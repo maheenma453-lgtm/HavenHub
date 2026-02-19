@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "33851762861",
+    "project_id": "havenhub-44e90",
+    "storage_bucket": "havenhub-44e90.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:33851762861:android:a9c6ee6a3d5a5c1b98be24",
+        "android_client_info": {
+          "package_name": "com.example.havenhub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBugNVBCGmB1K8USG-yltLUMnnoaDP-enQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
