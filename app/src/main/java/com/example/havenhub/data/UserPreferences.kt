@@ -1,9 +1,7 @@
 package com.example.havenhub.data
-// ═══════════════════════════════════════════════════════════════════════════════
 // UserPreferences.kt
 // Model: Per-user notification, privacy, and display preferences.
 // Synced across devices via Firestore.
-// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * # UserPreferences

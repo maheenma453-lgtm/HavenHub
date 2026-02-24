@@ -1,8 +1,6 @@
 package com.example.havenhub.data
-/ ═══════════════════════════════════════════════════════════════════════════════
 // PropertyVerification.kt
 // Model: Admin verification record for a submitted property listing.
-// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * # PropertyVerification

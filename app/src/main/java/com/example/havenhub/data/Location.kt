@@ -1,5 +1,4 @@
 package com.example.havenhub.data
-/ ═══════════════════════════════════════════════════════════════════════════════
 // Location.kt
 // Model: Geographic coordinates and address details for a property listing.
 // ═══════════════════════════════════════════════════════════════════════════════
