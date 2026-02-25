@@ -7,7 +7,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.havenhub.MainActivity
+import com.example.havenhub.MainActivity
 import com.havenhub.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
