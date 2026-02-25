@@ -1,4 +1,5 @@
 package com.example.havenhub.repository
+import com.example.havenhub.remote.FirebaseRealtimeListener
 import com.google.firebase.firestore.FirebaseFirestore
 import com.havenhub.data.model.Notification
 import com.havenhub.data.remote.FirebaseRealtimeListener
