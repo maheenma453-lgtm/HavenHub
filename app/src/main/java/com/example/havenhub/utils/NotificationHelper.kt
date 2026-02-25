@@ -1,14 +1,17 @@
 package com.example.havenhub.utils
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.havenhub.MainActivity
-import com.havenhub.R
+import androidx.core.content.ContextCompat
+import com.example.havenhub.MainActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -48,13 +51,28 @@ class NotificationHelper @Inject constructor(
         }
     }
 
+    // ── Check if notification permission is granted ───────────────────
+    private fun hasNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
     // ── Show a notification ───────────────────────────────────────────
+    @SuppressLint("MissingPermission")
     fun showNotification(
         title: String,
         message: String,
         type: String = Constants.NOTIF_SYSTEM,
         referenceId: String = ""
     ) {
+        if (!hasNotificationPermission()) return
+
         val channelId = when (type) {
             Constants.NOTIF_BOOKING -> CHANNEL_BOOKINGS
             Constants.NOTIF_PAYMENT -> CHANNEL_PAYMENTS
@@ -74,7 +92,7 @@ class NotificationHelper @Inject constructor(
         )
 
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
