@@ -1,27 +1,33 @@
 package com.example.havenhub
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
-import com.google.firebase.FirebaseApp
-import com.google.firebase.database.FirebaseDatabase
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.NavGraph
+import com.example.havenhub.ui.theme.HavenHubTheme
+//import com.example.havenhub.navigation.NavGraph  // tumhare navigation folder se
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Firebase initialize
-        FirebaseApp.initializeApp(this)
-
-        // Firebase test
-        val database = FirebaseDatabase.getInstance()
-        val ref = database.getReference("test")
-        ref.setValue("Firebase Connected Successfully")
-            .addOnSuccessListener {
-                Log.d("FirebaseTest", "Data set successfully")
+        enableEdgeToEdge()
+        setContent {
+            HavenHubTheme {
+                NavGraph()
             }
-            .addOnFailureListener { e ->
-                Log.e("FirebaseTest", "Error: ${e.message}")
-            }
+        }
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun MainPreview() {
+    HavenHubTheme {
+        NavGraph()
     }
+}

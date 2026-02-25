@@ -1,4 +1,5 @@
 package com.example.havenhub.repository
+import com.example.havenhub.remote.FirebaseDataManager
 import com.havenhub.data.model.Review
 import com.havenhub.data.remote.FirebaseDataManager
 import com.havenhub.utils.Resource
