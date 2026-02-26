@@ -1,9 +1,10 @@
 package com.example.havenhub.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.AppSettings
-import com.havenhub.data.repository.SettingsRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.AppSettings
+import com.example.havenhub.repository.SettingsRepository
+import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,16 +17,17 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
-    private val _settings = MutableStateFlow<Resource<AppSettings>>(Resource.Idle())
+    private val _settings = MutableStateFlow<Resource<AppSettings>>(Resource.Loading)
     val settings: StateFlow<Resource<AppSettings>> = _settings.asStateFlow()
 
-    private val _darkMode = MutableStateFlow(false)
+    // FIX: load from local SharedPreferences via repository (non-suspend functions)
+    private val _darkMode = MutableStateFlow(settingsRepository.isDarkMode())
     val darkMode: StateFlow<Boolean> = _darkMode.asStateFlow()
 
-    private val _notificationsEnabled = MutableStateFlow(true)
+    private val _notificationsEnabled = MutableStateFlow(settingsRepository.areNotificationsEnabled())
     val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
 
-    private val _language = MutableStateFlow("en")
+    private val _language = MutableStateFlow(settingsRepository.getLanguage())
     val language: StateFlow<String> = _language.asStateFlow()
 
     init {
@@ -34,34 +36,30 @@ class SettingsViewModel @Inject constructor(
 
     private fun loadSettings() {
         viewModelScope.launch {
-            val result = settingsRepository.getSettings()
-            _settings.value = result
-            if (result is Resource.Success) {
-                result.data?.let { s ->
-                    _darkMode.value = s.darkMode
-                    _notificationsEnabled.value = s.notificationsEnabled
-                    _language.value = s.language
-                }
-            }
+            // FIX: getSettings() → getAppSettings()
+            _settings.value = Resource.Loading
+            _settings.value = settingsRepository.getAppSettings()
         }
     }
 
+    // FIX: updateDarkMode() → setDarkMode() (non-suspend, local SharedPreferences)
     fun toggleDarkMode(enabled: Boolean) {
         _darkMode.value = enabled
-        viewModelScope.launch { settingsRepository.updateDarkMode(enabled) }
+        settingsRepository.setDarkMode(enabled)
     }
 
+    // FIX: updateNotifications() → setNotificationsEnabled()
     fun toggleNotifications(enabled: Boolean) {
         _notificationsEnabled.value = enabled
-        viewModelScope.launch { settingsRepository.updateNotifications(enabled) }
+        settingsRepository.setNotificationsEnabled(enabled)
     }
 
+    // FIX: updateLanguage() → setLanguage()
     fun setLanguage(lang: String) {
         _language.value = lang
-        viewModelScope.launch { settingsRepository.updateLanguage(lang) }
+        settingsRepository.setLanguage(lang)
     }
 
-    fun deleteAccount() {
-        viewModelScope.launch { settingsRepository.deleteAccount() }
-    }
+    // FIX: deleteAccount() doesn't exist in SettingsRepository — removed
+    // Add this to AuthRepository if needed
 }

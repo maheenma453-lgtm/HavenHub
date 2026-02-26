@@ -1,10 +1,12 @@
 package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.Booking
-import com.havenhub.data.repository.AuthRepository
-import com.havenhub.data.repository.BookingRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.Booking
+import com.example.havenhub.data.BookingStatus
+import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.repository.BookingRepository
+import com.example.havenhub.utils.Resource
+import com.google.firebase.Timestamp
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,19 +21,15 @@ class BookingViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _bookingState = MutableStateFlow<Resource<Booking>>(Resource.Idle())
-    val bookingState: StateFlow<Resource<Booking>> = _bookingState.asStateFlow()
+    private val _bookingState = MutableStateFlow<Resource<String>?>(null)
+    val bookingState: StateFlow<Resource<String>?> = _bookingState.asStateFlow()
 
-    private val _myBookings = MutableStateFlow<Resource<List<Booking>>>(Resource.Idle())
-    val myBookings: StateFlow<Resource<List<Booking>>> = _myBookings.asStateFlow()
+    private val _myBookings = MutableStateFlow<Resource<List<Booking>>?>(null)
+    val myBookings: StateFlow<Resource<List<Booking>>?> = _myBookings.asStateFlow()
 
-    private val _bookingDetail = MutableStateFlow<Resource<Booking>>(Resource.Idle())
-    val bookingDetail: StateFlow<Resource<Booking>> = _bookingDetail.asStateFlow()
+    private val _cancelState = MutableStateFlow<Resource<Unit>?>(null)
+    val cancelState: StateFlow<Resource<Unit>?> = _cancelState.asStateFlow()
 
-    private val _cancelState = MutableStateFlow<Resource<Boolean>>(Resource.Idle())
-    val cancelState: StateFlow<Resource<Boolean>> = _cancelState.asStateFlow()
-
-    // Selected dates for booking
     private val _checkInDate = MutableStateFlow<Date?>(null)
     val checkInDate: StateFlow<Date?> = _checkInDate.asStateFlow()
 
@@ -51,65 +49,67 @@ class BookingViewModel @Inject constructor(
         calculateTotal()
     }
 
-    private fun calculateTotal(pricePerDay: Double = 0.0) {
+    private fun calculateTotal(pricePerNight: Double = 0.0) {
         val checkIn = _checkInDate.value ?: return
         val checkOut = _checkOutDate.value ?: return
         val days = ((checkOut.time - checkIn.time) / (1000 * 60 * 60 * 24)).toInt()
-        _totalAmount.value = days * pricePerDay
+        _totalAmount.value = days * pricePerNight
     }
 
     fun createBooking(
         propertyId: String,
         propertyTitle: String,
-        pricePerDay: Double
+        pricePerNight: Double
     ) {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
+            val userId = authRepository.currentUser?.uid ?: return@launch
             val checkIn = _checkInDate.value ?: return@launch
             val checkOut = _checkOutDate.value ?: return@launch
-            _bookingState.value = Resource.Loading()
-            _bookingState.value = bookingRepository.createBooking(
-                tenantId = userId,
-                propertyId = propertyId,
+
+            val booking = Booking(
+                tenantId      = userId,
+                propertyId    = propertyId,
                 propertyTitle = propertyTitle,
-                checkInDate = checkIn,
-                checkOutDate = checkOut,
-                totalAmount = _totalAmount.value,
-                pricePerDay = pricePerDay
+                checkInDate   = Timestamp(checkIn),   // ✅ Date → Timestamp
+                checkOutDate  = Timestamp(checkOut),  // ✅ Date → Timestamp
+                totalAmount   = _totalAmount.value,
+                pricePerNight = pricePerNight         // ✅ pricePerDay → pricePerNight
             )
+
+            _bookingState.value = Resource.Loading
+            _bookingState.value = bookingRepository.createBooking(booking)
         }
     }
 
     fun loadMyBookings() {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
-            _myBookings.value = Resource.Loading()
-            _myBookings.value = bookingRepository.getBookingsByTenant(userId)
-        }
-    }
-
-    fun loadBookingDetail(bookingId: String) {
-        viewModelScope.launch {
-            _bookingDetail.value = Resource.Loading()
-            _bookingDetail.value = bookingRepository.getBookingById(bookingId)
+            val userId = authRepository.currentUser?.uid ?: return@launch
+            _myBookings.value = Resource.Loading
+            _myBookings.value = bookingRepository.getUserBookings(userId)
         }
     }
 
     fun cancelBooking(bookingId: String) {
         viewModelScope.launch {
-            _cancelState.value = Resource.Loading()
-            _cancelState.value = bookingRepository.cancelBooking(bookingId)
+            _cancelState.value = Resource.Loading
+            _cancelState.value = bookingRepository.updateBookingStatus(
+                bookingId,
+                BookingStatus.CANCELLED
+            )
         }
     }
 
     fun confirmBooking(bookingId: String) {
         viewModelScope.launch {
-            bookingRepository.updateBookingStatus(bookingId, "confirmed")
+            bookingRepository.updateBookingStatus(
+                bookingId,
+                BookingStatus.CONFIRMED
+            )
         }
     }
 
     fun resetState() {
-        _bookingState.value = Resource.Idle()
-        _cancelState.value = Resource.Idle()
+        _bookingState.value = null
+        _cancelState.value = null
     }
 }

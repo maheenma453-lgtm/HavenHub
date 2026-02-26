@@ -1,10 +1,12 @@
 package com.example.havenhub.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.Payment
-import com.havenhub.data.repository.AuthRepository
-import com.havenhub.data.repository.PaymentRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.Payment
+import com.example.havenhub.data.PaymentMethod
+import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.repository.PaymentRepository
+import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,46 +20,48 @@ class PaymentViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _paymentState = MutableStateFlow<Resource<Payment>>(Resource.Idle())
-    val paymentState: StateFlow<Resource<Payment>> = _paymentState.asStateFlow()
+    private val _paymentState = MutableStateFlow<Resource<String>>(Resource.Loading)
+    val paymentState: StateFlow<Resource<String>> = _paymentState.asStateFlow()
 
-    private val _paymentHistory = MutableStateFlow<Resource<List<Payment>>>(Resource.Idle())
+    private val _paymentHistory = MutableStateFlow<Resource<List<Payment>>>(Resource.Loading)
     val paymentHistory: StateFlow<Resource<List<Payment>>> = _paymentHistory.asStateFlow()
 
-    private val _selectedPaymentMethod = MutableStateFlow("card")
-    val selectedPaymentMethod: StateFlow<String> = _selectedPaymentMethod.asStateFlow()
+    // FIX: store PaymentMethod enum instead of raw String
+    private val _selectedPaymentMethod = MutableStateFlow(PaymentMethod.JAZZCASH)
+    val selectedPaymentMethod: StateFlow<PaymentMethod> = _selectedPaymentMethod.asStateFlow()
 
-    fun setPaymentMethod(method: String) {
+    fun setPaymentMethod(method: PaymentMethod) {
         _selectedPaymentMethod.value = method
     }
 
     fun processPayment(
         bookingId: String,
-        amount: Double,
-        propertyId: String
+        amount: Double
     ) {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
-            _paymentState.value = Resource.Loading()
-            _paymentState.value = paymentRepository.processPayment(
-                userId = userId,
-                bookingId = bookingId,
-                amount = amount,
-                propertyId = propertyId,
-                method = _selectedPaymentMethod.value
+            val userId = authRepository.currentUser?.uid ?: return@launch
+            _paymentState.value = Resource.Loading
+
+            // FIX: Payment has no propertyId or method(String) — use paymentMethod enum
+            val payment = Payment(
+                bookingId     = bookingId,
+                amount        = amount,
+                payerId       = userId,
+                paymentMethod = _selectedPaymentMethod.value
             )
+            _paymentState.value = paymentRepository.savePayment(payment)
         }
     }
 
     fun loadPaymentHistory() {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
-            _paymentHistory.value = Resource.Loading()
-            _paymentHistory.value = paymentRepository.getPaymentsByUser(userId)
+            val userId = authRepository.currentUser?.uid ?: return@launch
+            _paymentHistory.value = Resource.Loading
+            _paymentHistory.value = paymentRepository.getUserPayments(userId)
         }
     }
 
     fun resetState() {
-        _paymentState.value = Resource.Idle()
+        _paymentState.value = Resource.Loading
     }
 }

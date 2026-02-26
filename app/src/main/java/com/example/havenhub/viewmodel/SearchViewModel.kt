@@ -1,9 +1,11 @@
 package com.example.havenhub.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.Property
-import com.havenhub.data.repository.PropertyRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.Property
+import com.example.havenhub.data.PropertyType
+import com.example.havenhub.repository.PropertyRepository
+import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,21 +25,22 @@ class SearchViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    private val _searchResults = MutableStateFlow<Resource<List<Property>>>(Resource.Idle())
+    private val _searchResults = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
     val searchResults: StateFlow<Resource<List<Property>>> = _searchResults.asStateFlow()
 
     // Filter states
-    private val _minPrice = MutableStateFlow<Double?>(null)
-    private val _maxPrice = MutableStateFlow<Double?>(null)
+    private val _minPrice     = MutableStateFlow<Double?>(null)
+    private val _maxPrice     = MutableStateFlow<Double?>(null)
     private val _selectedCity = MutableStateFlow<String?>(null)
-    private val _propertyType = MutableStateFlow<String?>(null)
-    private val _minBedrooms = MutableStateFlow<Int?>(null)
+    // FIX: type is PropertyType enum, not String
+    private val _propertyType = MutableStateFlow<PropertyType?>(null)
+    private val _minBedrooms  = MutableStateFlow<Int?>(null)
 
-    val minPrice: StateFlow<Double?> = _minPrice.asStateFlow()
-    val maxPrice: StateFlow<Double?> = _maxPrice.asStateFlow()
-    val selectedCity: StateFlow<String?> = _selectedCity.asStateFlow()
-    val propertyType: StateFlow<String?> = _propertyType.asStateFlow()
-    val minBedrooms: StateFlow<Int?> = _minBedrooms.asStateFlow()
+    val minPrice:      StateFlow<Double?>       = _minPrice.asStateFlow()
+    val maxPrice:      StateFlow<Double?>       = _maxPrice.asStateFlow()
+    val selectedCity:  StateFlow<String?>       = _selectedCity.asStateFlow()
+    val propertyType:  StateFlow<PropertyType?> = _propertyType.asStateFlow()
+    val minBedrooms:   StateFlow<Int?>          = _minBedrooms.asStateFlow()
 
     @OptIn(FlowPreview::class)
     fun setupAutoSearch() {
@@ -46,9 +49,7 @@ class SearchViewModel @Inject constructor(
                 .debounce(500)
                 .distinctUntilChanged()
                 .filter { it.length >= 2 }
-                .collect { query ->
-                    performSearch(query)
-                }
+                .collect { performSearch(it) }
         }
     }
 
@@ -56,17 +57,47 @@ class SearchViewModel @Inject constructor(
         _searchQuery.value = query
     }
 
+    // FIX: searchProperties() doesn't exist — use getAllProperties() and filter in-memory
     fun performSearch(query: String = _searchQuery.value) {
         viewModelScope.launch {
-            _searchResults.value = Resource.Loading()
-            _searchResults.value = propertyRepository.searchProperties(
-                query = query,
-                minPrice = _minPrice.value,
-                maxPrice = _maxPrice.value,
-                city = _selectedCity.value,
-                type = _propertyType.value,
-                minBedrooms = _minBedrooms.value
-            )
+            _searchResults.value = Resource.Loading
+            val result = propertyRepository.getAllProperties()
+
+            if (result is Resource.Error) {
+                _searchResults.value = Resource.Error(result.message)
+                return@launch
+            }
+
+            var list = (result as Resource.Success).data
+
+            // Filter by search query (title, city, address)
+            if (query.isNotBlank()) {
+                val q = query.lowercase()
+                list = list.filter {
+                    it.title.lowercase().contains(q) ||
+                            it.city.lowercase().contains(q) ||
+                            it.address.lowercase().contains(q)
+                }
+            }
+
+            // Filter by price range (pricePerNight)
+            _minPrice.value?.let { min -> list = list.filter { it.pricePerNight >= min } }
+            _maxPrice.value?.let { max -> list = list.filter { it.pricePerNight <= max } }
+
+            // Filter by city
+            _selectedCity.value?.let { city ->
+                list = list.filter { it.city.lowercase() == city.lowercase() }
+            }
+
+            // Filter by property type (enum)
+            _propertyType.value?.let { type ->
+                list = list.filter { it.propertyType == type }
+            }
+
+            // Filter by minimum bedrooms
+            _minBedrooms.value?.let { min -> list = list.filter { it.bedrooms >= min } }
+
+            _searchResults.value = Resource.Success(list)
         }
     }
 
@@ -74,23 +105,23 @@ class SearchViewModel @Inject constructor(
         minPrice: Double?,
         maxPrice: Double?,
         city: String?,
-        type: String?,
+        type: PropertyType?,   // FIX: PropertyType enum, not String
         bedrooms: Int?
     ) {
-        _minPrice.value = minPrice
-        _maxPrice.value = maxPrice
+        _minPrice.value     = minPrice
+        _maxPrice.value     = maxPrice
         _selectedCity.value = city
         _propertyType.value = type
-        _minBedrooms.value = bedrooms
+        _minBedrooms.value  = bedrooms
         performSearch()
     }
 
     fun clearFilters() {
-        _minPrice.value = null
-        _maxPrice.value = null
+        _minPrice.value     = null
+        _maxPrice.value     = null
         _selectedCity.value = null
         _propertyType.value = null
-        _minBedrooms.value = null
+        _minBedrooms.value  = null
         performSearch()
     }
 }

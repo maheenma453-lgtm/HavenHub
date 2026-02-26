@@ -1,10 +1,10 @@
 package com.example.havenhub.viewmodel
-import android.net.Uri
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.User
-import com.havenhub.data.repository.AuthRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.User
+import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,11 +17,13 @@ class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _profile = MutableStateFlow<Resource<User>>(Resource.Idle())
+    private val _profile = MutableStateFlow<Resource<User>>(Resource.Loading)
     val profile: StateFlow<Resource<User>> = _profile.asStateFlow()
 
-    private val _updateState = MutableStateFlow<Resource<User>>(Resource.Idle())
-    val updateState: StateFlow<Resource<User>> = _updateState.asStateFlow()
+    // FIX: updateProfile() doesn't exist in AuthRepository
+    // Use Resource<Unit> — just signal success/failure, not return a User
+    private val _updateState = MutableStateFlow<Resource<Unit>>(Resource.Loading)
+    val updateState: StateFlow<Resource<Unit>> = _updateState.asStateFlow()
 
     init {
         loadProfile()
@@ -29,33 +31,25 @@ class ProfileViewModel @Inject constructor(
 
     fun loadProfile() {
         viewModelScope.launch {
-            _profile.value = Resource.Loading()
-            val user = authRepository.getCurrentUser()
-            _profile.value = if (user != null) Resource.Success(user) else Resource.Error("User not found")
-        }
-    }
-
-    fun updateProfile(
-        name: String,
-        phone: String,
-        bio: String,
-        profileImageUri: Uri? = null
-    ) {
-        viewModelScope.launch {
-            _updateState.value = Resource.Loading()
-            _updateState.value = authRepository.updateProfile(
-                name = name,
-                phone = phone,
-                bio = bio,
-                profileImageUri = profileImageUri
-            )
-            if (_updateState.value is Resource.Success) {
-                loadProfile()
+            _profile.value = Resource.Loading
+            // FIX: getCurrentUser() → currentUser (FirebaseUser property)
+            val firebaseUser = authRepository.currentUser
+            _profile.value = if (firebaseUser != null) {
+                // FirebaseUser se basic info — full User object chahiye toh dataManager.getUser() use karo
+                Resource.Success(
+                    User(
+                        userId   = firebaseUser.uid,
+                        email    = firebaseUser.email ?: "",
+                        fullName = firebaseUser.displayName ?: ""
+                    )
+                )
+            } else {
+                Resource.Error("User not found")
             }
         }
     }
 
     fun resetState() {
-        _updateState.value = Resource.Idle()
+        _updateState.value = Resource.Loading
     }
 }

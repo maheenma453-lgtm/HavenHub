@@ -1,11 +1,12 @@
 package com.example.havenhub.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.Property
-import com.havenhub.data.model.User
-import com.havenhub.data.repository.AuthRepository
-import com.havenhub.data.repository.PropertyRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.Property
+import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.repository.PropertyRepository
+import com.example.havenhub.utils.Resource
+import com.google.firebase.auth.FirebaseUser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,43 +20,38 @@ class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _featuredProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Idle())
-    val featuredProperties: StateFlow<Resource<List<Property>>> = _featuredProperties.asStateFlow()
+    // Resource.Loading used as initial state (your Resource.kt has no Idle class)
+    private val _allProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
+    val allProperties: StateFlow<Resource<List<Property>>> = _allProperties.asStateFlow()
 
-    private val _nearbyProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Idle())
-    val nearbyProperties: StateFlow<Resource<List<Property>>> = _nearbyProperties.asStateFlow()
+    // authRepository.currentUser is a property (not a suspend fun), so no coroutine needed
+    private val _currentUser = MutableStateFlow<FirebaseUser?>(authRepository.currentUser)
+    val currentUser: StateFlow<FirebaseUser?> = _currentUser.asStateFlow()
 
-    private val _currentUser = MutableStateFlow<User?>(null)
-    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+    private var lastLat: Double = 0.0
+    private var lastLng: Double = 0.0
 
     init {
-        loadCurrentUser()
-        loadFeaturedProperties()
-        loadNearbyProperties()
+        loadAllProperties()
     }
 
-    private fun loadCurrentUser() {
+    fun loadAllProperties() {
         viewModelScope.launch {
-            _currentUser.value = authRepository.getCurrentUser()
-        }
-    }
-
-    fun loadFeaturedProperties() {
-        viewModelScope.launch {
-            _featuredProperties.value = Resource.Loading()
-            _featuredProperties.value = propertyRepository.getFeaturedProperties()
+            _allProperties.value = Resource.Loading
+            _allProperties.value = propertyRepository.getAllProperties()
         }
     }
 
     fun loadNearbyProperties(lat: Double = 0.0, lng: Double = 0.0) {
-        viewModelScope.launch {
-            _nearbyProperties.value = Resource.Loading()
-            _nearbyProperties.value = propertyRepository.getNearbyProperties(lat, lng)
-        }
+        lastLat = lat
+        lastLng = lng
+        // PropertyRepository has no getNearbyProperties — use getAllProperties
+        // and filter by location in your UI/screen layer
+        loadAllProperties()
     }
 
     fun refreshHome() {
-        loadFeaturedProperties()
-        loadNearbyProperties()
+        _currentUser.value = authRepository.currentUser
+        loadAllProperties()
     }
 }

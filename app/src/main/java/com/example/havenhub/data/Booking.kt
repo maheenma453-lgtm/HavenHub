@@ -29,7 +29,7 @@ data class Booking(
     val status: BookingStatus = BookingStatus.PENDING,
     val hasReview: Boolean = false,
     val paymentId: String = "",
-    val paymentStatus: PaymentStatus = PaymentStatus.PENDING, // ✅ enum add kiya neeche
+    val paymentStatus: PaymentStatus = PaymentStatus.PENDING,
     val cancellationReason: String = "",
     val cancelledBy: String = "",
     val cancelledAt: Timestamp? = null,
@@ -66,17 +66,4 @@ enum class BookingStatus {
     }
 }
 
-// ✅ PaymentStatus enum add kiya - yeh missing tha
-enum class PaymentStatus {
-    PENDING,
-    PAID,
-    FAILED,
-    REFUNDED;
-
-    fun displayName(): String = when (this) {
-        PENDING  -> "Pending"
-        PAID     -> "Paid"
-        FAILED   -> "Failed"
-        REFUNDED -> "Refunded"
-    }
-}
+// ✅ PaymentStatus hata di — already doosri file mein exist karti hai

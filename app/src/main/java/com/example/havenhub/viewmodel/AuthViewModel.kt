@@ -1,9 +1,9 @@
 package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.User
-import com.havenhub.data.repository.AuthRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.utils.Resource
+import com.google.firebase.auth.FirebaseUser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,11 +16,9 @@ class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _authState = MutableStateFlow<Resource<User>>(Resource.Idle())
-    val authState: StateFlow<Resource<User>> = _authState.asStateFlow()
-
-    private val _currentUser = MutableStateFlow<User?>(null)
-    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+    // Resource<FirebaseUser> — matches AuthRepository return type
+    private val _authState = MutableStateFlow<Resource<FirebaseUser>?>(null)
+    val authState: StateFlow<Resource<FirebaseUser>?> = _authState.asStateFlow()
 
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
@@ -30,20 +28,17 @@ class AuthViewModel @Inject constructor(
     }
 
     private fun checkCurrentUser() {
-        viewModelScope.launch {
-            val user = authRepository.getCurrentUser()
-            _currentUser.value = user
-            _isLoggedIn.value = user != null
-        }
+        // authRepository.currentUser is a property, not a suspend function
+        val user = authRepository.currentUser
+        _isLoggedIn.value = user != null
     }
 
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
-            _authState.value = Resource.Loading()
+            _authState.value = Resource.Loading  // object hai, () nahi
             val result = authRepository.signIn(email, password)
             _authState.value = result
             if (result is Resource.Success) {
-                _currentUser.value = result.data
                 _isLoggedIn.value = true
             }
         }
@@ -53,15 +48,14 @@ class AuthViewModel @Inject constructor(
         name: String,
         email: String,
         password: String,
-        role: String,
-        phone: String
+        role: String
     ) {
         viewModelScope.launch {
-            _authState.value = Resource.Loading()
-            val result = authRepository.signUp(name, email, password, role, phone)
+            _authState.value = Resource.Loading  // object hai, () nahi
+            // signUp → registerUser (Repository ka actual method name)
+            val result = authRepository.registerUser(email, password, name, role)
             _authState.value = result
             if (result is Resource.Success) {
-                _currentUser.value = result.data
                 _isLoggedIn.value = true
             }
         }
@@ -69,22 +63,24 @@ class AuthViewModel @Inject constructor(
 
     fun forgotPassword(email: String) {
         viewModelScope.launch {
-            _authState.value = Resource.Loading()
+            _authState.value = Resource.Loading
             val result = authRepository.sendPasswordResetEmail(email)
-            _authState.value = result
+            // sendPasswordResetEmail returns Resource<Unit>, store separately if needed
+            if (result is Resource.Error) {
+                _authState.value = Resource.Error(result.message)
+            }
         }
     }
 
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
-            _currentUser.value = null
             _isLoggedIn.value = false
-            _authState.value = Resource.Idle()
+            _authState.value = null  // reset state
         }
     }
 
     fun resetState() {
-        _authState.value = Resource.Idle()
+        _authState.value = null
     }
 }

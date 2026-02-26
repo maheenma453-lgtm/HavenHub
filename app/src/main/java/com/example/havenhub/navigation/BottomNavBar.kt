@@ -1,40 +1,7 @@
 package com.example.havenhub.navigation
-// ═══════════════════════════════════════════════════════════════════════════
-// FILE     : BottomNavBar.kt
-// PACKAGE  : com.havenhub.ui.navigation
-//
-// PURPOSE  : Material3 NavigationBar shown at the bottom of the app.
-//            Displays 5 tabs for the main sections of HavenHub.
-//            Each tab has an icon, a label, and an unread-badge.
-//
-// TABS     :
-//   1. Home       → Screen.Home
-//   2. Search     → Screen.Search
-//   3. Bookings   → Screen.MyBookings
-//   4. Messages   → Screen.MessageList  (shows unread count badge)
-//   5. Profile    → Screen.Profile
-//
-// HOW IT WORKS:
-//   • BottomNavBar receives the current NavBackStackEntry so it can
-//     highlight the correct tab based on the active route.
-//   • Single-top navigation prevents duplicate screens on the back stack
-//     when the user taps the same tab twice.
-//   • saveState / restoreState preserve scroll positions when switching tabs.
-//   • The bar is only visible on the 5 root-level screens (see NavGraph.kt
-//     where Scaffold wraps child NavHost).
-//
-// USAGE (in NavGraph.kt / MainActivity):
-//   val navBackStackEntry by navController.currentBackStackEntryAsState()
-//   BottomNavBar(
-//       navController      = navController,
-//       currentBackStack   = navBackStackEntry,
-//       unreadMessageCount = unreadCount   // from MessagingViewModel
-//   )
-// ═══════════════════════════════════════════════════════════════════════════
 
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookOnline
 import androidx.compose.material.icons.filled.Home
@@ -63,21 +30,12 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import com.havenhub.ui.theme.BackgroundWhite
-import com.havenhub.ui.theme.BorderGray
-import com.havenhub.ui.theme.PrimaryBlue
-import com.havenhub.ui.theme.TextSecondary
+// FIX: com.havenhub.ui.theme → com.example.havenhub.ui.theme
+import com.example.havenhub.ui.theme.BackgroundWhite
+import com.example.havenhub.ui.theme.BorderGray
+import com.example.havenhub.ui.theme.PrimaryBlue
+import com.example.havenhub.ui.theme.TextSecondary
 
-// ── Data model for a single tab item ─────────────────────────────────────
-
-/**
- * Holds all display properties for a single bottom-nav tab.
- *
- * @param route         The [Screen] route this tab navigates to.
- * @param label         Short text shown below the icon.
- * @param selectedIcon  Filled icon when this tab is active.
- * @param unselectedIcon Outlined icon when this tab is inactive.
- */
 data class BottomNavItem(
     val route          : String,
     val label          : String,
@@ -85,12 +43,6 @@ data class BottomNavItem(
     val unselectedIcon : ImageVector
 )
 
-// ── Tab definitions ───────────────────────────────────────────────────────
-
-/**
- * The 5 tabs shown in [BottomNavBar].
- * Order here determines left-to-right display order.
- */
 val bottomNavItems = listOf(
     BottomNavItem(
         route          = Screen.Home.route,
@@ -124,12 +76,6 @@ val bottomNavItems = listOf(
     )
 )
 
-// ── Routes where BottomNavBar should be VISIBLE ───────────────────────────
-
-/**
- * BottomNavBar is only shown when the current route is one of these.
- * All other screens (detail views, forms, admin, etc.) hide the bar.
- */
 val bottomBarRoutes = setOf(
     Screen.Home.route,
     Screen.Search.route,
@@ -138,22 +84,12 @@ val bottomBarRoutes = setOf(
     Screen.Profile.route
 )
 
-// ── Main composable ───────────────────────────────────────────────────────
-
-/**
- * HavenHub's bottom navigation bar.
- *
- * @param navController       Used to perform navigation on tab tap.
- * @param currentBackStack    The current [NavBackStackEntry]; drives active-tab highlight.
- * @param unreadMessageCount  If > 0 a red badge is shown on the Messages tab.
- */
 @Composable
 fun BottomNavBar(
     navController      : NavController,
     currentBackStack   : NavBackStackEntry?,
     unreadMessageCount : Int = 0
 ) {
-    // Current destination route (may be null before first compose)
     val currentRoute = currentBackStack?.destination?.route
 
     NavigationBar(
@@ -169,18 +105,14 @@ fun BottomNavBar(
                 selected = isSelected,
                 onClick  = {
                     navController.navigate(item.route) {
-                        // Pop to the start destination to avoid large back stacks
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
-                        // Prevent multiple copies of the same destination
                         launchSingleTop = true
-                        // Restore scroll/list state when re-selecting a tab
-                        restoreState = true
+                        restoreState    = true
                     }
                 },
                 icon = {
-                    // Messages tab gets an unread count badge
                     if (item.route == Screen.MessageList.route && unreadMessageCount > 0) {
                         BadgedBox(
                             badge = {
@@ -228,5 +160,3 @@ fun BottomNavBar(
         }
     }
 }
-
-

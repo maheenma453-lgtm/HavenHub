@@ -1,10 +1,11 @@
 package com.example.havenhub.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.Notification
-import com.havenhub.data.repository.AuthRepository
-import com.havenhub.data.repository.NotificationRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.Notification
+import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.repository.NotificationRepository
+import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +19,7 @@ class NotificationViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _notifications = MutableStateFlow<Resource<List<Notification>>>(Resource.Idle())
+    private val _notifications = MutableStateFlow<Resource<List<Notification>>>(Resource.Loading)
     val notifications: StateFlow<Resource<List<Notification>>> = _notifications.asStateFlow()
 
     private val _unreadCount = MutableStateFlow(0)
@@ -30,12 +31,14 @@ class NotificationViewModel @Inject constructor(
 
     fun loadNotifications() {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
-            _notifications.value = Resource.Loading()
-            val result = notificationRepository.getNotifications(userId)
+            // FIX 1: getCurrentUser() → currentUser (property, not suspend fun)
+            val userId = authRepository.currentUser?.uid ?: return@launch
+            _notifications.value = Resource.Loading
+            // FIX 2: getNotifications() → getUserNotifications()
+            val result = notificationRepository.getUserNotifications(userId)
             _notifications.value = result
             if (result is Resource.Success) {
-                _unreadCount.value = result.data?.count { !it.isRead } ?: 0
+                _unreadCount.value = result.data.count { !it.isRead }
             }
         }
     }
@@ -49,7 +52,8 @@ class NotificationViewModel @Inject constructor(
 
     fun markAllAsRead() {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
+            // FIX 1: getCurrentUser() → currentUser
+            val userId = authRepository.currentUser?.uid ?: return@launch
             notificationRepository.markAllAsRead(userId)
             _unreadCount.value = 0
             loadNotifications()

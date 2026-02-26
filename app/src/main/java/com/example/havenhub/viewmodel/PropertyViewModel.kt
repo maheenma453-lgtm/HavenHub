@@ -1,11 +1,13 @@
 package com.example.havenhub.viewmodel
+
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.Property
-import com.havenhub.data.repository.AuthRepository
-import com.havenhub.data.repository.PropertyRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.Property
+import com.example.havenhub.data.PropertyType
+import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.repository.PropertyRepository
+import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,86 +21,105 @@ class PropertyViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _propertyDetail = MutableStateFlow<Resource<Property>>(Resource.Idle())
+    private val _propertyDetail = MutableStateFlow<Resource<Property>>(Resource.Loading)
     val propertyDetail: StateFlow<Resource<Property>> = _propertyDetail.asStateFlow()
 
-    private val _myProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Idle())
+    private val _myProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
     val myProperties: StateFlow<Resource<List<Property>>> = _myProperties.asStateFlow()
 
-    private val _addPropertyState = MutableStateFlow<Resource<Property>>(Resource.Idle())
-    val addPropertyState: StateFlow<Resource<Property>> = _addPropertyState.asStateFlow()
+    private val _addPropertyState = MutableStateFlow<Resource<String>>(Resource.Loading)
+    val addPropertyState: StateFlow<Resource<String>> = _addPropertyState.asStateFlow()
 
-    private val _updatePropertyState = MutableStateFlow<Resource<Property>>(Resource.Idle())
-    val updatePropertyState: StateFlow<Resource<Property>> = _updatePropertyState.asStateFlow()
+    private val _updatePropertyState = MutableStateFlow<Resource<Unit>>(Resource.Loading)
+    val updatePropertyState: StateFlow<Resource<Unit>> = _updatePropertyState.asStateFlow()
 
-    private val _deletePropertyState = MutableStateFlow<Resource<Boolean>>(Resource.Idle())
-    val deletePropertyState: StateFlow<Resource<Boolean>> = _deletePropertyState.asStateFlow()
+    private val _deletePropertyState = MutableStateFlow<Resource<Unit>>(Resource.Loading)
+    val deletePropertyState: StateFlow<Resource<Unit>> = _deletePropertyState.asStateFlow()
 
     fun loadPropertyDetail(propertyId: String) {
         viewModelScope.launch {
-            _propertyDetail.value = Resource.Loading()
+            _propertyDetail.value = Resource.Loading
             _propertyDetail.value = propertyRepository.getPropertyById(propertyId)
         }
     }
 
     fun loadMyProperties() {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
-            _myProperties.value = Resource.Loading()
-            _myProperties.value = propertyRepository.getPropertiesByOwner(userId)
+            val userId = authRepository.currentUser?.uid ?: return@launch
+            _myProperties.value = Resource.Loading
+            _myProperties.value = propertyRepository.getMyProperties(userId)
         }
     }
 
     fun addProperty(
         title: String,
         description: String,
-        price: Double,
+        pricePerNight: Double,           // FIX: was 'price' → 'pricePerNight'
         address: String,
         city: String,
-        type: String,
+        propertyType: PropertyType,      // FIX: was String 'type' → PropertyType enum
         bedrooms: Int,
         bathrooms: Int,
-        area: Double,
+        areaSqFt: Double? = null,        // FIX: was 'area' → 'areaSqFt' (nullable)
         amenities: List<String>,
         images: List<Uri>
     ) {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
-            _addPropertyState.value = Resource.Loading()
-            _addPropertyState.value = propertyRepository.addProperty(
-                ownerId = userId,
-                title = title,
-                description = description,
-                price = price,
-                address = address,
-                city = city,
-                type = type,
-                bedrooms = bedrooms,
-                bathrooms = bathrooms,
-                area = area,
-                amenities = amenities,
-                images = images
+            val userId = authRepository.currentUser?.uid ?: return@launch
+            _addPropertyState.value = Resource.Loading
+
+            val property = Property(
+                ownerId      = userId,
+                title        = title,
+                description  = description,
+                pricePerNight = pricePerNight,
+                address      = address,
+                city         = city,
+                propertyType = propertyType,
+                bedrooms     = bedrooms,
+                bathrooms    = bathrooms,
+                areaSqFt     = areaSqFt,
+                amenities    = amenities
             )
+            _addPropertyState.value = propertyRepository.addProperty(property, images)
         }
     }
 
     fun updateProperty(property: Property, newImages: List<Uri> = emptyList()) {
         viewModelScope.launch {
-            _updatePropertyState.value = Resource.Loading()
-            _updatePropertyState.value = propertyRepository.updateProperty(property, newImages)
+            _updatePropertyState.value = Resource.Loading
+            val fields = mutableMapOf<String, Any>(
+                "title"        to property.title,
+                "description"  to property.description,
+                "pricePerNight" to property.pricePerNight,  // FIX: was 'price'
+                "address"      to property.address,
+                "city"         to property.city,
+                "propertyType" to property.propertyType.name, // FIX: was 'type'
+                "bedrooms"     to property.bedrooms,
+                "bathrooms"    to property.bathrooms,
+                "amenities"    to property.amenities
+            )
+            // FIX: areaSqFt is nullable — only add if not null
+            property.areaSqFt?.let { fields["areaSqFt"] = it }
+
+            _updatePropertyState.value = propertyRepository.updateProperty(property.propertyId, fields)
+
+            if (newImages.isNotEmpty()) {
+                propertyRepository.addPropertyImages(property.propertyId, newImages)
+            }
         }
     }
 
     fun deleteProperty(propertyId: String) {
         viewModelScope.launch {
-            _deletePropertyState.value = Resource.Loading()
+            _deletePropertyState.value = Resource.Loading
             _deletePropertyState.value = propertyRepository.deleteProperty(propertyId)
         }
     }
 
     fun resetStates() {
-        _addPropertyState.value = Resource.Idle()
-        _updatePropertyState.value = Resource.Idle()
-        _deletePropertyState.value = Resource.Idle()
+        _addPropertyState.value = Resource.Loading
+        _updatePropertyState.value = Resource.Loading
+        _deletePropertyState.value = Resource.Loading
     }
 }

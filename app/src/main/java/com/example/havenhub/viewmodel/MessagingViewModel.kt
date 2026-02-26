@@ -1,10 +1,11 @@
 package com.example.havenhub.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.model.Message
-import com.havenhub.data.repository.AuthRepository
-import com.havenhub.data.repository.MessagingRepository
-import com.havenhub.utils.Resource
+import com.example.havenhub.data.Message
+import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.repository.MessagingRepository
+import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,60 +19,43 @@ class MessagingViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _conversations = MutableStateFlow<Resource<List<Message>>>(Resource.Idle())
-    val conversations: StateFlow<Resource<List<Message>>> = _conversations.asStateFlow()
-
-    private val _chatMessages = MutableStateFlow<Resource<List<Message>>>(Resource.Idle())
+    private val _chatMessages = MutableStateFlow<Resource<List<Message>>>(Resource.Loading)
     val chatMessages: StateFlow<Resource<List<Message>>> = _chatMessages.asStateFlow()
 
-    private val _sendMessageState = MutableStateFlow<Resource<Message>>(Resource.Idle())
-    val sendMessageState: StateFlow<Resource<Message>> = _sendMessageState.asStateFlow()
+    // FIX: sendMessage() returns Resource<String> not Resource<Message>
+    private val _sendMessageState = MutableStateFlow<Resource<String>>(Resource.Loading)
+    val sendMessageState: StateFlow<Resource<String>> = _sendMessageState.asStateFlow()
 
     private val _currentChatId = MutableStateFlow<String?>(null)
 
-    fun loadConversations() {
+    // FIX: getConversations() doesn't exist — use getConversationId() + observeMessages()
+    fun loadChatMessages(uid1: String, uid2: String) {
+        val conversationId = messagingRepository.getConversationId(uid1, uid2)
+        _currentChatId.value = conversationId
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
-            _conversations.value = Resource.Loading()
-            _conversations.value = messagingRepository.getConversations(userId)
-        }
-    }
-
-    fun loadChatMessages(chatId: String) {
-        _currentChatId.value = chatId
-        viewModelScope.launch {
-            _chatMessages.value = Resource.Loading()
-            messagingRepository.listenToMessages(chatId).collect { messages ->
+            _chatMessages.value = Resource.Loading
+            messagingRepository.observeMessages(conversationId).collect { messages ->
                 _chatMessages.value = Resource.Success(messages)
             }
         }
     }
 
-    fun sendMessage(
-        receiverId: String,
-        content: String,
-        propertyId: String? = null
-    ) {
+    // FIX: sendMessage() takes a Message object, not separate parameters
+    fun sendMessage(message: Message) {
         viewModelScope.launch {
-            val senderId = authRepository.getCurrentUser()?.uid ?: return@launch
-            _sendMessageState.value = Resource.Loading()
-            _sendMessageState.value = messagingRepository.sendMessage(
-                senderId = senderId,
-                receiverId = receiverId,
-                content = content,
-                propertyId = propertyId
-            )
+            _sendMessageState.value = Resource.Loading
+            _sendMessageState.value = messagingRepository.sendMessage(message)
         }
     }
 
-    fun markMessagesAsRead(chatId: String) {
+    fun markMessagesAsRead(conversationId: String) {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.uid ?: return@launch
-            messagingRepository.markMessagesAsRead(chatId, userId)
+            val userId = authRepository.currentUser?.uid ?: return@launch
+            messagingRepository.markMessagesAsRead(conversationId, userId)
         }
     }
 
     fun resetState() {
-        _sendMessageState.value = Resource.Idle()
+        _sendMessageState.value = Resource.Loading
     }
 }

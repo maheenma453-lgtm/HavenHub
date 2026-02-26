@@ -1,7 +1,9 @@
 package com.example.havenhub.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.havenhub.data.repository.AuthRepository
+// FIX: com.havenhub → com.example.havenhub
+import com.example.havenhub.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,9 +43,9 @@ class OnboardingViewModel @Inject constructor(
     }
 
     private fun completeOnboarding() {
-        viewModelScope.launch {
-            authRepository.setOnboardingComplete()
-            _onboardingComplete.value = true
-        }
+        // TODO: setOnboardingComplete() does not exist in AuthRepository
+        // Option A: Add it to AuthRepository (uses SharedPreferences or Firestore flag)
+        // Option B: Remove this call and handle navigation purely from _onboardingComplete state
+        _onboardingComplete.value = true
     }
 }
