@@ -1,12 +1,12 @@
 package com.example.havenhub.remote
 
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.Property
 import com.example.havenhub.data.Review
 import com.example.havenhub.data.User
 import com.example.havenhub.utils.Resource
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,7 +21,7 @@ class FirebaseDataManager @Inject constructor(
     private val bookingsCollection   = firestore.collection("bookings")
     private val reviewsCollection    = firestore.collection("reviews")
 
-    // ── User Operations ──────────────────────────────────────────────────────
+    // ── User ─────────────────────────────────────────────────────────────────
 
     suspend fun saveUser(user: User): Resource<Unit> {
         return try {
@@ -52,7 +52,7 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── Property Operations ──────────────────────────────────────────────────
+    // ── Property ─────────────────────────────────────────────────────────────
 
     suspend fun addProperty(property: Property): Resource<String> {
         return try {
@@ -120,7 +120,7 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── Booking Operations ───────────────────────────────────────────────────
+    // ── Booking ──────────────────────────────────────────────────────────────
 
     suspend fun createBooking(booking: Booking): Resource<String> {
         return try {
@@ -156,7 +156,7 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── Review Operations ────────────────────────────────────────────────────
+    // ── Review ───────────────────────────────────────────────────────────────
 
     suspend fun addReview(review: Review): Resource<String> {
         return try {
@@ -182,3 +182,30 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -8,13 +8,6 @@ import com.example.havenhub.utils.Resource
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * PropertyRepository
- *
- * Manages all property listing operations for HavenHub.
- * Combines Firestore data operations (via [FirebaseDataManager]) with
- * Firebase Storage image/document handling (via [FirebaseStorageManager]).
- */
 @Singleton
 class PropertyRepository @Inject constructor(
     private val dataManager: FirebaseDataManager,

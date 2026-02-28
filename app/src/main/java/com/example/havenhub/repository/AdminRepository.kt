@@ -2,12 +2,12 @@ package com.example.havenhub.repository
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.example.havenhub.data.Booking              // ✅ fixed
-import com.example.havenhub.data.Payment              // ✅ fixed
-import com.example.havenhub.data.Property             // ✅ fixed
-import com.example.havenhub.data.PropertyVerification // ✅ fixed
-import com.example.havenhub.data.User                 // ✅ fixed
-import com.example.havenhub.utils.Resource            // ✅ fixed
+import com.example.havenhub.data.Booking
+import com.example.havenhub.data.Payment
+import com.example.havenhub.data.Property
+import com.example.havenhub.data.PropertyVerification
+import com.example.havenhub.data.User
+import com.example.havenhub.utils.Resource
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton

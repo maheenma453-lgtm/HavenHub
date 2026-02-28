@@ -1,13 +1,11 @@
 package com.example.havenhub.remote
 
+import com.example.havenhub.data.Booking
+import com.example.havenhub.data.Message
+import com.example.havenhub.data.Notification
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
-import com.example.havenhub.data.Booking
-import com.example.havenhub.data.BookingStatus
-import com.example.havenhub.data.PaymentStatus
-import com.example.havenhub.data.Message
-import com.example.havenhub.data.Notification
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -20,59 +18,53 @@ class FirebaseRealtimeListener @Inject constructor(
 ) {
 
     fun listenToMessages(conversationId: String): Flow<List<Message>> = callbackFlow {
-        val messagesRef = firestore
+        val ref = firestore
             .collection("conversations")
             .document(conversationId)
             .collection("messages")
             .orderBy("timestamp", Query.Direction.ASCENDING)
 
-        val registration: ListenerRegistration = messagesRef.addSnapshotListener { snapshot, error ->
+        val registration: ListenerRegistration = ref.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 trySend(emptyList())
                 return@addSnapshotListener
             }
-            val messages = snapshot?.toObjects(Message::class.java) ?: emptyList()
-            trySend(messages)
+            trySend(snapshot?.toObjects(Message::class.java) ?: emptyList())
         }
 
         awaitClose { registration.remove() }
     }
 
     fun listenToNotifications(userId: String): Flow<List<Notification>> = callbackFlow {
-        val notificationsRef = firestore
+        val ref = firestore
             .collection("notifications")
             .whereEqualTo("userId", userId)
             .orderBy("timestamp", Query.Direction.DESCENDING)
 
-        val registration: ListenerRegistration = notificationsRef.addSnapshotListener { snapshot, error ->
+        val registration: ListenerRegistration = ref.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 trySend(emptyList())
                 return@addSnapshotListener
             }
-            val notifications = snapshot?.toObjects(Notification::class.java) ?: emptyList()
-            trySend(notifications)
+            trySend(snapshot?.toObjects(Notification::class.java) ?: emptyList())
         }
 
         awaitClose { registration.remove() }
     }
 
     fun listenToPropertyBookings(propertyId: String): Flow<List<Booking>> = callbackFlow {
-        val bookingsRef = firestore
+        val ref = firestore
             .collection("bookings")
             .whereEqualTo("propertyId", propertyId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
 
-        val registration: ListenerRegistration = bookingsRef.addSnapshotListener { snapshot, error ->
+        val registration: ListenerRegistration = ref.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 trySend(emptyList())
                 return@addSnapshotListener
             }
-            val bookings = snapshot?.documents?.mapNotNull { doc ->
-                try {
-                    doc.toObject(Booking::class.java)
-                } catch (e: Exception) {
-                    null
-                }
+            val bookings = snapshot?.documents?.mapNotNull {
+                try { it.toObject(Booking::class.java) } catch (e: Exception) { null }
             } ?: emptyList()
             trySend(bookings)
         }
@@ -81,22 +73,18 @@ class FirebaseRealtimeListener @Inject constructor(
     }
 
     fun listenToUserBookings(userId: String): Flow<List<Booking>> = callbackFlow {
-        val bookingsRef = firestore
+        val ref = firestore
             .collection("bookings")
             .whereEqualTo("tenantId", userId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
 
-        val registration: ListenerRegistration = bookingsRef.addSnapshotListener { snapshot, error ->
+        val registration: ListenerRegistration = ref.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 trySend(emptyList())
                 return@addSnapshotListener
             }
-            val bookings = snapshot?.documents?.mapNotNull { doc ->
-                try {
-                    doc.toObject(Booking::class.java)
-                } catch (e: Exception) {
-                    null
-                }
+            val bookings = snapshot?.documents?.mapNotNull {
+                try { it.toObject(Booking::class.java) } catch (e: Exception) { null }
             } ?: emptyList()
             trySend(bookings)
         }

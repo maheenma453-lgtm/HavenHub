@@ -1,161 +1,55 @@
 package com.example.havenhub.navigation
 
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BookOnline
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Message
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.BookOnline
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Message
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.navigation.NavBackStackEntry
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.painterResource
 import androidx.navigation.NavController
-import androidx.navigation.NavGraph.Companion.findStartDestination
-// FIX: com.havenhub.ui.theme → com.example.havenhub.ui.theme
-import com.example.havenhub.ui.theme.BackgroundWhite
-import com.example.havenhub.ui.theme.BorderGray
-import com.example.havenhub.ui.theme.PrimaryBlue
-import com.example.havenhub.ui.theme.TextSecondary
+import androidx.navigation.compose.currentBackStackEntryAsState
+import com.example.havenhub.R
 
 data class BottomNavItem(
-    val route          : String,
-    val label          : String,
-    val selectedIcon   : ImageVector,
-    val unselectedIcon : ImageVector
+    val label: String,
+    val route: String,
+    val iconRes: Int
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem(
-        route          = Screen.Home.route,
-        label          = "Home",
-        selectedIcon   = Icons.Filled.Home,
-        unselectedIcon = Icons.Outlined.Home
-    ),
-    BottomNavItem(
-        route          = Screen.Search.route,
-        label          = "Search",
-        selectedIcon   = Icons.Filled.Search,
-        unselectedIcon = Icons.Outlined.Search
-    ),
-    BottomNavItem(
-        route          = Screen.MyBookings.route,
-        label          = "Bookings",
-        selectedIcon   = Icons.Filled.BookOnline,
-        unselectedIcon = Icons.Outlined.BookOnline
-    ),
-    BottomNavItem(
-        route          = Screen.MessageList.route,
-        label          = "Messages",
-        selectedIcon   = Icons.Filled.Message,
-        unselectedIcon = Icons.Outlined.Message
-    ),
-    BottomNavItem(
-        route          = Screen.Profile.route,
-        label          = "Profile",
-        selectedIcon   = Icons.Filled.Person,
-        unselectedIcon = Icons.Outlined.Person
-    )
-)
-
-val bottomBarRoutes = setOf(
-    Screen.Home.route,
-    Screen.Search.route,
-    Screen.MyBookings.route,
-    Screen.MessageList.route,
-    Screen.Profile.route
+    BottomNavItem("Home",     Screen.Home.route,        R.drawable.ic_home),
+    BottomNavItem("Search",   Screen.Search.route,      R.drawable.ic_search),
+    BottomNavItem("Bookings", Screen.MyBookings.route,  R.drawable.ic_bookings),
+    BottomNavItem("Messages", Screen.MessageList.route, R.drawable.ic_message),
+    BottomNavItem("Profile",  Screen.Profile.route,     R.drawable.ic_profile)
 )
 
 @Composable
-fun BottomNavBar(
-    navController      : NavController,
-    currentBackStack   : NavBackStackEntry?,
-    unreadMessageCount : Int = 0
-) {
-    val currentRoute = currentBackStack?.destination?.route
+fun BottomNavBar(navController: NavController) {
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
 
-    NavigationBar(
-        containerColor = BackgroundWhite,
-        tonalElevation = 8.dp,
-        modifier       = Modifier.height(64.dp)
-    ) {
+    NavigationBar {
         bottomNavItems.forEach { item ->
-
-            val isSelected = currentRoute == item.route
-
             NavigationBarItem(
-                selected = isSelected,
-                onClick  = {
-                    navController.navigate(item.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
+                selected = currentRoute == item.route,
+                onClick = {
+                    if (currentRoute != item.route) {
+                        navController.navigate(item.route) {
+                            popUpTo(Screen.Home.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                        launchSingleTop = true
-                        restoreState    = true
                     }
                 },
                 icon = {
-                    if (item.route == Screen.MessageList.route && unreadMessageCount > 0) {
-                        BadgedBox(
-                            badge = {
-                                Badge(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor   = BackgroundWhite
-                                ) {
-                                    Text(
-                                        text     = if (unreadMessageCount > 9) "9+" else "$unreadMessageCount",
-                                        fontSize = 9.sp
-                                    )
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector        = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                                contentDescription = item.label,
-                                modifier           = Modifier.size(24.dp)
-                            )
-                        }
-                    } else {
-                        Icon(
-                            imageVector        = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                            contentDescription = item.label,
-                            modifier           = Modifier.size(24.dp)
-                        )
-                    }
-                },
-                label = {
-                    Text(
-                        text       = item.label,
-                        fontSize   = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                    Icon(
+                        painter = painterResource(id = item.iconRes),
+                        contentDescription = item.label
                     )
                 },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor   = PrimaryBlue,
-                    selectedTextColor   = PrimaryBlue,
-                    unselectedIconColor = TextSecondary,
-                    unselectedTextColor = TextSecondary,
-                    indicatorColor      = PrimaryBlue.copy(alpha = 0.1f)
-                ),
-                alwaysShowLabel = true
+                label = { Text(item.label) }
             )
         }
     }

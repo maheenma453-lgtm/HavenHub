@@ -12,7 +12,6 @@ class ReviewRepository @Inject constructor(
 ) {
 
     suspend fun addReview(review: Review): Resource<String> {
-        // createdAt @ServerTimestamp hai, Firestore khud set karega
         return dataManager.addReview(review)
     }
 

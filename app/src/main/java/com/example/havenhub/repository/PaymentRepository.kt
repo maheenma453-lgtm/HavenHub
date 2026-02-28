@@ -19,7 +19,7 @@ class PaymentRepository @Inject constructor(
         return try {
             val docRef = paymentsCollection.document()
             val newPayment = payment.copy(
-                paymentId = docRef.id  // ✅ createdAt remove - @ServerTimestamp handle karega
+                paymentId = docRef.id
             )
             docRef.set(newPayment).await()
             Resource.Success(docRef.id)

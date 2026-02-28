@@ -101,4 +101,18 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
-}
+
+
+        // ─── Material 3 ──────────────────────────────────────────────────────────
+        implementation("androidx.compose.material3:material3:1.4.0")
+
+        // ─── Navigation Compose ───────────────────────────────────────────────────
+        implementation("androidx.navigation:navigation-compose:2.8.9")
+
+        // ─── Compose BOM (baaki sab compose versions manage karta hai) ────────────
+        implementation(platform("androidx.compose:compose-bom:2025.12.00"))
+        implementation("androidx.compose.ui:ui")
+        implementation("androidx.compose.ui:ui-tooling-preview")
+        implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material:material-icons-extended")
+    }

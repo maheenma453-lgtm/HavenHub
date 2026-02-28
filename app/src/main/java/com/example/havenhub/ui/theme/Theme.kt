@@ -9,35 +9,67 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
+// ─── Dark Color Scheme ────────────────────────────────────────────────────────
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary            = PrimaryBlueLight,
+    onPrimary          = BackgroundDark,
+    primaryContainer   = PrimaryBlueDark,
+
+    secondary          = SecondaryBlueLight,
+    onSecondary        = BackgroundDark,
+    secondaryContainer = SecondaryBlueDark,
+
+    tertiary           = AccentAmberLight,
+    onTertiary         = BackgroundDark,
+    tertiaryContainer  = AccentAmberDark,
+
+    background         = BackgroundDark,
+    onBackground       = TextPrimaryDark,
+
+    surface            = SurfaceDark,
+    onSurface          = TextPrimaryDark,
+    surfaceVariant     = SurfaceVariantDark,
+
+    error              = ErrorRedDark,
+    onError            = OnErrorRedDark
 )
 
+// ─── Light Color Scheme ───────────────────────────────────────────────────────
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary            = PrimaryBlue,
+    onPrimary          = OnPrimaryBlue,
+    primaryContainer   = PrimaryBlueLight,
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    secondary          = SecondaryBlue,
+    onSecondary        = OnSecondary,
+    secondaryContainer = SecondaryBlueLight,
+
+    tertiary           = AccentAmber,
+    onTertiary         = OnAccentAmber,
+    tertiaryContainer  = AccentAmberLight,
+
+    background         = BackgroundLight,
+    onBackground       = TextPrimary,
+
+    surface            = SurfaceWhite,
+    onSurface          = TextPrimary,
+    surfaceVariant     = SurfaceVariantLight,
+
+    error              = ErrorRed,
+    onError            = OnErrorRed
 )
 
+// ─── Theme Entry Point ────────────────────────────────────────────────────────
 @Composable
 fun HavenHubTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -45,14 +77,23 @@ fun HavenHubTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
         darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        else      -> LightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            window.statusBarColor = colorScheme.primary.toArgb()
+            WindowCompat.getInsetsController(window, view)
+                .isAppearanceLightStatusBars = !darkTheme
+        }
+    }
+
+    HavenHubTheme(
+       //colorScheme = colorScheme,
+      //typography  = HavenTypography,
+          content   = content
     )
 }

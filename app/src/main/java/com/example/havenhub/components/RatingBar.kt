@@ -1,4 +1,5 @@
 package com.example.havenhub.components
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -22,17 +23,25 @@ import kotlin.math.floor
 
 private val StarColor = Color(0xFFFFC107)
 
-/**
- * Read-only star rating display.
- *
- * Supports half-star precision. Shows filled, half, and empty stars
- * based on [rating].
- *
- * @param rating      Value between 0.0 and [maxStars]
- * @param maxStars    Total number of stars (default 5)
- * @param starSize    Size of each star icon
- * @param showLabel   When true, appends the numeric rating next to the stars
- */
+private enum class StarType { Full, Half, Empty }
+
+@Composable
+private fun StarIcon(type: StarType, size: Dp) {
+    Icon(
+        imageVector = when (type) {
+            StarType.Full  -> Icons.Default.Star
+            StarType.Half  -> Icons.Default.StarHalf
+            StarType.Empty -> Icons.Outlined.StarOutline
+        },
+        contentDescription = null,
+        tint = when (type) {
+            StarType.Empty -> MaterialTheme.colorScheme.outline
+            else           -> StarColor
+        },
+        modifier = Modifier.size(size)
+    )
+}
+
 @Composable
 fun RatingBar(
     rating: Float,
@@ -45,17 +54,17 @@ fun RatingBar(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        for (i in 1..maxStars) {
+    )
+    {
+        for (i in 1..maxStars)
+        {
             val starType = when {
-                i <= floor(rating)               -> StarType.Full
-                i == floor(rating).toInt() + 1
-                        && (rating % 1) >= 0.5f  -> StarType.Half
-                else                              -> StarType.Empty
+                i <= floor(rating)                                       -> StarType.Full
+                i == floor(rating).toInt() + 1 && (rating % 1) >= 0.5f -> StarType.Half
+                else                                                     -> StarType.Empty
             }
             StarIcon(type = starType, size = starSize)
         }
-
         if (showLabel) {
             Text(
                 text = String.format("%.1f", rating),
@@ -68,15 +77,6 @@ fun RatingBar(
     }
 }
 
-/**
- * Interactive star rating input.
- *
- * @param rating       Current selected rating (1 – [maxStars])
- * @param onRatingChange Callback with the tapped star index
- * @param maxStars     Total stars
- * @param starSize     Size of each star icon
- * @param enabled      When false, disables tap interaction
- */
 @Composable
 fun RatingInput(
     rating: Int,
@@ -106,25 +106,3 @@ fun RatingInput(
         }
     }
 }
-
-// ── Private helpers ───────────────────────────────────────────────────────────
-
-private enum class StarType { Full, Half, Empty }
-
-@Composable
-private fun StarIcon(type: StarType, size: Dp) {
-    Icon(
-        imageVector = when (type) {
-            StarType.Full  -> Icons.Default.Star
-            StarType.Half  -> Icons.Default.StarHalf
-            StarType.Empty -> Icons.Outlined.StarOutline
-        },
-        contentDescription = null,
-        tint = when (type) {
-            StarType.Empty -> MaterialTheme.colorScheme.outline
-            else           -> StarColor
-        },
-        modifier = Modifier.size(size)
-    )
-}
-

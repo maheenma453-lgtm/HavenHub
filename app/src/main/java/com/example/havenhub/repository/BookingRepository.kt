@@ -34,7 +34,7 @@ class BookingRepository @Inject constructor(
         return realtimeListener.listenToPropertyBookings(propertyId)
     }
 
-    suspend fun updateBookingStatus(bookingId: String, status: BookingStatus): Resource<Unit> { // ✅ String → BookingStatus
-        return dataManager.updateBookingStatus(bookingId, status.name) // ✅ .name se String convert
+    suspend fun updateBookingStatus(bookingId: String, status: BookingStatus): Resource<Unit> {
+        return dataManager.updateBookingStatus(bookingId, status.name)
     }
 }
