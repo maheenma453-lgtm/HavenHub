@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.rememberNavController
-import com.example.havenhub.ui.navigation.NavGraph
+import com.example.havenhub.navigation.NavGraph
 import com.example.havenhub.ui.theme.HavenHubTheme
 import dagger.hilt.android.AndroidEntryPoint
 

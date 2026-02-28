@@ -92,8 +92,8 @@ fun HavenHubTheme(
     }
 
     HavenHubTheme(
-       //colorScheme = colorScheme,
-      //typography  = HavenTypography,
+        colorScheme = colorScheme,
+      typography  = HavenTypography,
           content   = content
     )
 }
