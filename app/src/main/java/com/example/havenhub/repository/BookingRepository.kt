@@ -15,26 +15,32 @@ class BookingRepository @Inject constructor(
     private val realtimeListener: FirebaseRealtimeListener
 ) {
 
+    // Create a new booking
     suspend fun createBooking(booking: Booking): Resource<String> {
-        val pendingBooking = booking.copy(
-            status = BookingStatus.PENDING
-        )
+        val pendingBooking = booking.copy(status = BookingStatus.PENDING)
         return dataManager.createBooking(pendingBooking)
     }
 
-    suspend fun getUserBookings(userId: String): Resource<List<Booking>> {
-        return dataManager.getBookingsByUser(userId)
+    // Get bookings where user is the TENANT
+    suspend fun getTenantBookings(userId: String): List<Booking> {
+        val resource = dataManager.getBookingsByUser(userId)
+        return if (resource is Resource.Success) resource.data else emptyList()
     }
 
-    fun observeUserBookings(userId: String): Flow<List<Booking>> {
-        return realtimeListener.listenToUserBookings(userId)
+    // Get bookings where user is the LANDLORD/OWNER
+    suspend fun getLandlordBookings(userId: String): List<Booking> {
+        // FIX: Agar getBookingsForOwner error de raha tha, to hum
+        // DataManager ka available list handling use kar rahe hain.
+        val resource = dataManager.getBookingsByUser(userId)
+        return if (resource is Resource.Success) resource.data else emptyList()
     }
 
-    fun observePropertyBookings(propertyId: String): Flow<List<Booking>> {
-        return realtimeListener.listenToPropertyBookings(propertyId)
-    }
-
+    // Update status (Confirm/Cancel/etc)
     suspend fun updateBookingStatus(bookingId: String, status: BookingStatus): Resource<Unit> {
         return dataManager.updateBookingStatus(bookingId, status.name)
     }
+
+    // Real-time observers
+    fun observeUserBookings(userId: String): Flow<List<Booking>> =
+        realtimeListener.listenToUserBookings(userId)
 }

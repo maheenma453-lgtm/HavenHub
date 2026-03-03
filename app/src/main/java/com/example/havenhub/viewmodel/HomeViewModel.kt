@@ -3,55 +3,72 @@ package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Property
-import com.example.havenhub.repository.AuthRepository
 import com.example.havenhub.repository.PropertyRepository
 import com.example.havenhub.utils.Resource
-import com.google.firebase.auth.FirebaseUser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val propertyRepository: PropertyRepository,
-    private val authRepository: AuthRepository
+    private val propertyRepository: PropertyRepository
 ) : ViewModel() {
 
-    // Resource.Loading used as initial state (your Resource.kt has no Idle class)
-    private val _allProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
-    val allProperties: StateFlow<Resource<List<Property>>> = _allProperties.asStateFlow()
+    // ✅ Fix: Resource.Loading is an object, no brackets ()
+    private val _featuredProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
+    val featuredProperties: StateFlow<Resource<List<Property>>> = _featuredProperties.asStateFlow()
 
-    // authRepository.currentUser is a property (not a suspend fun), so no coroutine needed
-    private val _currentUser = MutableStateFlow<FirebaseUser?>(authRepository.currentUser)
-    val currentUser: StateFlow<FirebaseUser?> = _currentUser.asStateFlow()
+    private val _nearbyProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
+    val nearbyProperties: StateFlow<Resource<List<Property>>> = _nearbyProperties.asStateFlow()
 
-    private var lastLat: Double = 0.0
-    private var lastLng: Double = 0.0
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     init {
-        loadAllProperties()
+        loadHomeData()
     }
 
-    fun loadAllProperties() {
+    fun loadHomeData() {
         viewModelScope.launch {
-            _allProperties.value = Resource.Loading
-            _allProperties.value = propertyRepository.getAllProperties()
+            _isLoading.value = true
+            _errorMessage.value = null
+            try {
+                // Parallel calls
+                val job1 = launch { _featuredProperties.value = propertyRepository.getFeaturedProperties() }
+                val job2 = launch { _nearbyProperties.value = propertyRepository.getNearbyProperties() }
+                joinAll(job1, job2)
+            } catch (e: Exception) {
+                val errorMsg = e.localizedMessage ?: "Unknown Error"
+                _errorMessage.value = errorMsg
+                // ✅ Fix: Matching Resource.Error(message, code)
+                _featuredProperties.value = Resource.Error(errorMsg)
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
-    fun loadNearbyProperties(lat: Double = 0.0, lng: Double = 0.0) {
-        lastLat = lat
-        lastLng = lng
-        // PropertyRepository has no getNearbyProperties — use getAllProperties
-        // and filter by location in your UI/screen layer
-        loadAllProperties()
-    }
-
-    fun refreshHome() {
-        _currentUser.value = authRepository.currentUser
-        loadAllProperties()
+    fun searchProperties(query: String) {
+        if (query.isBlank()) {
+            loadHomeData()
+            return
+        }
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                _featuredProperties.value = propertyRepository.searchPropertiesByName(query)
+            } catch (e: Exception) {
+                _errorMessage.value = e.localizedMessage
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
 }

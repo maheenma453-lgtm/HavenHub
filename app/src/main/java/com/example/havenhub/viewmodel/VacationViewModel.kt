@@ -2,7 +2,7 @@ package com.example.havenhub.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.havenhub.data.Booking
+import com.example.havenhub.viewmodel.Booking
 import com.example.havenhub.data.Property
 import com.example.havenhub.data.PropertyType
 import com.example.havenhub.repository.BookingRepository

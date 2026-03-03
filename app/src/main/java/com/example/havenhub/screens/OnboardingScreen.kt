@@ -1,7 +1,6 @@
 package com.example.havenhub.screens
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
+
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -13,26 +12,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.havenhub.ui.navigation.Screen
-import com.havenhub.ui.theme.*
-import com.havenhub.ui.viewmodel.OnboardingViewModel
+import com.example.havenhub.navigation.Screen
+import com.example.havenhub.ui.theme.*
 import kotlinx.coroutines.launch
 
-// ─────────────────────────────────────────────────────────────────
-// OnboardingScreen.kt
-// PURPOSE : 3-page swipeable intro shown only on first app launch.
-//           Each page highlights a key feature of HavenHub.
-// NAVIGATION: OnboardingScreen → SignInScreen
-// ─────────────────────────────────────────────────────────────────
-
-// Data class representing each onboarding page content
 data class OnboardingPage(
     val emoji       : String,
     val title       : String,
@@ -42,11 +30,9 @@ data class OnboardingPage(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(
-    navController : NavController,
-    viewModel     : OnboardingViewModel = hiltViewModel()
+    navController : NavController
 ) {
 
-    // ── Onboarding Pages Content ──────────────────────────────────
     val pages = listOf(
         OnboardingPage(
             emoji       = "🏘️",
@@ -68,7 +54,6 @@ fun OnboardingScreen(
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val scope      = rememberCoroutineScope()
 
-    // ── UI ────────────────────────────────────────────────────────
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -80,7 +65,6 @@ fun OnboardingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // ── Skip Button (top right) ───────────────────────────
             Row(
                 modifier       = Modifier
                     .fillMaxWidth()
@@ -89,7 +73,6 @@ fun OnboardingScreen(
             ) {
                 TextButton(
                     onClick = {
-                        viewModel.completeOnboarding()  // Mark onboarding done
                         navController.navigate(Screen.SignIn.route) {
                             popUpTo(Screen.Onboarding.route) { inclusive = true }
                         }
@@ -102,7 +85,6 @@ fun OnboardingScreen(
                 }
             }
 
-            // ── Horizontal Pager (swipeable pages) ───────────────
             HorizontalPager(
                 state    = pagerState,
                 modifier = Modifier.weight(1f)
@@ -110,7 +92,6 @@ fun OnboardingScreen(
                 OnboardingPageContent(page = pages[pageIndex])
             }
 
-            // ── Page Indicator Dots ───────────────────────────────
             Row(
                 modifier              = Modifier.padding(vertical = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -130,17 +111,13 @@ fun OnboardingScreen(
                 }
             }
 
-            // ── Next / Get Started Button ─────────────────────────
             Button(
                 onClick = {
                     if (pagerState.currentPage < pages.size - 1) {
-                        // Go to next page
                         scope.launch {
                             pagerState.animateScrollToPage(pagerState.currentPage + 1)
                         }
                     } else {
-                        // Last page → navigate to Sign In
-                        viewModel.completeOnboarding()
                         navController.navigate(Screen.SignIn.route) {
                             popUpTo(Screen.Onboarding.route) { inclusive = true }
                         }
@@ -166,10 +143,6 @@ fun OnboardingScreen(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// OnboardingPageContent
-// Reusable composable for individual onboarding page
-// ─────────────────────────────────────────────────────────────────
 @Composable
 private fun OnboardingPageContent(page: OnboardingPage) {
     Column(
@@ -180,12 +153,11 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         verticalArrangement = Arrangement.Center
     ) {
 
-        // ── Illustration Area ─────────────────────────────────────
         Box(
             modifier = Modifier
                 .size(200.dp)
                 .clip(RoundedCornerShape(32.dp))
-                .background(SurfaceGray),
+                .background(SurfaceVariantLight),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -196,7 +168,6 @@ private fun OnboardingPageContent(page: OnboardingPage) {
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        // ── Title ─────────────────────────────────────────────────
         Text(
             text       = page.title,
             fontSize   = 24.sp,
@@ -207,14 +178,12 @@ private fun OnboardingPageContent(page: OnboardingPage) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ── Description ───────────────────────────────────────────
         Text(
-            text      = page.description,
-            fontSize  = 15.sp,
-            color     = TextSecondary,
-            textAlign = TextAlign.Center,
+            text       = page.description,
+            fontSize   = 15.sp,
+            color      = TextSecondary,
+            textAlign  = TextAlign.Center,
             lineHeight = 22.sp
         )
     }
 }
-

@@ -8,120 +8,161 @@ import com.example.havenhub.repository.PropertyRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ─────────────────────────────────────────────
+//  Search UI State
+// ─────────────────────────────────────────────
+data class SearchUiState(
+    val isLoading: Boolean = false,
+    val searchQuery: String = "",
+    val searchResults: List<Property> = emptyList(),
+    val errorMessage: String? = null,
+
+    // Filter States
+    val minPrice: Double? = null,
+    val maxPrice: Double? = null,
+    val selectedCity: String? = null,
+    val propertyType: PropertyType? = null,
+    val minBedrooms: Int? = null
+)
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val propertyRepository: PropertyRepository
 ) : ViewModel() {
 
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    private val _uiState = MutableStateFlow(SearchUiState())
+    val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
-    private val _searchResults = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
-    val searchResults: StateFlow<Resource<List<Property>>> = _searchResults.asStateFlow()
+    init {
+        // Initial search to load properties
+        performSearch()
+        setupAutoSearch()
+    }
 
-    // Filter states
-    private val _minPrice     = MutableStateFlow<Double?>(null)
-    private val _maxPrice     = MutableStateFlow<Double?>(null)
-    private val _selectedCity = MutableStateFlow<String?>(null)
-    // FIX: type is PropertyType enum, not String
-    private val _propertyType = MutableStateFlow<PropertyType?>(null)
-    private val _minBedrooms  = MutableStateFlow<Int?>(null)
-
-    val minPrice:      StateFlow<Double?>       = _minPrice.asStateFlow()
-    val maxPrice:      StateFlow<Double?>       = _maxPrice.asStateFlow()
-    val selectedCity:  StateFlow<String?>       = _selectedCity.asStateFlow()
-    val propertyType:  StateFlow<PropertyType?> = _propertyType.asStateFlow()
-    val minBedrooms:   StateFlow<Int?>          = _minBedrooms.asStateFlow()
-
+    // ─────────────────────────────────────────
+    //  Auto Search Logic (Debounce)
+    // ─────────────────────────────────────────
     @OptIn(FlowPreview::class)
-    fun setupAutoSearch() {
+    private fun setupAutoSearch() {
         viewModelScope.launch {
-            _searchQuery
-                .debounce(500)
+            _uiState
+                .map { it.searchQuery }
+                .debounce(500) // 500ms wait after user stops typing
                 .distinctUntilChanged()
-                .filter { it.length >= 2 }
-                .collect { performSearch(it) }
+                .collect {
+                    performSearch()
+                }
         }
     }
 
-    fun updateQuery(query: String) {
-        _searchQuery.value = query
+    // ─────────────────────────────────────────
+    //  Field Updates
+    // ─────────────────────────────────────────
+
+    fun onQueryChange(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
     }
 
-    // FIX: searchProperties() doesn't exist — use getAllProperties() and filter in-memory
-    fun performSearch(query: String = _searchQuery.value) {
+    // ─────────────────────────────────────────
+    //  Perform Search & Filtering
+    // ─────────────────────────────────────────
+
+    fun performSearch() {
         viewModelScope.launch {
-            _searchResults.value = Resource.Loading
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+            // Fetching all properties from repository
             val result = propertyRepository.getAllProperties()
 
-            if (result is Resource.Error) {
-                _searchResults.value = Resource.Error(result.message)
-                return@launch
-            }
+            when (result) {
+                is Resource.Success -> {
+                    val currentState = _uiState.value
+                    var filteredList = result.data
 
-            var list = (result as Resource.Success).data
+                    // 1. Search Query Filter (Title, City, Address)
+                    if (currentState.searchQuery.isNotBlank()) {
+                        val q = currentState.searchQuery.lowercase().trim()
+                        filteredList = filteredList.filter {
+                            it.title.lowercase().contains(q) ||
+                                    it.city.lowercase().contains(q) ||
+                                    it.address.lowercase().contains(q)
+                        }
+                    }
 
-            // Filter by search query (title, city, address)
-            if (query.isNotBlank()) {
-                val q = query.lowercase()
-                list = list.filter {
-                    it.title.lowercase().contains(q) ||
-                            it.city.lowercase().contains(q) ||
-                            it.address.lowercase().contains(q)
+                    // 2. Price Range Filter
+                    currentState.minPrice?.let { min ->
+                        filteredList = filteredList.filter { it.pricePerNight >= min }
+                    }
+                    currentState.maxPrice?.let { max ->
+                        filteredList = filteredList.filter { it.pricePerNight <= max }
+                    }
+
+                    // 3. City Filter
+                    currentState.selectedCity?.let { city ->
+                        filteredList = filteredList.filter { it.city.equals(city, ignoreCase = true) }
+                    }
+
+                    // 4. Property Type Filter (Enum based)
+                    currentState.propertyType?.let { type ->
+                        filteredList = filteredList.filter { it.propertyType == type }
+                    }
+
+                    // 5. Bedroom Count Filter
+                    currentState.minBedrooms?.let { min ->
+                        filteredList = filteredList.filter { it.bedrooms >= min }
+                    }
+
+                    _uiState.update { it.copy(
+                        isLoading = false,
+                        searchResults = filteredList
+                    ) }
+                }
+                is Resource.Error -> {
+                    _uiState.update { it.copy(
+                        isLoading = false,
+                        errorMessage = result.message
+                    ) }
+                }
+                is Resource.Loading -> {
+                    _uiState.update { it.copy(isLoading = true) }
                 }
             }
-
-            // Filter by price range (pricePerNight)
-            _minPrice.value?.let { min -> list = list.filter { it.pricePerNight >= min } }
-            _maxPrice.value?.let { max -> list = list.filter { it.pricePerNight <= max } }
-
-            // Filter by city
-            _selectedCity.value?.let { city ->
-                list = list.filter { it.city.lowercase() == city.lowercase() }
-            }
-
-            // Filter by property type (enum)
-            _propertyType.value?.let { type ->
-                list = list.filter { it.propertyType == type }
-            }
-
-            // Filter by minimum bedrooms
-            _minBedrooms.value?.let { min -> list = list.filter { it.bedrooms >= min } }
-
-            _searchResults.value = Resource.Success(list)
         }
     }
+
+    // ─────────────────────────────────────────
+    //  Filter Actions
+    // ─────────────────────────────────────────
 
     fun applyFilters(
         minPrice: Double?,
         maxPrice: Double?,
         city: String?,
-        type: PropertyType?,   // FIX: PropertyType enum, not String
+        type: PropertyType?,
         bedrooms: Int?
     ) {
-        _minPrice.value     = minPrice
-        _maxPrice.value     = maxPrice
-        _selectedCity.value = city
-        _propertyType.value = type
-        _minBedrooms.value  = bedrooms
+        _uiState.update { it.copy(
+            minPrice = minPrice,
+            maxPrice = maxPrice,
+            selectedCity = city,
+            propertyType = type,
+            minBedrooms = bedrooms
+        ) }
         performSearch()
     }
 
     fun clearFilters() {
-        _minPrice.value     = null
-        _maxPrice.value     = null
-        _selectedCity.value = null
-        _propertyType.value = null
-        _minBedrooms.value  = null
+        _uiState.update { it.copy(
+            minPrice = null,
+            maxPrice = null,
+            selectedCity = null,
+            propertyType = null,
+            minBedrooms = null
+        ) }
         performSearch()
     }
 }

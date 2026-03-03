@@ -1,4 +1,4 @@
-package com.example.havenhub.ui.components
+package com.example.havenhub.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions

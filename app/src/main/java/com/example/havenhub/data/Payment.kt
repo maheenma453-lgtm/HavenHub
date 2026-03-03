@@ -6,7 +6,7 @@ import com.google.firebase.firestore.ServerTimestamp
 /**
  * Represents a payment transaction stored in Firestore → `payments/{paymentId}`.
  *
- * Each [Booking] has exactly one associated Payment document.
+ * Each [com.example.havenhub.viewmodel.Booking] has exactly one associated Payment document.
  * Refunds create a new [PaymentType.REFUND] document referencing the
  * original via [originalPaymentId].
  *

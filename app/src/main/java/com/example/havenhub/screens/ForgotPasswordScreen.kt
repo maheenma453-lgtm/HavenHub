@@ -1,6 +1,8 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -17,15 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.havenhub.ui.theme.*
-import com.havenhub.ui.viewmodel.AuthViewModel
-
-// ─────────────────────────────────────────────────────────────────
-// ForgotPasswordScreen.kt
-// PURPOSE : Allows user to request a password reset email via
-//           Firebase Auth. Shows success confirmation after sending.
-// NAVIGATION: ForgotPasswordScreen → (back to SignIn)
-// ─────────────────────────────────────────────────────────────────
+import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,30 +28,28 @@ fun ForgotPasswordScreen(
     navController : NavController,
     viewModel     : AuthViewModel = hiltViewModel()
 ) {
+    // ── ViewModel State Observation ──
+    val uiState by viewModel.uiState.collectAsState()
+    val email by viewModel.email.collectAsState()
+    val emailError by viewModel.emailError.collectAsState()
 
-    // ── State ──────────────────────────────────────────────────────
-    var email        by remember { mutableStateOf("") }
-    val isLoading    by viewModel.isLoading.collectAsState()
-    val resetSuccess by viewModel.resetEmailSent.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
+    // ── Derived State from uiState ──
+    val isLoading = uiState.isLoading
+    val resetSuccess = uiState.isPasswordResetSent
+    val errorMessage = uiState.errorMessage
 
-    // ── UI ─────────────────────────────────────────────────────────
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Forgot Password") },
                 navigationIcon = {
-                    // Back arrow to return to sign in
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector        = Icons.Default.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = PrimaryBlue,
-                    titleContentColor      = BackgroundWhite,
+                    titleContentColor = BackgroundWhite,
                     navigationIconContentColor = BackgroundWhite
                 )
             )
@@ -71,17 +64,13 @@ fun ForgotPasswordScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
             Spacer(modifier = Modifier.height(40.dp))
 
-            // ── Lock Illustration ──────────────────────────────────
+            // Lock Illustration
             Box(
                 modifier = Modifier
                     .size(100.dp)
-                    .background(
-                        color = PrimaryBlue.copy(alpha = 0.1f),
-                        shape = androidx.compose.foundation.shape.CircleShape
-                    ),
+                    .background(color = PrimaryBlue.copy(alpha = 0.1f), shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(text = "🔐", fontSize = 44.sp)
@@ -89,133 +78,91 @@ fun ForgotPasswordScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Title & Description ────────────────────────────────
             Text(
-                text       = "Reset Your Password",
-                fontSize   = 22.sp,
+                text = "Reset Your Password",
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color      = TextPrimary
+                color = TextPrimary
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text      = "Enter your registered email address. We'll send you a link to reset your password.",
-                fontSize  = 14.sp,
-                color     = TextSecondary,
+                text = "Enter your registered email address. We'll send you a link to reset your password.",
+                fontSize = 14.sp,
+                color = TextSecondary,
                 textAlign = TextAlign.Center,
                 lineHeight = 21.sp
             )
 
             Spacer(modifier = Modifier.height(36.dp))
 
-            // ── Success State ─────────────────────────────────────
             if (resetSuccess) {
-                // Show success card when email is sent
+                // Success Confirmation Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape    = RoundedCornerShape(12.dp),
-                    colors   = CardDefaults.cardColors(
-                        containerColor = SuccessGreen.copy(alpha = 0.1f)
-                    )
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = SuccessGreen.copy(alpha = 0.1f))
                 ) {
                     Column(
-                        modifier            = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(text = "✅", fontSize = 36.sp)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text       = "Email Sent!",
-                            fontSize   = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color      = SuccessGreen
-                        )
+                        Text("Email Sent!", fontWeight = FontWeight.Bold, color = SuccessGreen)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text      = "Check your inbox at $email and follow the instructions to reset your password.",
-                            fontSize  = 13.sp,
-                            color     = TextSecondary,
-                            textAlign = TextAlign.Center
+                            text = "Check your inbox at $email and follow the instructions to reset your password.",
+                            fontSize = 13.sp, color = TextSecondary, textAlign = TextAlign.Center
                         )
                     }
                 }
-
                 Spacer(modifier = Modifier.height(24.dp))
-
-                // Back to Sign In button
-                OutlinedButton(
-                    onClick  = { navController.popBackStack() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
+                Button(
+                    onClick = { navController.popBackStack() },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(
-                        text  = "Back to Sign In",
-                        color = PrimaryBlue
-                    )
+                    Text("Back to Sign In")
                 }
-
             } else {
-
-                // ── Email Input Form ──────────────────────────────
+                // Email Input
                 OutlinedTextField(
-                    value         = email,
-                    onValueChange = { email = it },
-                    label         = { Text("Email Address") },
-                    leadingIcon   = {
-                        Icon(Icons.Default.Email, "Email", tint = PrimaryBlue)
-                    },
+                    value = email,
+                    onValueChange = { viewModel.onEmailChange(it) },
+                    label = { Text("Email Address") },
+                    isError = emailError != null,
+                    supportingText = { emailError?.let { Text(it) } },
+                    leadingIcon = { Icon(Icons.Default.Email, "Email", tint = PrimaryBlue) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    singleLine      = true,
-                    modifier        = Modifier.fillMaxWidth(),
-                    shape           = RoundedCornerShape(10.dp),
-                    colors          = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor   = PrimaryBlue,
-                        unfocusedBorderColor = BorderGray
-                    )
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
                 )
 
-                // ── Error Message ─────────────────────────────────
-                errorMessage?.let { error ->
+                errorMessage?.let {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text     = error,
-                        color    = ErrorRed,
-                        fontSize = 13.sp
-                    )
+                    Text(text = it, color = ErrorRed, fontSize = 13.sp)
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // ── Send Reset Button ─────────────────────────────
+                // ✅ Fix: Function name matching ViewModel
                 Button(
-                    onClick  = { viewModel.sendPasswordReset(email.trim()) },
-                    enabled  = email.isNotBlank() && !isLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape  = RoundedCornerShape(12.dp),
+                    onClick = { viewModel.sendPasswordResetEmail() },
+                    enabled = email.isNotBlank() && !isLoading,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
                     if (isLoading) {
-                        CircularProgressIndicator(
-                            color       = BackgroundWhite,
-                            modifier    = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
+                        CircularProgressIndicator(color = BackgroundWhite, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
-                        Text(
-                            text       = "Send Reset Link",
-                            fontSize   = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text("Send Reset Link", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         }
     }
 }
-
-

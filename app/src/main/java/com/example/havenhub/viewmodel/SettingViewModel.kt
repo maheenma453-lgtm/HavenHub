@@ -3,6 +3,7 @@ package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.AppSettings
+import com.example.havenhub.data.UserPreferences
 import com.example.havenhub.repository.SettingsRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,49 +18,83 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
-    private val _settings = MutableStateFlow<Resource<AppSettings>>(Resource.Loading)
-    val settings: StateFlow<Resource<AppSettings>> = _settings.asStateFlow()
+    private val _userPreferences = MutableStateFlow<Resource<UserPreferences>?>(null)
+    val userPreferences: StateFlow<Resource<UserPreferences>?> = _userPreferences.asStateFlow()
 
-    // FIX: load from local SharedPreferences via repository (non-suspend functions)
-    private val _darkMode = MutableStateFlow(settingsRepository.isDarkMode())
-    val darkMode: StateFlow<Boolean> = _darkMode.asStateFlow()
+    private val _appSettings = MutableStateFlow<Resource<AppSettings>?>(null)
+    val appSettings: StateFlow<Resource<AppSettings>?> = _appSettings.asStateFlow()
 
-    private val _notificationsEnabled = MutableStateFlow(settingsRepository.areNotificationsEnabled())
-    val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _language = MutableStateFlow(settingsRepository.getLanguage())
-    val language: StateFlow<String> = _language.asStateFlow()
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     init {
         loadSettings()
     }
 
+    // ✅ Load Settings
     private fun loadSettings() {
         viewModelScope.launch {
-            // FIX: getSettings() → getAppSettings()
-            _settings.value = Resource.Loading
-            _settings.value = settingsRepository.getAppSettings()
+            _isLoading.value = true
+
+            try {
+                val prefsResult = settingsRepository.getUserPreferences()
+                _userPreferences.value = prefsResult
+
+                val settingsResult = settingsRepository.getAppSettings()
+                _appSettings.value = settingsResult
+
+            } catch (e: Exception) {
+                _errorMessage.value = e.message
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
-    // FIX: updateDarkMode() → setDarkMode() (non-suspend, local SharedPreferences)
-    fun toggleDarkMode(enabled: Boolean) {
-        _darkMode.value = enabled
-        settingsRepository.setDarkMode(enabled)
+    // ✅ Update Preferences
+    fun updatePreferences(preferences: UserPreferences) {
+        viewModelScope.launch {
+            _isLoading.value = true
+
+            try {
+                val result = settingsRepository.updateUserPreferences(preferences)
+                _userPreferences.value = result
+            } catch (e: Exception) {
+                _errorMessage.value = e.message
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
 
-    // FIX: updateNotifications() → setNotificationsEnabled()
+    // ✅ Toggle Notifications
     fun toggleNotifications(enabled: Boolean) {
-        _notificationsEnabled.value = enabled
-        settingsRepository.setNotificationsEnabled(enabled)
+        viewModelScope.launch {
+            try {
+                settingsRepository.updateNotificationSettings(enabled)
+                loadSettings()
+            } catch (e: Exception) {
+                _errorMessage.value = e.message
+            }
+        }
     }
 
-    // FIX: updateLanguage() → setLanguage()
-    fun setLanguage(lang: String) {
-        _language.value = lang
-        settingsRepository.setLanguage(lang)
+    // ✅ Toggle Dark Mode
+    fun toggleDarkMode(enabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                settingsRepository.updateThemeSettings(enabled)
+                loadSettings()
+            } catch (e: Exception) {
+                _errorMessage.value = e.message
+            }
+        }
     }
 
-    // FIX: deleteAccount() doesn't exist in SettingsRepository — removed
-    // Add this to AuthRepository if needed
+    fun clearError() {
+        _errorMessage.value = null
+    }
 }

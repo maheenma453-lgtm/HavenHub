@@ -6,7 +6,7 @@ import com.google.firebase.firestore.ServerTimestamp
 /**
  * Represents a tenant review stored in Firestore → `reviews/{reviewId}`.
  *
- * Reviews are linked to a completed [Booking] and can only be submitted
+ * Reviews are linked to a completed [com.example.havenhub.viewmodel.Booking] and can only be submitted
  * once per booking. They contribute to the property's [Property.averageRating]
  * and the landlord's [User.landlordRating] (updated via Cloud Function).
  *

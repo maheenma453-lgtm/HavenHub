@@ -1,15 +1,5 @@
 package com.example.havenhub.screens
 
-// ─────────────────────────────────────────────────────────────────
-// SplashScreen.kt
-//
-// PURPOSE    : App launch par sabse pehle dikhne wali screen.
-//              Logo aur tagline fade-in animation ke saath show hoti hai,
-//              phir 2.5 seconds baad Onboarding screen par navigate karti hai.
-//
-// NAVIGATION : SplashScreen → OnboardingScreen
-// ─────────────────────────────────────────────────────────────────
-
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.EaseOutBack
 import androidx.compose.animation.core.animateFloatAsState
@@ -30,55 +20,47 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.AccentNavy
 import com.example.havenhub.ui.theme.BackgroundWhite
 import com.example.havenhub.ui.theme.PrimaryBlue
+import com.example.havenhub.ui.theme.PrimaryBlueDark
 import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(navController: NavController) {
 
-    // ── Animation State ───────────────────────────────────────────
-    // startAnimation false se true hone par animations trigger hoti hain
     var startAnimation by remember { mutableStateOf(false) }
 
-    // Logo aur tagline ka fade-in effect (0f → 1f)
     val alphaAnim by animateFloatAsState(
         targetValue   = if (startAnimation) 1f else 0f,
         animationSpec = tween(durationMillis = 1200, easing = EaseInOut),
         label         = "splashAlpha"
     )
 
-    // Logo ka scale-up effect (0.8f → 1f) with bounce
     val scaleAnim by animateFloatAsState(
         targetValue   = if (startAnimation) 1f else 0.8f,
         animationSpec = tween(durationMillis = 1000, easing = EaseOutBack),
         label         = "splashScale"
     )
 
-    // ── Side Effect: Animation start karo, phir navigate karo ────
     LaunchedEffect(Unit) {
-        startAnimation = true   // Animations trigger karo
-        delay(2500)             // 2.5 seconds ruko
+        startAnimation = true
+        delay(2500)
         navController.navigate(Screen.Onboarding.route) {
-            // Splash ko back stack se hata do taaki user wapas na ja sake
             popUpTo(Screen.Splash.route) { inclusive = true }
         }
     }
 
-    // ── Root Container ────────────────────────────────────────────
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(PrimaryBlue, AccentNavy)
+                    colors = listOf(PrimaryBlue, PrimaryBlueDark)
                 )
             ),
         contentAlignment = Alignment.Center
     ) {
 
-        // ── Center Content: Logo + App Name + Tagline ─────────────
         Column(
             modifier = Modifier
                 .scale(scaleAnim)
@@ -87,9 +69,6 @@ fun SplashScreen(navController: NavController) {
             verticalArrangement = Arrangement.Center
         ) {
 
-            // ── App Logo ──────────────────────────────────────────
-            // TODO: Replace emoji with actual logo:
-            //       Image(painter = painterResource(R.drawable.ic_splash_logo), ...)
             Box(
                 modifier = Modifier
                     .size(100.dp)
@@ -107,7 +86,6 @@ fun SplashScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── App Name ──────────────────────────────────────────
             Text(
                 text       = "HavenHub",
                 fontSize   = 36.sp,
@@ -117,7 +95,6 @@ fun SplashScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // ── Tagline ───────────────────────────────────────────
             Text(
                 text      = "Your Perfect Home, One Tap Away",
                 fontSize  = 14.sp,
@@ -126,7 +103,6 @@ fun SplashScreen(navController: NavController) {
             )
         }
 
-        // ── Bottom: Version Number ────────────────────────────────
         Text(
             text     = "v1.0.0",
             fontSize = 12.sp,

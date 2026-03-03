@@ -4,52 +4,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 
-data class Booking(
-
-    @DocumentId
-    val bookingId: String = "",
-
-    val tenantId: String = "",
-    val tenantName: String = "",
-    val landlordId: String = "",
-    val landlordName: String = "",
-    val propertyId: String = "",
-    val propertyTitle: String = "",
-    val propertyCoverUrl: String = "",
-    val propertyAddress: String = "",
-    val checkInDate: Timestamp? = null,
-    val checkOutDate: Timestamp? = null,
-    val totalNights: Int = 0,
-    val guestCount: Int = 1,
-    val pricePerNight: Double = 0.0,
-    val subtotal: Double = 0.0,
-    val serviceFee: Double = 0.0,
-    val securityDeposit: Double = 0.0,
-    val totalAmount: Double = 0.0,
-    val status: BookingStatus = BookingStatus.PENDING,
-    val hasReview: Boolean = false,
-    val paymentId: String = "",
-    val paymentStatus: PaymentStatus = PaymentStatus.PENDING,
-    val cancellationReason: String = "",
-    val cancelledBy: String = "",
-    val cancelledAt: Timestamp? = null,
-
-    @ServerTimestamp
-    val createdAt: Timestamp? = null,
-    val updatedAt: Timestamp? = null
-
-) {
-    constructor() : this(bookingId = "")
-
-    val formattedTotal: String get() = "PKR ${"%,.0f".format(totalAmount)}"
-
-    val isCancellable: Boolean
-        get() = status in listOf(BookingStatus.PENDING, BookingStatus.CONFIRMED)
-
-    val canReview: Boolean
-        get() = status == BookingStatus.COMPLETED && !hasReview
-}
-
+// ─── Enums (Class se bahar rakhein taaki asani se access hon) ───
 enum class BookingStatus {
     PENDING,
     CONFIRMED,
@@ -66,4 +21,64 @@ enum class BookingStatus {
     }
 }
 
-// ✅ PaymentStatus hata di — already doosri file mein exist karti hai
+enum class PaymentStatus {
+    PENDING,
+    PAID,
+    REFUNDED,
+    FAILED
+}
+
+// ─── Data Class ───
+data class Booking(
+    @DocumentId
+    val bookingId: String = "",
+
+    val tenantId: String = "",
+    val tenantName: String = "",
+    val landlordId: String = "",
+    val landlordName: String = "",
+    val propertyId: String = "",
+    val propertyTitle: String = "",
+    val propertyCoverUrl: String = "",
+    val propertyAddress: String = "",
+
+    val checkInDate: Timestamp? = null,
+    val checkOutDate: Timestamp? = null,
+    val totalNights: Int = 0,
+    val guestCount: Int = 1,
+
+    val pricePerNight: Double = 0.0,
+    val subtotal: Double = 0.0,
+    val serviceFee: Double = 0.0,
+    val securityDeposit: Double = 0.0,
+    val totalAmount: Double = 0.0,
+
+    // Line 45 Fix: Simple enum reference
+    val status: BookingStatus = BookingStatus.PENDING,
+
+    val hasReview: Boolean = false,
+    val paymentId: String = "",
+
+    // Payment Status Fix:
+    val paymentStatus: PaymentStatus = PaymentStatus.PENDING,
+
+    val cancellationReason: String = "",
+    val cancelledBy: String = "",
+    val cancelledAt: Timestamp? = null,
+
+    @ServerTimestamp
+    val createdAt: Timestamp? = null,
+    val updatedAt: Timestamp? = null
+) {
+    // Firebase required no-arg constructor
+    constructor() : this(bookingId = "")
+
+    val formattedTotal: String
+        get() = "PKR ${"%,.0f".format(totalAmount)}"
+
+    val isCancellable: Boolean
+        get() = status == BookingStatus.PENDING || status == BookingStatus.CONFIRMED
+
+    val canReview: Boolean
+        get() = status == BookingStatus.COMPLETED && !hasReview
+}
