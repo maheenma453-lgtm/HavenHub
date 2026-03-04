@@ -3,53 +3,97 @@ package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.User
+import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.repository.AuthRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class ProfileUiState(
+    val isLoading: Boolean = false,
+    val user: User? = null,
+    val errorMessage: String? = null,
+    val actionSuccess: Boolean = false
+)
+
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val dataManager: FirebaseDataManager
 ) : ViewModel() {
 
-    private val _profile = MutableStateFlow<Resource<User>>(Resource.Loading)
-    val profile: StateFlow<Resource<User>> = _profile.asStateFlow()
-
-    // FIX: updateProfile() doesn't exist in AuthRepository
-    // Use Resource<Unit> — just signal success/failure, not return a User
-    private val _updateState = MutableStateFlow<Resource<Unit>>(Resource.Loading)
-    val updateState: StateFlow<Resource<Unit>> = _updateState.asStateFlow()
+    private val _uiState = MutableStateFlow(ProfileUiState())
+    val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     init {
         loadProfile()
     }
 
+    // Load Profile
     fun loadProfile() {
         viewModelScope.launch {
-            _profile.value = Resource.Loading
-            // FIX: getCurrentUser() → currentUser (FirebaseUser property)
-            val firebaseUser = authRepository.currentUser
-            _profile.value = if (firebaseUser != null) {
-                // FirebaseUser se basic info — full User object chahiye toh dataManager.getUser() use karo
-                Resource.Success(
-                    User(
-                        userId   = firebaseUser.uid,
-                        email    = firebaseUser.email ?: "",
-                        fullName = firebaseUser.displayName ?: ""
-                    )
-                )
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val uid = authRepository.currentUser?.uid
+            if (uid != null) {
+                when (val result = dataManager.getUser(uid)) {
+                    is Resource.Success -> _uiState.update {
+                        it.copy(isLoading = false, user = result.data)
+                    }
+                    is Resource.Error -> _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
+                    }
+                    Resource.Loading -> Unit
+                }
             } else {
-                Resource.Error("User not found")
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = "User not found")
+                }
             }
         }
     }
 
-    fun resetState() {
-        _updateState.value = Resource.Loading
+    // Update Profile
+    fun updateProfile(
+        fullName   : String,
+        phoneNumber: String,
+        city       : String
+    ) {
+        val uid = authRepository.currentUser?.uid ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val fields = mapOf(
+                "fullName"    to fullName,
+                "phoneNumber" to phoneNumber,
+                "location"    to mapOf("city" to city)
+            )
+            when (val result = dataManager.updateUserFields(uid, fields)) {
+                is Resource.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading     = false,
+                            actionSuccess = true,
+                            user          = it.user?.copy(
+                                fullName    = fullName,
+                                phoneNumber = phoneNumber
+                            )
+                        )
+                    }
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                Resource.Loading -> Unit
+            }
+        }
+    }
+
+    // Clear Messages
+    fun clearMessages() {
+        _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
     }
 }

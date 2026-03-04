@@ -1,8 +1,10 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,58 +15,139 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationSettingsScreen(onBack: () -> Unit = {}) {
-    var pushEnabled by remember { mutableStateOf(true) }
-    var emailEnabled by remember { mutableStateOf(true) }
-    var smsEnabled by remember { mutableStateOf(false) }
-    var bookingAlerts by remember { mutableStateOf(true) }
-    var paymentAlerts by remember { mutableStateOf(true) }
-    var messageAlerts by remember { mutableStateOf(true) }
-    var promoAlerts by remember { mutableStateOf(false) }
-    var systemAlerts by remember { mutableStateOf(true) }
+fun NotificationSettingsScreen(
+    navController: NavController,
+    viewModel    : SettingsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val prefs = uiState.userPreferences
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Notification Settings", fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } }
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor             = PrimaryBlue,
+                    titleContentColor          = Color.White,
+                    navigationIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
 
+        if (uiState.isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+            return@Scaffold
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+        ) {
+
+            // Notification Channels
             SettingsGroup(title = "Notification Channels") {
-                SwitchSettingItem(Icons.Default.Notifications, "Push Notifications", "App notifications on your device", pushEnabled) { pushEnabled = it }
-                SwitchSettingItem(Icons.Default.Email, "Email Notifications", "Updates sent to your email", emailEnabled) { emailEnabled = it }
-                SwitchSettingItem(Icons.Default.Sms, "SMS Notifications", "Text message updates", smsEnabled) { smsEnabled = it }
+                SwitchSettingItem(
+                    icon             = Icons.Default.Notifications,
+                    label            = "Push Notifications",
+                    subtitle         = "App notifications on your device",
+                    checked          = prefs?.hasAnyNotificationsEnabled ?: true,
+                    onCheckedChange  = { viewModel.toggleNotifications(it) }
+                )
             }
 
+            // Notification Types
             SettingsGroup(title = "Notification Types") {
-                SwitchSettingItem(Icons.Default.CalendarToday, "Booking Alerts", "Confirmations, reminders, cancellations", bookingAlerts) { bookingAlerts = it }
-                SwitchSettingItem(Icons.Default.Payment, "Payment Alerts", "Receipts and payment confirmations", paymentAlerts) { paymentAlerts = it }
-                SwitchSettingItem(Icons.Default.Message, "Message Alerts", "New messages from hosts or tenants", messageAlerts) { messageAlerts = it }
-                SwitchSettingItem(Icons.Default.LocalOffer, "Promotions", "Deals and special offers", promoAlerts) { promoAlerts = it }
-                SwitchSettingItem(Icons.Default.Info, "System Updates", "App updates and announcements", systemAlerts) { systemAlerts = it }
+                SwitchSettingItem(
+                    icon            = Icons.Default.CalendarToday,
+                    label           = "Booking Alerts",
+                    subtitle        = "Confirmations, reminders, cancellations",
+                    checked         = prefs?.notifyBookingUpdates ?: true,
+                    onCheckedChange = { viewModel.updateNotificationChannel("notifyBookingUpdates", it) }
+                )
+                SwitchSettingItem(
+                    icon            = Icons.Default.Payment,
+                    label           = "Payment Alerts",
+                    subtitle        = "Receipts and payment confirmations",
+                    checked         = prefs?.notifyPayments ?: true,
+                    onCheckedChange = { viewModel.updateNotificationChannel("notifyPayments", it) }
+                )
+                SwitchSettingItem(
+                    icon            = Icons.Default.Message,
+                    label           = "Message Alerts",
+                    subtitle        = "New messages from hosts or tenants",
+                    checked         = prefs?.notifyMessages ?: true,
+                    onCheckedChange = { viewModel.updateNotificationChannel("notifyMessages", it) }
+                )
+                SwitchSettingItem(
+                    icon            = Icons.Default.LocalOffer,
+                    label           = "Promotions",
+                    subtitle        = "Deals and special offers",
+                    checked         = prefs?.notifyPromotions ?: false,
+                    onCheckedChange = { viewModel.updateNotificationChannel("notifyPromotions", it) }
+                )
+                SwitchSettingItem(
+                    icon            = Icons.Default.Info,
+                    label           = "System Updates",
+                    subtitle        = "App updates and announcements",
+                    checked         = prefs?.notifyAdminAlerts ?: true,
+                    onCheckedChange = { viewModel.updateNotificationChannel("notifyAdminAlerts", it) }
+                )
+            }
+
+            // Error Message
+            uiState.errorMessage?.let { error ->
+                Text(
+                    text     = error,
+                    color    = ErrorRed,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(16.dp)
+                )
             }
         }
     }
 }
 
 @Composable
-fun SwitchSettingItem(icon: ImageVector, label: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+fun SwitchSettingItem(
+    icon           : ImageVector,
+    label          : String,
+    subtitle       : String,
+    checked        : Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier          = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, fontSize = 14.sp)
-            Text(subtitle, fontSize = 11.sp, color = Color.Gray)
+            Text(label, fontSize = 14.sp, color = TextPrimary)
+            Text(subtitle, fontSize = 11.sp, color = TextSecondary)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked         = checked,
+            onCheckedChange = onCheckedChange,
+            colors          = SwitchDefaults.colors(checkedThumbColor = PrimaryBlue)
+        )
     }
 }

@@ -1,4 +1,5 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -6,6 +7,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,35 +17,71 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import com.example.havenhub.data.NotificationType
+import com.example.havenhub.navigation.Screen
+import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.NotificationViewModel
+import com.google.firebase.auth.FirebaseAuth
 
-// ─── Screen ─────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationDetailScreen(
-    notificationId: String = "N001",
-    onBack: () -> Unit = {},
-    onActionClick: () -> Unit = {}
+    navController   : NavController,
+    notificationId  : String,
+    viewModel       : NotificationViewModel = hiltViewModel()
 ) {
-    // In real app: fetch from ViewModel using notificationId
-    val notification = dummyNotifications.find { it.id == notificationId }
-        ?: dummyNotifications.first()
+    val uiState by viewModel.uiState.collectAsState()
+    val userId  = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+    // Notification dhundo list mein se
+    val notification = uiState.notifications.find { it.notificationId == notificationId }
+
+    // Mark as read jab screen khule
+    LaunchedEffect(notificationId) {
+        if (notificationId.isNotEmpty()) {
+            viewModel.markAsRead(notificationId, userId)
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Notification", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor             = PrimaryBlue,
+                    titleContentColor          = Color.White,
+                    navigationIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->
+
+        if (uiState.isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+            return@Scaffold
+        }
+
+        if (notification == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Notification not found.", color = TextSecondary)
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -51,10 +91,9 @@ fun NotificationDetailScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-
             Spacer(Modifier.height(12.dp))
 
-            // ── Icon ──
+            // Icon
             Box(
                 modifier = Modifier
                     .size(90.dp)
@@ -63,14 +102,14 @@ fun NotificationDetailScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = notificationIcon(notification.type),
+                    imageVector        = notificationIcon(notification.type),
                     contentDescription = null,
-                    tint = notificationColor(notification.type),
+                    tint     = notificationColor(notification.type),
                     modifier = Modifier.size(44.dp)
                 )
             }
 
-            // ── Type Tag ──
+            // Type Tag
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
@@ -78,67 +117,106 @@ fun NotificationDetailScreen(
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = notification.type.replaceFirstChar { it.uppercase() },
-                    color = notificationColor(notification.type),
-                    fontSize = 13.sp,
+                    text       = notification.type.displayName(),
+                    color      = notificationColor(notification.type),
+                    fontSize   = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
 
-            // ── Title ──
+            // Title
             Text(
-                text = notification.title,
-                fontSize = 20.sp,
+                text       = notification.title,
+                fontSize   = 20.sp,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
+                textAlign  = TextAlign.Center,
+                color      = TextPrimary
             )
 
-            // ── Time ──
+            // Time
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(14.dp), tint = TextSecondary)
                 Spacer(Modifier.width(4.dp))
-                Text(text = notification.time, fontSize = 13.sp, color = Color.Gray)
-            }
-
-            HorizontalDivider()
-
-            // ── Message ──
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
                 Text(
-                    text = notification.message,
-                    modifier = Modifier.padding(16.dp),
-                    fontSize = 15.sp,
-                    lineHeight = 24.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text     = notification.createdAt?.toDate()?.toString() ?: "-",
+                    fontSize = 13.sp,
+                    color    = TextSecondary
                 )
             }
 
-            // ── Action Button (context-aware) ──
-            NotificationActionButton(type = notification.type, onClick = onActionClick)
+            HorizontalDivider(color = BorderGray)
+
+            // Message Body
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(12.dp),
+                colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+            ) {
+                Text(
+                    text      = notification.body,
+                    modifier  = Modifier.padding(16.dp),
+                    fontSize  = 15.sp,
+                    lineHeight = 24.sp,
+                    color     = TextPrimary
+                )
+            }
+
+            // Action Button
+            NotificationActionButton(
+                type    = notification.type,
+                onClick = {
+                    when (notification.type) {
+                        NotificationType.BOOKING_REQUESTED,
+                        NotificationType.BOOKING_CONFIRMED,
+                        NotificationType.BOOKING_CANCELLED,
+                        NotificationType.BOOKING_COMPLETED,
+                        NotificationType.BOOKING_REMINDER -> {
+                            if (notification.referenceId.isNotEmpty()) {
+                                navController.navigate(Screen.BookingDetails.createRoute(notification.referenceId))
+                            }
+                        }
+                        NotificationType.PAYMENT_RECEIVED,
+                        NotificationType.PAYMENT_FAILED,
+                        NotificationType.REFUND_ISSUED -> {
+                            if (notification.referenceId.isNotEmpty()) {
+                                navController.navigate(Screen.PaymentSuccess.createRoute(notification.referenceId))
+                            }
+                        }
+                        NotificationType.NEW_MESSAGE -> {
+                            if (notification.referenceId.isNotEmpty()) {
+                                navController.navigate(Screen.Chat.createRoute(notification.referenceId))
+                            }
+                        }
+                        else -> { }
+                    }
+                }
+            )
 
             Spacer(Modifier.height(16.dp))
         }
     }
 }
 
-// ─── Context-Aware Action Button ────────────────────────────────────
 @Composable
-fun NotificationActionButton(type: String, onClick: () -> Unit) {
+fun NotificationActionButton(type: NotificationType, onClick: () -> Unit) {
     val (label, icon) = when (type) {
-        "booking" -> "View Booking"  to Icons.Default.CalendarToday
-        "payment" -> "View Payment"  to Icons.Default.Payment
-        "message" -> "Open Chat"     to Icons.Default.Message
-        else      -> "View Details"  to Icons.Default.OpenInNew
+        NotificationType.BOOKING_REQUESTED,
+        NotificationType.BOOKING_CONFIRMED,
+        NotificationType.BOOKING_CANCELLED,
+        NotificationType.BOOKING_COMPLETED,
+        NotificationType.BOOKING_REMINDER  -> "View Booking"  to Icons.Default.CalendarToday
+        NotificationType.PAYMENT_RECEIVED,
+        NotificationType.PAYMENT_FAILED,
+        NotificationType.REFUND_ISSUED     -> "View Payment"  to Icons.Default.Payment
+        NotificationType.NEW_MESSAGE       -> "Open Chat"     to Icons.AutoMirrored.Filled.Message
+        else                               -> "View Details"  to Icons.AutoMirrored.Filled.OpenInNew
     }
 
     Button(
-        onClick = onClick,
+        onClick  = onClick,
         modifier = Modifier.fillMaxWidth().height(50.dp),
-        shape = RoundedCornerShape(12.dp)
+        shape    = RoundedCornerShape(12.dp),
+        colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))

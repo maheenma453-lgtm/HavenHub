@@ -1,12 +1,14 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,36 +20,27 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import com.example.havenhub.data.Notification
+import com.example.havenhub.data.NotificationType
+import com.example.havenhub.navigation.Screen
+import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.NotificationViewModel
+import com.google.firebase.auth.FirebaseAuth
 
-// ─── Dummy Data Model ───────────────────────────────────────────────
-data class NotificationItem(
-    val id: String,
-    val title: String,
-    val message: String,
-    val time: String,
-    val type: String,        // "booking", "payment", "message", "system"
-    val isRead: Boolean
-)
-
-val dummyNotifications = listOf(
-    NotificationItem("N001", "Booking Confirmed!", "Your booking for Luxury Sea View Apartment has been confirmed.", "2 min ago", "booking", false),
-    NotificationItem("N002", "Payment Received", "Payment of Rs. 34,000 received via JazzCash.", "1 hr ago", "payment", false),
-    NotificationItem("N003", "New Message", "Ali Raza sent you a message: 'Welcome! Check-in is at 2 PM.'", "3 hrs ago", "message", false),
-    NotificationItem("N004", "Booking Reminder", "Your check-in at Clifton Apartment is tomorrow.", "Yesterday", "booking", true),
-    NotificationItem("N005", "System Update", "We've updated our privacy policy. Please review the changes.", "2 days ago", "system", true),
-    NotificationItem("N006", "Review Request", "How was your stay at DHA Residency? Leave a review!", "3 days ago", "system", true),
-    NotificationItem("N007", "Booking Cancelled", "Your booking BK-20241030-0031 has been cancelled.", "5 days ago", "booking", true),
-)
-
-// ─── Screen ─────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
-    onBack: () -> Unit = {},
-    onNotificationClick: (String) -> Unit = {}
+    navController: NavController,
+    viewModel    : NotificationViewModel = hiltViewModel()
 ) {
-    var notifications by remember { mutableStateOf(dummyNotifications) }
-    val unreadCount = notifications.count { !it.isRead }
+    val uiState by viewModel.uiState.collectAsState()
+    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+    LaunchedEffect(userId) {
+        if (userId.isNotEmpty()) viewModel.loadNotifications(userId)
+    }
 
     Scaffold(
         topBar = {
@@ -55,69 +48,131 @@ fun NotificationsScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Notifications", fontWeight = FontWeight.Bold)
-                        if (unreadCount > 0) {
+                        if (uiState.unreadCount > 0) {
                             Spacer(Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
+                                    .background(PrimaryBlue)
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
-                                Text(text = "$unreadCount", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text       = "${uiState.unreadCount}",
+                                    color      = Color.White,
+                                    fontSize   = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    if (unreadCount > 0) {
-                        TextButton(onClick = {
-                            notifications = notifications.map { it.copy(isRead = true) }
-                        }) {
-                            Text("Mark all read", fontSize = 12.sp)
+                    if (uiState.unreadCount > 0) {
+                        TextButton(onClick = { viewModel.markAllAsRead(userId) }) {
+                            Text("Mark all read", fontSize = 12.sp, color = Color.White)
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor             = PrimaryBlue,
+                    titleContentColor          = Color.White,
+                    navigationIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->
-        if (notifications.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+
+        if (uiState.isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+            return@Scaffold
+        }
+
+        if (uiState.notifications.isEmpty()) {
+            Box(
+                modifier         = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.NotificationsNone, contentDescription = null, modifier = Modifier.size(72.dp), tint = Color.LightGray)
+                    Icon(
+                        Icons.Default.NotificationsNone,
+                        contentDescription = null,
+                        modifier = Modifier.size(72.dp),
+                        tint     = TextSecondary
+                    )
                     Spacer(Modifier.height(12.dp))
-                    Text("No notifications yet", color = Color.Gray, fontSize = 16.sp)
+                    Text("No notifications yet", color = TextSecondary, fontSize = 16.sp)
                 }
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier       = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
-                items(notifications, key = { it.id }) { notification ->
+                items(uiState.notifications, key = { it.notificationId }) { notification ->
                     NotificationCard(
-                        item = notification,
+                        item    = notification,
                         onClick = {
-                            notifications = notifications.map {
-                                if (it.id == notification.id) it.copy(isRead = true) else it
+                            viewModel.markAsRead(notification.notificationId, userId)
+                            // Deep link navigation based on type
+                            when (notification.type) {
+                                NotificationType.BOOKING_CONFIRMED,
+                                NotificationType.BOOKING_CANCELLED,
+                                NotificationType.BOOKING_REMINDER,
+                                NotificationType.BOOKING_COMPLETED,
+                                NotificationType.BOOKING_REQUESTED -> {
+                                    if (notification.referenceId.isNotEmpty()) {
+                                        navController.navigate(
+                                            Screen.BookingDetails.createRoute(notification.referenceId)
+                                        )
+                                    }
+                                }
+                                NotificationType.PAYMENT_RECEIVED,
+                                NotificationType.PAYMENT_FAILED,
+                                NotificationType.REFUND_ISSUED -> {
+                                    if (notification.referenceId.isNotEmpty()) {
+                                        navController.navigate(
+                                            Screen.PaymentSuccess.createRoute(notification.referenceId)
+                                        )
+                                    }
+                                }
+                                NotificationType.NEW_MESSAGE -> {
+                                    if (notification.referenceId.isNotEmpty()) {
+                                        navController.navigate(
+                                            Screen.Chat.createRoute(notification.referenceId)
+                                        )
+                                    }
+                                }
+                                else -> { }
                             }
-                            onNotificationClick(notification.id)
                         }
                     )
                 }
             }
         }
+
+        // Error Message
+        uiState.errorMessage?.let { error ->
+            Text(
+                text     = error,
+                color    = ErrorRed,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
     }
 }
 
-// ─── Notification Card ───────────────────────────────────────────────
 @Composable
-fun NotificationCard(item: NotificationItem, onClick: () -> Unit) {
-    val bgColor = if (item.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+fun NotificationCard(item: Notification, onClick: () -> Unit) {
+    val bgColor = if (item.isRead) MaterialTheme.colorScheme.surface
+    else PrimaryBlue.copy(alpha = 0.07f)
 
     Row(
         modifier = Modifier
@@ -127,18 +182,17 @@ fun NotificationCard(item: NotificationItem, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Icon
         Box(
-            modifier = Modifier
+            modifier         = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
                 .background(notificationColor(item.type).copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = notificationIcon(item.type),
+                imageVector        = notificationIcon(item.type),
                 contentDescription = null,
-                tint = notificationColor(item.type),
+                tint     = notificationColor(item.type),
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -148,15 +202,20 @@ fun NotificationCard(item: NotificationItem, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = item.title,
+                    text       = item.type.displayName(),
                     fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 14.sp,
-                    modifier = Modifier.weight(1f)
+                    fontSize   = 14.sp,
+                    color      = TextPrimary,
+                    modifier   = Modifier.weight(1f)
                 )
-                Text(text = item.time, fontSize = 11.sp, color = Color.Gray)
+                Text(
+                    text     = item.createdAt?.toDate()?.toString() ?: "-",
+                    fontSize = 11.sp,
+                    color    = TextSecondary
+                )
             }
             Spacer(Modifier.height(2.dp))
-            Text(text = item.message, fontSize = 13.sp, color = Color.Gray, maxLines = 2)
+            Text(text = item.body, fontSize = 13.sp, color = TextSecondary, maxLines = 2)
         }
 
         if (!item.isRead) {
@@ -165,25 +224,40 @@ fun NotificationCard(item: NotificationItem, onClick: () -> Unit) {
                 modifier = Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(PrimaryBlue)
                     .align(Alignment.CenterVertically)
             )
         }
     }
-    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+    HorizontalDivider(color = BorderGray.copy(alpha = 0.4f))
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────
-fun notificationIcon(type: String): ImageVector = when (type) {
-    "booking" -> Icons.Default.CalendarToday
-    "payment" -> Icons.Default.Payment
-    "message" -> Icons.Default.Message
-    else      -> Icons.Default.Info
+fun notificationIcon(type: NotificationType): ImageVector = when (type) {
+    NotificationType.BOOKING_REQUESTED,
+    NotificationType.BOOKING_CONFIRMED,
+    NotificationType.BOOKING_CANCELLED,
+    NotificationType.BOOKING_COMPLETED,
+    NotificationType.BOOKING_REMINDER  -> Icons.Default.CalendarToday
+    NotificationType.PAYMENT_RECEIVED,
+    NotificationType.PAYMENT_FAILED,
+    NotificationType.REFUND_ISSUED     -> Icons.Default.Payment
+    NotificationType.NEW_MESSAGE       -> Icons.AutoMirrored.Filled.Message
+    NotificationType.NEW_REVIEW,
+    NotificationType.REVIEW_REPLY      -> Icons.Default.Star
+    NotificationType.PROPERTY_APPROVED,
+    NotificationType.PROPERTY_REJECTED -> Icons.Default.Home
+    else                               -> Icons.Default.Info
 }
 
-fun notificationColor(type: String): Color = when (type) {
-    "booking" -> Color(0xFF1565C0)
-    "payment" -> Color(0xFF2E7D32)
-    "message" -> Color(0xFF6A1B9A)
-    else      -> Color(0xFFE65100)
+fun notificationColor(type: NotificationType): Color = when (type) {
+    NotificationType.BOOKING_REQUESTED,
+    NotificationType.BOOKING_CONFIRMED,
+    NotificationType.BOOKING_CANCELLED,
+    NotificationType.BOOKING_COMPLETED,
+    NotificationType.BOOKING_REMINDER  -> PrimaryBlue
+    NotificationType.PAYMENT_RECEIVED,
+    NotificationType.REFUND_ISSUED     -> SuccessGreen
+    NotificationType.PAYMENT_FAILED    -> ErrorRed
+    NotificationType.NEW_MESSAGE       -> Color(0xFF6A1B9A)
+    else                               -> WarningOrange
 }
