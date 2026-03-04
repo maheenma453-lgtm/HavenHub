@@ -3,179 +3,154 @@ package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Payment
-import com.example.havenhub.repository.PaymentRepository
+import com.example.havenhub.data.PaymentMethod
+import com.example.havenhub.data.PaymentStatus
+import com.example.havenhub.data.PaymentType
+import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.repository.BookingRepository
-import com.example.havenhub.repository.NotificationRepository
+import com.example.havenhub.repository.PaymentRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class PaymentMethod {
-    JAZZCASH,
-    EASYPAISA,
-    BANK_TRANSFER,
-    CASH_ON_ARRIVAL
-}
-
-enum class PaymentStatus {
-    PENDING,
-    PROCESSING,
-    COMPLETED,
-    FAILED,
-    REFUNDED
-}
+data class PaymentUiState(
+    val isLoading: Boolean = false,
+    val payment: Payment? = null,
+    val paymentHistory: List<Payment> = emptyList(),
+    val selectedMethod: PaymentMethod? = null,
+    val defaultMethod: PaymentMethod? = null,
+    val errorMessage: String? = null,
+    val actionSuccess: Boolean = false
+)
 
 @HiltViewModel
 class PaymentViewModel @Inject constructor(
     private val paymentRepository: PaymentRepository,
-    private val bookingRepository: BookingRepository,
-    private val notificationRepository: NotificationRepository
+    private val bookingRepository: BookingRepository
 ) : ViewModel() {
 
-    private val _paymentState = MutableStateFlow<Resource<Payment>?>(null)
-    val paymentState: StateFlow<Resource<Payment>?> = _paymentState.asStateFlow()
+    private val _uiState = MutableStateFlow(PaymentUiState())
+    val uiState: StateFlow<PaymentUiState> = _uiState.asStateFlow()
 
-    private val _paymentHistory = MutableStateFlow<Resource<List<Payment>>?>(null)
-    val paymentHistory: StateFlow<Resource<List<Payment>>?> = _paymentHistory.asStateFlow()
-
-    private val _selectedMethod = MutableStateFlow<PaymentMethod?>(null)
-    val selectedMethod: StateFlow<PaymentMethod?> = _selectedMethod.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-
-    // ✅ Process Payment
+    // ── Process Payment ────────────────────────────────────────────
     fun processPayment(
         bookingId: String,
-        userId: String,
-        ownerId: String,
+        payerId: String,
+        payeeId: String,
+        payerName: String,
+        payeeName: String,
         amount: Double,
         method: PaymentMethod
     ) {
         if (amount <= 0.0) {
-            _errorMessage.value = "Invalid payment amount"
+            _uiState.update { it.copy(errorMessage = "Invalid payment amount") }
             return
         }
 
         viewModelScope.launch {
-            _paymentState.value = Resource.Loading()
-            _isLoading.value = true
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
             try {
                 val payment = Payment(
-                    paymentId = "",
-                    bookingId = bookingId,
-                    userId = userId,
-                    ownerId = ownerId,
-                    amount = amount,
-                    paymentMethod = method.name,
-                    paymentStatus = PaymentStatus.PENDING.name,
-                    transactionId = null,
-                    createdAt = System.currentTimeMillis(),
-                    updatedAt = System.currentTimeMillis()
+                    bookingId     = bookingId,
+                    payerId       = payerId,
+                    payerName     = payerName,
+                    payeeId       = payeeId,
+                    payeeName     = payeeName,
+                    amount        = amount,
+                    paymentMethod = method,
+                    status        = PaymentStatus.PENDING,
+                    type          = PaymentType.BOOKING
                 )
 
-                val result = when (method) {
-                    PaymentMethod.JAZZCASH -> paymentRepository.processJazzCashPayment(payment)
-                    PaymentMethod.EASYPAISA -> paymentRepository.processEasyPaisaPayment(payment)
-                    PaymentMethod.BANK_TRANSFER -> paymentRepository.processBankTransfer(payment)
-                    PaymentMethod.CASH_ON_ARRIVAL -> paymentRepository.processCashPayment(payment)
-                }
-
-                when (result) {
+                when (val result = paymentRepository.savePayment(payment)) {
                     is Resource.Success -> {
-                        _paymentState.value = Resource.Success(result.data!!)
+                        bookingRepository.updateBookingStatus(bookingId, BookingStatus.CONFIRMED)
+                        paymentRepository.updatePaymentStatus(result.data, PaymentStatus.COMPLETED.name)
 
-                        // Update booking status to CONFIRMED
-                        bookingRepository.updateBookingStatus(bookingId, "CONFIRMED")
-
-                        // Update payment status in booking
-                        bookingRepository.updatePaymentStatus(bookingId, "PAID")
-
-                        // Send notification to owner
-                        notificationRepository.sendPaymentNotification(
-                            ownerId = ownerId,
-                            bookingId = bookingId,
-                            amount = amount,
-                            message = "Payment received for booking"
-                        )
+                        val updated = paymentRepository.getPaymentByBooking(bookingId)
+                        _uiState.update {
+                            it.copy(
+                                isLoading     = false,
+                                payment       = if (updated is Resource.Success) updated.data else null,
+                                actionSuccess = true
+                            )
+                        }
                     }
-                    is Resource.Error -> {
-                        _paymentState.value = Resource.Error(result.message ?: "Payment failed")
-                        _errorMessage.value = result.message
+                    is Resource.Error -> _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
                     }
-                    else -> {}
+                    Resource.Loading -> Unit
                 }
 
             } catch (e: Exception) {
-                _paymentState.value = Resource.Error(e.message ?: "Unknown error")
-                _errorMessage.value = e.message
-            } finally {
-                _isLoading.value = false
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.message ?: "Unknown error")
+                }
             }
         }
     }
 
-    // ✅ Load Payment History
+    // ── Load Payment History ───────────────────────────────────────
     fun loadPaymentHistory(userId: String) {
         viewModelScope.launch {
-            _paymentHistory.value = Resource.Loading()
-            _isLoading.value = true
-
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val result = paymentRepository.getUserPayments(userId)
-                _paymentHistory.value = result
-            } catch (e: Exception) {
-                _paymentHistory.value = Resource.Error(e.message ?: "Failed to load payments")
-                _errorMessage.value = e.message
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    // ✅ Verify Payment Status
-    fun verifyPaymentStatus(paymentId: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-
-            try {
-                val result = paymentRepository.verifyPayment(paymentId)
-                when (result) {
-                    is Resource.Success -> {
-                        _paymentState.value = Resource.Success(result.data!!)
+                when (val result = paymentRepository.getUserPayments(userId)) {
+                    is Resource.Success -> _uiState.update {
+                        it.copy(isLoading = false, paymentHistory = result.data)
                     }
-                    is Resource.Error -> {
-                        _errorMessage.value = result.message
+                    is Resource.Error -> _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
                     }
-                    else -> {}
+                    Resource.Loading -> Unit
                 }
             } catch (e: Exception) {
-                _errorMessage.value = e.message
-            } finally {
-                _isLoading.value = false
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load payments")
+                }
             }
         }
     }
 
-    // ✅ Select Payment Method
+    // ── Verify Payment ─────────────────────────────────────────────
+    fun verifyPaymentStatus(bookingId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                when (val result = paymentRepository.getPaymentByBooking(bookingId)) {
+                    is Resource.Success -> _uiState.update {
+                        it.copy(isLoading = false, payment = result.data)
+                    }
+                    is Resource.Error -> _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
+                    }
+                    Resource.Loading -> Unit
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.message ?: "Unknown error")
+                }
+            }
+        }
+    }
+
+    // ── Payment Method Selection ───────────────────────────────────
     fun selectPaymentMethod(method: PaymentMethod) {
-        _selectedMethod.value = method
+        _uiState.update { it.copy(selectedMethod = method) }
     }
 
-    // ✅ Clear States
-    fun clearError() {
-        _errorMessage.value = null
+    fun setDefaultMethod(method: PaymentMethod) {
+        _uiState.update { it.copy(defaultMethod = method, selectedMethod = method) }
     }
 
-    fun resetPaymentState() {
-        _paymentState.value = null
+    // ── Clear ──────────────────────────────────────────────────────
+    fun clearMessages() {
+        _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
     }
 }

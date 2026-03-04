@@ -1,4 +1,5 @@
 package com.example.havenhub.screens
+
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -18,20 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.havenhub.ui.navigation.Screen
-import com.havenhub.ui.theme.*
-import com.havenhub.ui.viewmodel.BookingViewModel
-
-// ─────────────────────────────────────────────────────────────────
-// BookingConfirmationScreen.kt
-// PURPOSE : Success screen shown after booking is created.
-//           Displays booking summary, ID, and next steps.
-//           User can go to payment or view bookings.
-// PARAMETERS: bookingId (from navigation)
-// NAVIGATION:
-//   → PaymentScreen (to pay now)
-//   → MyBookingsScreen (view all bookings)
-// ─────────────────────────────────────────────────────────────────
+import com.example.havenhub.navigation.Screen
+import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.BookingViewModel
 
 @Composable
 fun BookingConfirmationScreen(
@@ -39,13 +29,7 @@ fun BookingConfirmationScreen(
     bookingId     : String,
     viewModel     : BookingViewModel = hiltViewModel()
 ) {
-
-    // ── Load booking details ───────────────────────────────────────
-    LaunchedEffect(bookingId) {
-        viewModel.loadBookingDetails(bookingId)
-    }
-
-    val booking by viewModel.currentBooking.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     // ── Animated checkmark (pop-in effect) ────────────────────────
     val scale by animateFloatAsState(
@@ -57,7 +41,6 @@ fun BookingConfirmationScreen(
         label = "confirmScale"
     )
 
-    // ── UI ─────────────────────────────────────────────────────────
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -98,74 +81,65 @@ fun BookingConfirmationScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text      = "Your property has been booked successfully.\nThe owner has been notified.",
-            fontSize  = 14.sp,
-            color     = TextSecondary,
-            textAlign = TextAlign.Center,
+            text       = "Your property has been booked successfully.\nThe owner has been notified.",
+            fontSize   = 14.sp,
+            color      = TextSecondary,
+            textAlign  = TextAlign.Center,
             lineHeight = 21.sp
         )
 
         Spacer(modifier = Modifier.height(32.dp))
 
         // ── Booking Summary Card ───────────────────────────────────
-        booking?.let { b ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(16.dp),
-                colors   = CardDefaults.cardColors(containerColor = SurfaceGray),
-                elevation = CardDefaults.cardElevation(0.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+        Card(
+            modifier  = Modifier.fillMaxWidth(),
+            shape     = RoundedCornerShape(16.dp),
+            colors    = CardDefaults.cardColors(containerColor = SurfaceVariantLight),
+            elevation = CardDefaults.cardElevation(0.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
 
-                    Text("Booking Details", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(14.dp))
+                Text("Booking Details", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(14.dp))
 
-                    // Booking ID
-                    BookingDetailRow(
-                        label = "Booking ID",
-                        value = "#${b.id.take(8).uppercase()}"
+                BookingDetailRow(label = "Booking ID", value = "#${bookingId.take(8).uppercase()}")
+                BookingDetailRow(label = "Property ID", value = uiState.bookings.firstOrNull()?.propertyId ?: "-")
+                BookingDetailRow(label = "Status", value = "Pending")
+                BookingDetailRow(label = "Payment", value = "Pending")
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = BorderGray)
+
+                // Total amount
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Total Amount", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text       = "PKR 12,000",
+                        fontSize   = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = PrimaryBlue
                     )
-                    BookingDetailRow(label = "Property",    value = b.propertyTitle)
-                    BookingDetailRow(label = "Location",    value = b.propertyCity)
-                    BookingDetailRow(label = "Package",     value = b.rentalPackage)
-                    BookingDetailRow(label = "Check-In",    value = b.checkInDate)
-                    BookingDetailRow(label = "Check-Out",   value = b.checkOutDate)
-                    BookingDetailRow(label = "Guests",      value = "${b.guestCount}")
+                }
 
-                    Divider(modifier = Modifier.padding(vertical = 12.dp), color = BorderGray)
+                Spacer(modifier = Modifier.height(12.dp))
 
-                    // Total amount
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Total Amount", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            text       = "PKR ${b.totalPrice}",
-                            fontSize   = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color      = PrimaryBlue
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Payment status badge
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(WarningAmber.copy(alpha = 0.12f))
-                            .padding(10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text       = "⏳ Payment Pending",
-                            fontSize   = 13.sp,
-                            color      = WarningAmber,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                // Payment status badge
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(WarningOrange.copy(alpha = 0.12f))
+                        .padding(10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text       = "⏳ Payment Pending",
+                        fontSize   = 13.sp,
+                        color      = WarningOrange,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
@@ -173,8 +147,6 @@ fun BookingConfirmationScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         // ── Action Buttons ─────────────────────────────────────────
-
-        // Pay Now → goes to payment
         Button(
             onClick = { navController.navigate(Screen.Payment.createRoute(bookingId)) },
             modifier = Modifier
@@ -188,11 +160,9 @@ fun BookingConfirmationScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Pay Later → view bookings
         OutlinedButton(
             onClick = {
                 navController.navigate(Screen.MyBookings.route) {
-                    // Clear back stack so user starts fresh
                     popUpTo(Screen.Home.route)
                 }
             },
@@ -205,6 +175,11 @@ fun BookingConfirmationScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        // ── Error Message ──────────────────────────────────────────
+        uiState.errorMessage?.let { error ->
+            Text(text = error, color = ErrorRed, fontSize = 14.sp)
+        }
     }
 }
 
@@ -221,5 +196,3 @@ private fun BookingDetailRow(label: String, value: String) {
         Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
     }
 }
-
-

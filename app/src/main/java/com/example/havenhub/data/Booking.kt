@@ -4,7 +4,6 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 
-// ─── Enums (Class se bahar rakhein taaki asani se access hon) ───
 enum class BookingStatus {
     PENDING,
     CONFIRMED,
@@ -21,14 +20,7 @@ enum class BookingStatus {
     }
 }
 
-enum class PaymentStatus {
-    PENDING,
-    PAID,
-    REFUNDED,
-    FAILED
-}
 
-// ─── Data Class ───
 data class Booking(
     @DocumentId
     val bookingId: String = "",
@@ -53,13 +45,9 @@ data class Booking(
     val securityDeposit: Double = 0.0,
     val totalAmount: Double = 0.0,
 
-    // Line 45 Fix: Simple enum reference
     val status: BookingStatus = BookingStatus.PENDING,
-
     val hasReview: Boolean = false,
     val paymentId: String = "",
-
-    // Payment Status Fix:
     val paymentStatus: PaymentStatus = PaymentStatus.PENDING,
 
     val cancellationReason: String = "",
@@ -70,7 +58,6 @@ data class Booking(
     val createdAt: Timestamp? = null,
     val updatedAt: Timestamp? = null
 ) {
-    // Firebase required no-arg constructor
     constructor() : this(bookingId = "")
 
     val formattedTotal: String

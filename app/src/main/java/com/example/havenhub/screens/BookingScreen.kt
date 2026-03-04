@@ -1,6 +1,5 @@
 package com.example.havenhub.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,11 +16,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.example.havenhub.viewmodel.BookingViewModel
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.PaymentStatus
 import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.BookingViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,10 +29,9 @@ fun BookingScreen(
     propertyId: String,
     viewModel: BookingViewModel = hiltViewModel()
 ) {
-    // Collect state correctly using 'by'
     val uiState by viewModel.uiState.collectAsState()
 
-    // Handle Success Navigation
+    // Success hone par back navigate karo
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             navController.popBackStack()
@@ -66,47 +64,63 @@ fun BookingScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Price Breakdown Card
-            val SurfaceGray: Color = null
+
+            // ── Order Summary Card ──────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceGray)
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Order Summary", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Property ID: $propertyId", color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Total Amount: Rs. 12,000", fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Status: Pending", color = TextSecondary)
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Confirm Booking Button
+            // ── Confirm & Pay Button ────────────────────────────
             Button(
                 onClick = {
                     val booking = Booking(
                         propertyId = propertyId,
-                        totalAmount = 12000.0, // Replace with dynamic price
+                        totalAmount = 12000.0,
                         status = BookingStatus.PENDING,
                         paymentStatus = PaymentStatus.PENDING
                     )
                     viewModel.createBooking(booking)
                 },
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
                 enabled = !uiState.isLoading,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
                 } else {
                     Text("Confirm & Pay", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            // Error Message Display
+            // ── Error Message ───────────────────────────────────
             uiState.errorMessage?.let { error ->
-                Text(text = error, color = Color.Red, modifier = Modifier.padding(top = 8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = error,
+                    color = Color.Red,
+                    fontSize = 14.sp
+                )
             }
         }
     }

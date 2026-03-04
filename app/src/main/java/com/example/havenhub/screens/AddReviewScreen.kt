@@ -1,9 +1,11 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,87 +15,163 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.ReviewViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddReviewScreen(onBack: () -> Unit = {}, onSubmit: () -> Unit = {}) {
-    var rating by remember { mutableIntStateOf(0) }
-    var reviewText by remember { mutableStateOf("") }
+fun AddReviewScreen(
+    navController : NavController,
+    propertyId    : String,
+    bookingId     : String,
+    propertyTitle : String,
+    viewModel     : ReviewViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    // Local UI state
+    var rating      by remember { mutableIntStateOf(0) }
+    var reviewText  by remember { mutableStateOf("") }
     var cleanliness by remember { mutableIntStateOf(0) }
-    var location by remember { mutableIntStateOf(0) }
-    var value by remember { mutableIntStateOf(0) }
+    var location    by remember { mutableIntStateOf(0) }
+    var value       by remember { mutableIntStateOf(0) }
+
+    // Success hone par back navigate karo
+    LaunchedEffect(uiState.actionSuccess) {
+        if (uiState.actionSuccess) {
+            navController.popBackStack()
+            viewModel.clearMessages()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Write a Review", fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } }
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor        = PrimaryBlue,
+                    titleContentColor     = Color.White,
+                    navigationIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Property Info
+
+            // Property Info Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                shape    = RoundedCornerShape(12.dp),
+                colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
             ) {
-                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                Row(
+                    modifier          = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Home,
+                        contentDescription = null,
+                        tint     = PrimaryBlue,
+                        modifier = Modifier.size(36.dp)
+                    )
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("Luxury Sea View Apartment", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text("Stayed: Nov 10 – Nov 14, 2024", fontSize = 12.sp, color = Color.Gray)
+                        Text(propertyTitle, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
+                        Text("Booking ID: #${bookingId.take(8).uppercase()}", fontSize = 12.sp, color = TextSecondary)
                     }
                 }
             }
 
             // Overall Rating
-            Text("Overall Rating", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text("Overall Rating", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (1..5).forEach { star ->
                     IconButton(onClick = { rating = star }) {
                         Icon(
-                            if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                            imageVector        = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = null,
-                            tint = if (star <= rating) Color(0xFFFFC107) else Color.Gray,
+                            tint     = if (star <= rating) AccentAmber else TextSecondary,
                             modifier = Modifier.size(36.dp)
                         )
                     }
                 }
                 if (rating > 0) {
-                    Text("$rating/5", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC107), modifier = Modifier.align(Alignment.CenterVertically))
+                    Text(
+                        "$rating/5",
+                        fontSize   = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = AccentAmber,
+                        modifier   = Modifier.align(Alignment.CenterVertically)
+                    )
                 }
             }
 
             // Category Ratings
-            Text("Category Ratings", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-            CategoryRating("Cleanliness", cleanliness) { cleanliness = it }
-            CategoryRating("Location", location) { location = it }
-            CategoryRating("Value for Money", value) { value = it }
+            Text("Category Ratings", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
+            CategoryRating("Cleanliness", cleanliness)    { cleanliness = it }
+            CategoryRating("Location", location)          { location    = it }
+            CategoryRating("Value for Money", value)      { value       = it }
 
             // Review Text
-            Text("Your Review", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text("Your Review", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
             OutlinedTextField(
-                value = reviewText,
-                onValueChange = { reviewText = it },
-                modifier = Modifier.fillMaxWidth().height(140.dp),
-                placeholder = { Text("Share your experience...") },
-                shape = RoundedCornerShape(12.dp),
-                maxLines = 6
+                value         = reviewText,
+                onValueChange = { if (it.length <= 500) reviewText = it },
+                modifier      = Modifier.fillMaxWidth().height(140.dp),
+                placeholder   = { Text("Share your experience...") },
+                shape         = RoundedCornerShape(12.dp),
+                maxLines      = 6
             )
-            Text("${reviewText.length}/500 characters", fontSize = 11.sp, color = Color.Gray, modifier = Modifier.align(Alignment.End))
+            Text(
+                "${reviewText.length}/500 characters",
+                fontSize = 11.sp,
+                color    = TextSecondary,
+                modifier = Modifier.align(Alignment.End)
+            )
 
+            // Submit Button
             Button(
-                onClick = onSubmit,
+                onClick = {
+                    viewModel.addReview(
+                        propertyId = propertyId,
+                        bookingId  = bookingId,
+                        rating     = rating.toFloat(),
+                        comment    = reviewText
+                    )
+                },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(12.dp),
-                enabled = rating > 0 && reviewText.isNotBlank()
+                shape    = RoundedCornerShape(12.dp),
+                enabled  = rating > 0 && reviewText.isNotBlank() && !uiState.isLoading,
+                colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
-                Text("Submit Review", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(
+                        modifier    = Modifier.size(20.dp),
+                        color       = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Submit Review", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            // Error Message
+            uiState.errorMessage?.let { error ->
+                Text(text = error, color = ErrorRed, fontSize = 14.sp)
             }
         }
     }
@@ -101,15 +179,18 @@ fun AddReviewScreen(onBack: () -> Unit = {}, onSubmit: () -> Unit = {}) {
 
 @Composable
 fun CategoryRating(label: String, value: Int, onSelect: (Int) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 13.sp, color = Color.Gray, modifier = Modifier.width(130.dp))
+    Row(
+        modifier          = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 13.sp, color = TextSecondary, modifier = Modifier.width(130.dp))
         Row {
             (1..5).forEach { star ->
                 IconButton(onClick = { onSelect(star) }, modifier = Modifier.size(32.dp)) {
                     Icon(
-                        if (star <= value) Icons.Default.Star else Icons.Default.StarBorder,
+                        imageVector        = if (star <= value) Icons.Default.Star else Icons.Default.StarBorder,
                         contentDescription = null,
-                        tint = if (star <= value) Color(0xFFFFC107) else Color.LightGray,
+                        tint     = if (star <= value) AccentAmber else TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }

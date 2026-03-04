@@ -1,9 +1,11 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,22 +15,50 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import com.example.havenhub.data.PaymentMethod
+import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.PaymentViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentScreen(
-    onBack: () -> Unit = {},
-    onPaymentSuccess: () -> Unit = {},
-    onSelectMethod: () -> Unit = {}
+    navController: NavController,
+    bookingId: String,
+    payerId: String,
+    payeeId: String,
+    payerName: String,
+    payeeName: String,
+    amount: Double,
+    viewModel: PaymentViewModel = hiltViewModel()
 ) {
-    var selectedMethod by remember { mutableStateOf("JazzCash") }
-    var isProcessing by remember { mutableStateOf(false) }
+    val uiState by viewModel.uiState.collectAsState()
+
+    // Success hone par BookingConfirmation pe navigate karo
+    LaunchedEffect(uiState.actionSuccess) {
+        if (uiState.actionSuccess) {
+            navController.navigate("booking_confirmation/$bookingId") {
+                popUpTo("payment/$bookingId") { inclusive = true }
+            }
+            viewModel.clearMessages()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Payment", fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } }
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = PrimaryBlue,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->
@@ -40,37 +70,39 @@ fun PaymentScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Order Summary
+
+            // Order Summary Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                shape    = RoundedCornerShape(12.dp),
+                colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Order Summary", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
-                    HorizontalDivider()
-                    PayRow("Property", "Luxury Sea View Apartment")
-                    PayRow("Check-In", "Nov 10, 2024")
-                    PayRow("Check-Out", "Nov 14, 2024")
-                    PayRow("Nights", "4")
-                    PayRow("Rs. 8,500 × 4 nights", "Rs. 34,000")
-                    HorizontalDivider()
-                    PayRow("Total", "Rs. 34,000", bold = true, highlight = true)
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Order Summary", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = PrimaryBlue)
+                    HorizontalDivider(color = BorderGray)
+                    PayRow("Booking ID", "#${bookingId.take(8).uppercase()}")
+                    PayRow("Amount", "PKR ${amount.toInt()}")
+                    HorizontalDivider(color = BorderGray)
+                    PayRow("Total", "PKR ${amount.toInt()}", bold = true, highlight = true)
                 }
             }
 
-            // Payment Method
-            Text("Payment Method", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            // Payment Method Selection
+            Text("Payment Method", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
 
-            listOf("JazzCash", "EasyPaisa", "Credit/Debit Card", "Bank Transfer").forEach { method ->
+            listOf(
+                PaymentMethod.JAZZCASH,
+                PaymentMethod.EASYPAISA,
+                PaymentMethod.CREDIT_CARD,
+                PaymentMethod.BANK_TRANSFER
+            ).forEach { method ->
                 OutlinedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(Modifier),
-                    shape = RoundedCornerShape(10.dp),
-                    border = if (selectedMethod == method)
-                        CardDefaults.outlinedCardBorder().copy()
-                    else CardDefaults.outlinedCardBorder()
+                    onClick  = { viewModel.selectPaymentMethod(method) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(10.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -78,46 +110,77 @@ fun PaymentScreen(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(selected = selectedMethod == method, onClick = { selectedMethod = method })
+                        RadioButton(
+                            selected = uiState.selectedMethod == method,
+                            onClick  = { viewModel.selectPaymentMethod(method) }
+                        )
                         Spacer(Modifier.width(8.dp))
                         Icon(
                             imageVector = when (method) {
-                                "Credit/Debit Card" -> Icons.Default.CreditCard
-                                "Bank Transfer" -> Icons.Default.AccountBalance
+                                PaymentMethod.CREDIT_CARD,
+                                PaymentMethod.DEBIT_CARD  -> Icons.Default.CreditCard
+                                PaymentMethod.BANK_TRANSFER -> Icons.Default.AccountBalance
                                 else -> Icons.Default.Payment
                             },
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint     = PrimaryBlue,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(method, fontSize = 14.sp)
+                        Text(method.displayName(), fontSize = 14.sp, color = TextPrimary)
                     }
                 }
             }
 
             Spacer(Modifier.height(8.dp))
 
+            // Pay Button
             Button(
                 onClick = {
-                    isProcessing = true
-                    onPaymentSuccess()
+                    uiState.selectedMethod?.let { method ->
+                        viewModel.processPayment(
+                            bookingId = bookingId,
+                            payerId   = payerId,
+                            payeeId   = payeeId,
+                            payerName = payerName,
+                            payeeName = payeeName,
+                            amount    = amount,
+                            method    = method
+                        )
+                    } ?: run {
+                        // Method select nahi hua
+                    }
                 },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                enabled = !isProcessing
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape   = RoundedCornerShape(12.dp),
+                enabled = !uiState.isLoading && uiState.selectedMethod != null,
+                colors  = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
-                if (isProcessing) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(
+                        modifier    = Modifier.size(20.dp),
+                        color       = Color.White,
+                        strokeWidth = 2.dp
+                    )
                     Spacer(Modifier.width(8.dp))
+                    Text("Processing...", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                } else {
+                    Text("Pay PKR ${amount.toInt()}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
-                Text("Pay Rs. 34,000", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Error Message
+            uiState.errorMessage?.let { error ->
+                Text(text = error, color = ErrorRed, fontSize = 14.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally))
             }
 
             Text(
                 "Your payment is secured and encrypted.",
                 fontSize = 12.sp,
-                color = Color.Gray,
+                color    = TextSecondary,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         }
@@ -125,14 +188,22 @@ fun PaymentScreen(
 }
 
 @Composable
-fun PayRow(label: String, value: String, bold: Boolean = false, highlight: Boolean = false) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 13.sp, color = if (highlight) MaterialTheme.colorScheme.onSurface else Color.Gray)
+fun PayRow(
+    label    : String,
+    value    : String,
+    bold     : Boolean = false,
+    highlight: Boolean = false
+) {
+    Row(
+        modifier              = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, fontSize = 13.sp, color = TextSecondary)
         Text(
-            value,
-            fontSize = 13.sp,
+            text       = value,
+            fontSize   = 13.sp,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            color = if (highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            color      = if (highlight) PrimaryBlue else TextPrimary
         )
     }
 }

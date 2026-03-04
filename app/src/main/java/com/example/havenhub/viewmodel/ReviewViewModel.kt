@@ -10,8 +10,17 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class ReviewUiState(
+    val isLoading: Boolean = false,
+    val reviews: List<Review> = emptyList(),
+    val averageRating: Double = 0.0,
+    val errorMessage: String? = null,
+    val actionSuccess: Boolean = false
+)
 
 @HiltViewModel
 class ReviewViewModel @Inject constructor(
@@ -19,35 +28,32 @@ class ReviewViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _reviews = MutableStateFlow<Resource<List<Review>>>(Resource.Loading)
-    val reviews: StateFlow<Resource<List<Review>>> = _reviews.asStateFlow()
+    private val _uiState = MutableStateFlow(ReviewUiState())
+    val uiState: StateFlow<ReviewUiState> = _uiState.asStateFlow()
 
-    // FIX: addReview() returns Resource<String> not Resource<Review>
-    private val _addReviewState = MutableStateFlow<Resource<String>>(Resource.Loading)
-    val addReviewState: StateFlow<Resource<String>> = _addReviewState.asStateFlow()
-
-    private val _averageRating = MutableStateFlow(0.0)
-    val averageRating: StateFlow<Double> = _averageRating.asStateFlow()
-
-    // FIX: getReviewsByProperty() → getPropertyReviews()
+    // Load Property Reviews
     fun loadPropertyReviews(propertyId: String) {
         viewModelScope.launch {
-            _reviews.value = Resource.Loading
-            val result = reviewRepository.getPropertyReviews(propertyId)
-            _reviews.value = result
-            if (result is Resource.Success) {
-                // FIX: result.data is non-null in Resource.Success — no ?: needed
-                // FIX: rating field is overallRating not rating
-                val list = result.data
-                _averageRating.value = if (list.isNotEmpty())
-                    list.sumOf { it.overallRating.toDouble() } / list.size
-                else 0.0
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            when (val result = reviewRepository.getPropertyReviews(propertyId)) {
+                is Resource.Success -> {
+                    val list = result.data
+                    val avg  = if (list.isNotEmpty())
+                        list.sumOf { it.overallRating.toDouble() } / list.size
+                    else 0.0
+                    _uiState.update {
+                        it.copy(isLoading = false, reviews = list, averageRating = avg)
+                    }
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                Resource.Loading -> Unit
             }
         }
     }
 
-    // FIX: addReview() takes a Review object, not separate params
-    // FIX: getCurrentUser() → currentUser (property)
+    // Add Review
     fun addReview(
         propertyId: String,
         bookingId: String,
@@ -57,21 +63,32 @@ class ReviewViewModel @Inject constructor(
         viewModelScope.launch {
             val userId   = authRepository.currentUser?.uid ?: return@launch
             val userName = authRepository.currentUser?.displayName ?: ""
-            _addReviewState.value = Resource.Loading
+
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
             val review = Review(
-                reviewerId   = userId,
-                reviewerName = userName,
-                propertyId   = propertyId,
-                bookingId    = bookingId,
+                reviewerId    = userId,
+                reviewerName  = userName,
+                propertyId    = propertyId,
+                bookingId     = bookingId,
                 overallRating = rating,
-                comment      = comment
+                comment       = comment
             )
-            _addReviewState.value = reviewRepository.addReview(review)
+
+            when (val result = reviewRepository.addReview(review)) {
+                is Resource.Success -> _uiState.update {
+                    it.copy(isLoading = false, actionSuccess = true)
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                Resource.Loading -> Unit
+            }
         }
     }
 
-    fun resetState() {
-        _addReviewState.value = Resource.Loading
+    // Clear Messages — navigation ke baad call karo
+    fun clearMessages() {
+        _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
     }
 }
