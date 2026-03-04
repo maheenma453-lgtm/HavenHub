@@ -5,179 +5,90 @@ import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Property
 import com.example.havenhub.data.User
 import com.example.havenhub.repository.AdminRepository
-import com.example.havenhub.repository.NotificationRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class VerificationUiState(
+    val isLoading: Boolean = false,
+    val pendingUsers: List<User> = emptyList(),
+    val pendingProperties: List<Property> = emptyList(),
+    val actionSuccess: Boolean = false,
+    val errorMessage: String? = null
+)
+
 @HiltViewModel
 class VerificationViewModel @Inject constructor(
-    private val adminRepository: AdminRepository,
-    private val notificationRepository: NotificationRepository
+    private val adminRepository: AdminRepository
 ) : ViewModel() {
 
-    private val _pendingProperties = MutableStateFlow<Resource<List<Property>>?>(null)
-    val pendingProperties: StateFlow<Resource<List<Property>>?> = _pendingProperties.asStateFlow()
+    private val _uiState = MutableStateFlow(VerificationUiState())
+    val uiState: StateFlow<VerificationUiState> = _uiState.asStateFlow()
 
-    private val _pendingUsers = MutableStateFlow<Resource<List<User>>?>(null)
-    val pendingUsers: StateFlow<Resource<List<User>>?> = _pendingUsers.asStateFlow()
+    init { loadAllPending() }
 
-    private val _verifyPropertyState = MutableStateFlow<Resource<Boolean>?>(null)
-    val verifyPropertyState: StateFlow<Resource<Boolean>?> = _verifyPropertyState.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-
-    init {
-        loadPendingVerifications()
-    }
-
-    // ✅ Load Pending Properties
-    fun loadPendingVerifications() {
+    fun loadAllPending() {
         viewModelScope.launch {
-            _pendingProperties.value = Resource.Loading()
-            _isLoading.value = true
+            _uiState.update { it.copy(isLoading = true) }
+            val usersResult = adminRepository.getAllUsers()
+            val propertiesResult = adminRepository.getPendingProperties()
 
-            try {
-                val result = adminRepository.getPendingProperties()
-                _pendingProperties.value = result
-            } catch (e: Exception) {
-                _pendingProperties.value = Resource.Error(e.message ?: "Failed to load")
-                _errorMessage.value = e.message
-            } finally {
-                _isLoading.value = false
+            _uiState.update { state ->
+                state.copy(
+                    isLoading = false,
+                    pendingUsers = if (usersResult is Resource.Success)
+                        usersResult.data?.filter { !it.isVerified } ?: emptyList()
+                    else emptyList(),
+                    pendingProperties = if (propertiesResult is Resource.Success)
+                        propertiesResult.data ?: emptyList()
+                    else emptyList()
+                )
             }
         }
     }
 
-    // ✅ Load Pending Users
-    fun loadPendingUsers() {
+    fun approveUser(userId: String) {
         viewModelScope.launch {
-            _pendingUsers.value = Resource.Loading()
-            _isLoading.value = true
-
-            try {
-                val result = adminRepository.getPendingUsers()
-                _pendingUsers.value = result
-            } catch (e: Exception) {
-                _pendingUsers.value = Resource.Error(e.message ?: "Failed to load")
-                _errorMessage.value = e.message
-            } finally {
-                _isLoading.value = false
-            }
+            _uiState.update { it.copy(isLoading = true) }
+            handleResult(adminRepository.verifyUser(userId))
         }
     }
 
-    // ✅ Approve Property
-    fun approveProperty(propertyId: String, ownerId: String) {
+    fun rejectUser(userId: String) {
         viewModelScope.launch {
-            _verifyPropertyState.value = Resource.Loading()
-            _isLoading.value = true
-
-            try {
-                val result = adminRepository.updatePropertyVerification(propertyId, "APPROVED")
-
-                when (result) {
-                    is Resource.Success -> {
-                        _verifyPropertyState.value = Resource.Success(true)
-
-                        // Send notification to owner
-                        notificationRepository.sendVerificationNotification(
-                            userId = ownerId,
-                            propertyId = propertyId,
-                            status = "APPROVED",
-                            message = "Your property has been approved"
-                        )
-
-                        // Reload pending list
-                        loadPendingVerifications()
-                    }
-                    is Resource.Error -> {
-                        _verifyPropertyState.value = Resource.Error(result.message ?: "Approval failed")
-                        _errorMessage.value = result.message
-                    }
-                    else -> {}
-                }
-
-            } catch (e: Exception) {
-                _verifyPropertyState.value = Resource.Error(e.message ?: "Unknown error")
-                _errorMessage.value = e.message
-            } finally {
-                _isLoading.value = false
-            }
+            _uiState.update { it.copy(isLoading = true) }
+            handleResult(adminRepository.banUser(userId))
         }
     }
 
-    // ✅ Reject Property
-    fun rejectProperty(propertyId: String, ownerId: String, reason: String) {
+    fun approveProperty(propertyId: String) {
         viewModelScope.launch {
-            _verifyPropertyState.value = Resource.Loading()
-            _isLoading.value = true
-
-            try {
-                val result = adminRepository.updatePropertyVerification(propertyId, "REJECTED")
-
-                when (result) {
-                    is Resource.Success -> {
-                        _verifyPropertyState.value = Resource.Success(true)
-
-                        // Send notification to owner with reason
-                        notificationRepository.sendVerificationNotification(
-                            userId = ownerId,
-                            propertyId = propertyId,
-                            status = "REJECTED",
-                            message = "Property rejected: $reason"
-                        )
-
-                        // Reload pending list
-                        loadPendingVerifications()
-                    }
-                    is Resource.Error -> {
-                        _verifyPropertyState.value = Resource.Error(result.message ?: "Rejection failed")
-                        _errorMessage.value = result.message
-                    }
-                    else -> {}
-                }
-
-            } catch (e: Exception) {
-                _verifyPropertyState.value = Resource.Error(e.message ?: "Unknown error")
-                _errorMessage.value = e.message
-            } finally {
-                _isLoading.value = false
-            }
+            _uiState.update { it.copy(isLoading = true) }
+            // Fixed: Only passing propertyId as per your Repository
+            handleResult(adminRepository.approveProperty(propertyId))
         }
     }
 
-    // ✅ Verify User
-    fun verifyUser(userId: String, isApproved: Boolean) {
+    fun rejectProperty(propertyId: String, reason: String) {
         viewModelScope.launch {
-            _isLoading.value = true
-
-            try {
-                val status = if (isApproved) "VERIFIED" else "REJECTED"
-                adminRepository.updateUserVerification(userId, status)
-
-                loadPendingUsers()
-            } catch (e: Exception) {
-                _errorMessage.value = e.message
-            } finally {
-                _isLoading.value = false
-            }
+            _uiState.update { it.copy(isLoading = true) }
+            // Fixed: Matches (propertyId, reason) in your Repository
+            handleResult(adminRepository.rejectProperty(propertyId, reason))
         }
     }
 
-    fun clearError() {
-        _errorMessage.value = null
+    private fun handleResult(result: Resource<Unit>) {
+        if (result is Resource.Success) {
+            _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
+            loadAllPending()
+        } else {
+            _uiState.update { it.copy(isLoading = false, errorMessage = (result as? Resource.Error)?.message) }
+        }
     }
 
-    fun resetVerifyPropertyState() {
-        _verifyPropertyState.value = null
+    fun resetActionState() {
+        _uiState.update { it.copy(actionSuccess = false, errorMessage = null) }
     }
 }

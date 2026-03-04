@@ -9,167 +9,114 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ─── Unified UI State ─────────────────────────────────────────────
+data class MessagingUiState(
+    val isLoading: Boolean = false,
+    val messages: List<Message> = emptyList(),
+    val unreadCount: Int = 0,
+    val errorMessage: String? = null,
+    val sendSuccess: Boolean = false
+)
 
 @HiltViewModel
 class MessagingViewModel @Inject constructor(
     private val messagingRepository: MessagingRepository
 ) : ViewModel() {
 
-    private val _messages = MutableStateFlow<Resource<List<Message>>?>(null)
-    val messages: StateFlow<Resource<List<Message>>?> = _messages.asStateFlow()
+    private val _uiState = MutableStateFlow(MessagingUiState())
+    val uiState: StateFlow<MessagingUiState> = _uiState.asStateFlow()
 
-    private val _sendMessageState = MutableStateFlow<Resource<Message>?>(null)
-    val sendMessageState: StateFlow<Resource<Message>?> = _sendMessageState.asStateFlow()
+    // Current User ID (Aap isse AuthRepository se bhi le sakte hain)
+    private var currentUserId: String = ""
 
-    private val _unreadCount = MutableStateFlow(0)
-    val unreadCount: StateFlow<Int> = _unreadCount.asStateFlow()
+    fun initUserId(userId: String) {
+        currentUserId = userId
+    }
 
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    // ✅ Load Chat & Listen Real-time (image_0413e4.png fix)
+    fun loadChat(otherUserId: String) {
+        val chatId = messagingRepository.generateChatId(currentUserId, otherUserId)
+        listenToMessages(chatId, currentUserId)
+    }
 
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-
-    // ✅ Listen to Messages (Real-time)
-    fun listenToMessages(chatId: String, currentUserId: String) {
+    // ✅ Listen to Messages
+    fun listenToMessages(chatId: String, userId: String) {
         viewModelScope.launch {
-            _messages.value = Resource.Loading()
+            _uiState.update { it.copy(isLoading = true) }
 
-            try {
-                messagingRepository.getMessagesRealtime(chatId).collect { result ->
-                    _messages.value = result
-
-                    // Mark messages as read
-                    if (result is Resource.Success) {
-                        messagingRepository.markMessagesAsRead(chatId, currentUserId)
+            messagingRepository.getMessagesRealtime(chatId).collect { result ->
+                when (result) {
+                    is Resource.Success -> {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                messages = result.data ?: emptyList()
+                            )
+                        }
+                        // Mark as read automatically
+                        markAsRead(chatId, userId)
+                    }
+                    is Resource.Error -> {
+                        _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                    }
+                    is Resource.Loading -> {
+                        _uiState.update { it.copy(isLoading = true) }
                     }
                 }
-            } catch (e: Exception) {
-                _messages.value = Resource.Error(e.message ?: "Failed to load messages")
-                _errorMessage.value = e.message
             }
         }
     }
 
-    // ✅ Load Unread Count
-    fun loadUnreadCount(userId: String) {
+    // ✅ Mark Messages as Read (image_0413e4.png fix)
+    fun markAsRead(chatId: String, userId: String) {
         viewModelScope.launch {
-            try {
-                _unreadCount.value = messagingRepository.getUnreadMessagesCount(userId)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message
-            }
+            messagingRepository.markMessagesAsRead(chatId, userId)
         }
     }
 
-    // ✅ Send Text Message
+    // ✅ Send Message (Text & Image combined)
     fun sendMessage(
-        senderId: String,
         receiverId: String,
-        content: String
+        content: String,
+        messageType: String = Message.TYPE_TEXT,
+        mediaUrl: String? = null
     ) {
-        if (content.isBlank()) {
-            _errorMessage.value = "Message cannot be empty"
-            return
-        }
+        if (content.isBlank() && mediaUrl == null) return
 
         viewModelScope.launch {
-            _sendMessageState.value = Resource.Loading()
+            _uiState.update { it.copy(sendSuccess = false) }
+            val chatId = messagingRepository.generateChatId(currentUserId, receiverId)
 
-            try {
-                // Generate conversation ID
-                val conversationId = messagingRepository.generateChatId(senderId, receiverId)
+            // Conversation ensure karein
+            messagingRepository.createOrGetConversation(currentUserId, receiverId)
 
-                // Ensure conversation exists
-                messagingRepository.createOrGetConversation(senderId, receiverId)
+            val result = messagingRepository.sendMessage(
+                conversationId = chatId,
+                senderId = currentUserId,
+                receiverId = receiverId,
+                content = content,
+                messageType = messageType,
+                mediaUrl = mediaUrl
+            )
 
-                // Send message
-                val result = messagingRepository.sendMessage(
-                    conversationId = conversationId,
-                    senderId = senderId,
-                    receiverId = receiverId,
-                    content = content,
-                    messageType = Message.TYPE_TEXT
-                )
-
-                when (result) {
-                    is Resource.Success -> {
-                        _sendMessageState.value = Resource.Success(result.data!!)
-                    }
-                    is Resource.Error -> {
-                        _sendMessageState.value = Resource.Error(result.message ?: "Failed to send")
-                        _errorMessage.value = result.message
-                    }
-                    else -> {}
-                }
-
-            } catch (e: Exception) {
-                _sendMessageState.value = Resource.Error(e.message ?: "Unknown error")
-                _errorMessage.value = e.message
-            }
-        }
-    }
-
-    // ✅ Send Image Message
-    fun sendImageMessage(
-        senderId: String,
-        receiverId: String,
-        imageUrl: String,
-        caption: String = ""
-    ) {
-        viewModelScope.launch {
-            _sendMessageState.value = Resource.Loading()
-
-            try {
-                val conversationId = messagingRepository.generateChatId(senderId, receiverId)
-                messagingRepository.createOrGetConversation(senderId, receiverId)
-
-                val result = messagingRepository.sendMessage(
-                    conversationId = conversationId,
-                    senderId = senderId,
-                    receiverId = receiverId,
-                    content = caption,
-                    messageType = Message.TYPE_IMAGE,
-                    mediaUrl = imageUrl
-                )
-
-                when (result) {
-                    is Resource.Success -> {
-                        _sendMessageState.value = Resource.Success(result.data!!)
-                    }
-                    is Resource.Error -> {
-                        _sendMessageState.value = Resource.Error(result.message ?: "Failed to send")
-                        _errorMessage.value = result.message
-                    }
-                    else -> {}
-                }
-
-            } catch (e: Exception) {
-                _sendMessageState.value = Resource.Error(e.message ?: "Unknown error")
-                _errorMessage.value = e.message
-            }
-        }
-    }
-
-    // ✅ Delete Chat
-    fun deleteConversation(chatId: String) {
-        viewModelScope.launch {
-            try {
-                messagingRepository.deleteConversation(chatId)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message
+            if (result is Resource.Success) {
+                _uiState.update { it.copy(sendSuccess = true) }
+            } else if (result is Resource.Error) {
+                _uiState.update { it.copy(errorMessage = result.message) }
             }
         }
     }
 
     // ✅ Clear States
     fun clearError() {
-        _errorMessage.value = null
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
-    fun resetSendMessageState() {
-        _sendMessageState.value = null
+    fun resetSendSuccess() {
+        _uiState.update { it.copy(sendSuccess = false) }
     }
 }

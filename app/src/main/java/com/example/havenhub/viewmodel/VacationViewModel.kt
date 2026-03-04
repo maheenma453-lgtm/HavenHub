@@ -2,7 +2,6 @@ package com.example.havenhub.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.havenhub.viewmodel.Booking
 import com.example.havenhub.data.Property
 import com.example.havenhub.data.PropertyType
 import com.example.havenhub.repository.BookingRepository
@@ -12,9 +11,17 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.Date
+import java.util.*
 import javax.inject.Inject
+
+data class VacationUiState(
+    val isLoading: Boolean = false,
+    val properties: List<Property> = emptyList(),
+    val unavailableDates: List<Date> = emptyList(),
+    val errorMessage: String? = null
+)
 
 @HiltViewModel
 class VacationViewModel @Inject constructor(
@@ -22,86 +29,51 @@ class VacationViewModel @Inject constructor(
     private val bookingRepository: BookingRepository
 ) : ViewModel() {
 
-    private val _vacationProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
-    val vacationProperties: StateFlow<Resource<List<Property>>> = _vacationProperties.asStateFlow()
-
-    // FIX: RentalPackage doesn't exist in repository — removed
-    // FIX: unavailableDates doesn't exist in repository — calculated from bookings
-    private val _unavailableDates = MutableStateFlow<List<Date>>(emptyList())
-    val unavailableDates: StateFlow<List<Date>> = _unavailableDates.asStateFlow()
-
-    private val _selectedProperty = MutableStateFlow<Property?>(null)
-    val selectedProperty: StateFlow<Property?> = _selectedProperty.asStateFlow()
-
-    private val _propertyBookings = MutableStateFlow<Resource<List<Booking>>>(Resource.Loading)
-    val propertyBookings: StateFlow<Resource<List<Booking>>> = _propertyBookings.asStateFlow()
+    private val _uiState = MutableStateFlow(VacationUiState())
+    val uiState: StateFlow<VacationUiState> = _uiState.asStateFlow()
 
     init {
         loadVacationProperties()
     }
 
-    // FIX: getVacationRentals() doesn't exist — use getAllProperties() and filter by type
     fun loadVacationProperties(city: String? = null) {
         viewModelScope.launch {
-            _vacationProperties.value = Resource.Loading
+            _uiState.update { it.copy(isLoading = true) }
             val result = propertyRepository.getAllProperties()
-
-            if (result is Resource.Error) {
-                _vacationProperties.value = Resource.Error(result.message)
-                return@launch
+            if (result is Resource.Success) {
+                val list = result.data?.filter {
+                    it.propertyType in listOf(PropertyType.VILLA, PropertyType.FARMHOUSE, PropertyType.APARTMENT)
+                }?.filter { city == null || it.city.equals(city, ignoreCase = true) } ?: emptyList()
+                _uiState.update { it.copy(isLoading = false, properties = list) }
+            } else {
+                _uiState.update { it.copy(isLoading = false) }
             }
-
-            var list = (result as Resource.Success).data
-
-            // Filter vacation-type properties (VILLA, FARMHOUSE, APARTMENT)
-            list = list.filter {
-                it.propertyType in listOf(
-                    PropertyType.VILLA,
-                    PropertyType.FARMHOUSE,
-                    PropertyType.APARTMENT
-                )
-            }
-
-            // Filter by city if provided
-            city?.let { c ->
-                list = list.filter { it.city.lowercase() == c.lowercase() }
-            }
-
-            _vacationProperties.value = Resource.Success(list)
         }
     }
 
-    // FIX: getUnavailableDates() doesn't exist — observe bookings and extract dates
     fun loadUnavailableDates(propertyId: String) {
         viewModelScope.launch {
-            bookingRepository.observePropertyBookings(propertyId).collect { bookings ->
-                val dates = mutableListOf<Date>()
+            bookingRepository.observeUserBookings(propertyId).collect { bookings ->
+                val allDates = mutableListOf<Date>()
                 bookings.forEach { booking ->
-                    // Extract dates between checkIn and checkOut from each booking
-                    val checkIn  = booking.checkInDate?.toDate()  ?: return@forEach
-                    val checkOut = booking.checkOutDate?.toDate() ?: return@forEach
-                    var current  = checkIn
-                    while (!current.after(checkOut)) {
-                        dates.add(current)
-                        val cal = java.util.Calendar.getInstance()
-                        cal.time = current
-                        cal.add(java.util.Calendar.DATE, 1)
-                        current = cal.time
+                    // ✅ FIXED: Non-null checks and explicit casting to Date
+                    val startDate = booking.checkInDate?.toDate()
+                    val endDate = booking.checkOutDate?.toDate()
+
+                    if (startDate != null && endDate != null) {
+                        val calendar = Calendar.getInstance()
+                        var current: Date = startDate
+
+                        while (!current.after(endDate)) {
+                            allDates.add(Date(current.time))
+                            calendar.time = current
+                            calendar.add(Calendar.DATE, 1)
+                            current = calendar.time
+                        }
                     }
                 }
-                _unavailableDates.value = dates
+                _uiState.update { it.copy(unavailableDates = allDates) }
             }
         }
-    }
-
-    fun selectProperty(property: Property) {
-        _selectedProperty.value = property
-        // FIX: property.id → property.propertyId
-        loadUnavailableDates(property.propertyId)
-    }
-
-    fun clearSelectedProperty() {
-        _selectedProperty.value = null
-        _unavailableDates.value = emptyList()
     }
 }

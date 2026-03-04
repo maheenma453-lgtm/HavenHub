@@ -1,14 +1,12 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
@@ -16,172 +14,122 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.havenhub.ui.theme.*
-import com.havenhub.ui.viewmodel.VacationViewModel
-
-// ─────────────────────────────────────────────────────────────────
-// VacationCalendarScreen.kt
-// PURPOSE : Interactive availability calendar for vacation properties.
-//           Shows which dates are booked (red), available (green),
-//           or partially available (yellow).
-//           User taps on an available date range to start booking.
-// NAVIGATION: VacationCalendarScreen → PreBookingScreen
-// ─────────────────────────────────────────────────────────────────
+// FIX: Correcting your specific project imports
+import com.example.havenhub.navigation.Screen
+import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.VacationViewModel
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VacationCalendarScreen(
-    navController : NavController,
-    propertyId    : String = "",
-    viewModel     : VacationViewModel = hiltViewModel()
+    navController: NavController,
+    propertyId: String = "",
+    viewModel: VacationViewModel = hiltViewModel()
 ) {
+    // FIX: Sync with VacationViewModel uiState
+    val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(propertyId) {
-        if (propertyId.isNotEmpty()) viewModel.loadCalendar(propertyId)
+        if (propertyId.isNotEmpty()) {
+            viewModel.loadUnavailableDates(propertyId)
+        }
     }
 
-    // ── Calendar State ─────────────────────────────────────────────
-    // Tracks which month is currently displayed
-    var currentMonth    by remember { mutableStateOf(3) }    // April (0-indexed March = 3 in display)
-    var currentYear     by remember { mutableStateOf(2025) }
-    var selectedCheckIn  by remember { mutableStateOf(-1) }  // Selected start day
-    var selectedCheckOut by remember { mutableStateOf(-1) }  // Selected end day
+    // Calendar Display Logic
+    val calendar = remember { Calendar.getInstance() }
+    var currentMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH)) }
+    var currentYear by remember { mutableIntStateOf(calendar.get(Calendar.YEAR)) }
 
-    val bookedDates     by viewModel.bookedDates.collectAsState()
+    var selectedCheckIn by remember { mutableIntStateOf(-1) }
+    var selectedCheckOut by remember { mutableIntStateOf(-1) }
 
-    val monthNames = listOf(
-        "January","February","March","April","May","June",
-        "July","August","September","October","November","December"
-    )
-
-    val daysInMonth = getDaysInMonth(currentMonth, currentYear)
-    val firstDayOfWeek = getFirstDayOfWeek(currentMonth, currentYear)  // 0=Sun .. 6=Sat
+    val monthNames = listOf("January","February","March","April","May","June","July","August","September","October","November","December")
     val dayNames = listOf("Sun","Mon","Tue","Wed","Thu","Fri","Sat")
 
-    // ── UI ─────────────────────────────────────────────────────────
+    val daysInMonth = getDaysInMonth(currentMonth, currentYear)
+    val firstDayOfWeek = getFirstDayOfWeek(currentMonth, currentYear)
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Availability Calendar") },
+                title = { Text("Availability Calendar", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, null, tint = BackgroundWhite)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor    = PrimaryBlue,
-                    titleContentColor = BackgroundWhite,
-                    navigationIconContentColor = BackgroundWhite
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
             )
         }
     ) { paddingValues ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(BackgroundWhite)
+                .background(Color.White)
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-
-            // ── Month Navigation Header ────────────────────────────
+            // Month Navigation
             Row(
-                modifier              = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Previous month arrow
-                IconButton(
-                    onClick = {
-                        if (currentMonth == 0) { currentMonth = 11; currentYear-- }
-                        else currentMonth--
-                    }
-                ) {
-                    Icon(Icons.Default.ChevronLeft, "Previous", tint = PrimaryBlue)
+                IconButton(onClick = { if (currentMonth == 0) { currentMonth = 11; currentYear-- } else currentMonth-- }) {
+                    Icon(Icons.Default.ChevronLeft, "Prev", tint = PrimaryBlue)
                 }
-
-                // Month & Year label
-                Text(
-                    text       = "${monthNames[currentMonth]} $currentYear",
-                    fontSize   = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color      = TextPrimary
-                )
-
-                // Next month arrow
-                IconButton(
-                    onClick = {
-                        if (currentMonth == 11) { currentMonth = 0; currentYear++ }
-                        else currentMonth++
-                    }
-                ) {
+                Text("${monthNames[currentMonth]} $currentYear", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                IconButton(onClick = { if (currentMonth == 11) { currentMonth = 0; currentYear++ } else currentMonth++ }) {
                     Icon(Icons.Default.ChevronRight, "Next", tint = PrimaryBlue)
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ── Day name headers ───────────────────────────────────
+            // Day Headers
             Row(modifier = Modifier.fillMaxWidth()) {
                 dayNames.forEach { day ->
-                    Text(
-                        text      = day,
-                        modifier  = Modifier.weight(1f),
-                        textAlign = TextAlign.Center,
-                        fontSize  = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color     = TextSecondary
-                    )
+                    Text(day, Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 12.sp, color = Color.Gray)
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // ── Calendar Grid ──────────────────────────────────────
-            // Total cells = leading empty slots + days in month
+            // Calendar Grid
             val totalCells = firstDayOfWeek + daysInMonth
+            val rows = (totalCells + 6) / 7
 
-            // Build grid rows
-            val rows = (totalCells + 6) / 7   // ceil division
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (row in 0 until rows) {
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        for (col in 0 until 7) {
-                            val cellIndex = row * 7 + col
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (r in 0 until rows) {
+                    Row(Modifier.fillMaxWidth()) {
+                        for (c in 0 until 7) {
+                            val cellIndex = r * 7 + c
                             val day = cellIndex - firstDayOfWeek + 1
 
                             if (day < 1 || day > daysInMonth) {
-                                // Empty cell
-                                Box(modifier = Modifier.weight(1f).height(40.dp))
+                                Box(Modifier.weight(1f).height(40.dp))
                             } else {
-                                val isBooked   = day in bookedDates
-                                val isCheckIn  = day == selectedCheckIn
-                                val isCheckOut = day == selectedCheckOut
-                                val inRange    = selectedCheckIn != -1 && selectedCheckOut != -1
-                                        && day > selectedCheckIn && day < selectedCheckOut
+                                // Logic to check if date is booked from ViewModel's unavailableDates
+                                val isBooked = checkIsDateBooked(day, currentMonth, currentYear, uiState.unavailableDates)
 
                                 CalendarDay(
-                                    day       = day,
-                                    isBooked  = isBooked,
-                                    isSelected = isCheckIn || isCheckOut,
-                                    isInRange  = inRange,
-                                    modifier   = Modifier.weight(1f),
-                                    onClick    = {
+                                    day = day,
+                                    isBooked = isBooked,
+                                    isSelected = (day == selectedCheckIn || day == selectedCheckOut),
+                                    isInRange = selectedCheckIn != -1 && selectedCheckOut != -1 && day > selectedCheckIn && day < selectedCheckOut,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
                                         if (!isBooked) {
-                                            // First tap = check-in, second tap = check-out
                                             if (selectedCheckIn == -1 || day <= selectedCheckIn) {
-                                                selectedCheckIn  = day
+                                                selectedCheckIn = day
                                                 selectedCheckOut = -1
                                             } else {
                                                 selectedCheckOut = day
@@ -195,52 +143,39 @@ fun VacationCalendarScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Legend ─────────────────────────────────────────────
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                modifier              = Modifier.fillMaxWidth()
-            ) {
-                LegendItem(color = SuccessGreen, label = "Available")
-                LegendItem(color = ErrorRed,     label = "Booked")
-                LegendItem(color = PrimaryBlue,  label = "Selected")
+            // Legend
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LegendItem(Color(0xFF4CAF50), "Available")
+                LegendItem(Color(0xFFF44336), "Booked")
+                LegendItem(PrimaryBlue, "Selected")
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(Modifier.weight(1f))
 
-            // ── Selected range summary ─────────────────────────────
+            // Selection Info & Action
             if (selectedCheckIn != -1) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape    = RoundedCornerShape(12.dp),
-                    colors   = CardDefaults.cardColors(containerColor = SurfaceGray)
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(
-                        modifier              = Modifier.fillMaxWidth().padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment     = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Selected Dates", fontSize = 12.sp, color = TextSecondary)
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Stay Duration", fontSize = 12.sp, color = Color.Gray)
                             Text(
-                                text = if (selectedCheckOut != -1)
-                                    "$currentMonth/$selectedCheckIn → $currentMonth/$selectedCheckOut"
-                                else
-                                    "Check-in: $currentMonth/$selectedCheckIn",
-                                fontSize   = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color      = TextPrimary
+                                if (selectedCheckOut != -1) "$selectedCheckIn - $selectedCheckOut ${monthNames[currentMonth]}"
+                                else "Starts $selectedCheckIn ${monthNames[currentMonth]}",
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         if (selectedCheckOut != -1) {
                             Button(
                                 onClick = { navController.navigate(Screen.PreBooking.route) },
-                                shape   = RoundedCornerShape(8.dp),
-                                colors  = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                                modifier = Modifier.height(36.dp)
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                             ) {
-                                Text("Book", fontSize = 13.sp)
+                                Text("Continue")
                             }
                         }
                     }
@@ -250,65 +185,52 @@ fun VacationCalendarScreen(
     }
 }
 
-// ── Single calendar day cell ──────────────────────────────────────
 @Composable
-private fun CalendarDay(
-    day        : Int,
-    isBooked   : Boolean,
-    isSelected : Boolean,
-    isInRange  : Boolean,
-    modifier   : Modifier,
-    onClick    : () -> Unit
-) {
+private fun CalendarDay(day: Int, isBooked: Boolean, isSelected: Boolean, isInRange: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val bgColor = when {
         isSelected -> PrimaryBlue
-        isInRange  -> PrimaryBlue.copy(alpha = 0.15f)
-        isBooked   -> ErrorRed.copy(alpha = 0.15f)
-        else       -> BackgroundWhite
+        isInRange -> PrimaryBlue.copy(alpha = 0.1f)
+        else -> Color.Transparent
     }
-    val textColor = when {
-        isSelected -> BackgroundWhite
-        isBooked   -> ErrorRed
-        else       -> TextPrimary
+    val contentColor = when {
+        isSelected -> Color.White
+        isBooked -> Color.Red.copy(alpha = 0.5f)
+        else -> Color.Black
     }
 
     Box(
         modifier = modifier
             .height(40.dp)
-            .padding(2.dp)
             .clip(CircleShape)
             .background(bgColor)
             .clickable(enabled = !isBooked) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(text = "$day", fontSize = 13.sp, color = textColor, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+        Text(text = "$day", color = contentColor, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+        if (isBooked) {
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp).size(4.dp).background(Color.Red, CircleShape))
+        }
     }
 }
 
-// ── Calendar legend item ───────────────────────────────────────────
 @Composable
-private fun LegendItem(color: androidx.compose.ui.graphics.Color, label: String) {
+private fun LegendItem(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(color))
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(text = label, fontSize = 11.sp, color = TextSecondary)
+        Box(Modifier.size(10.dp).background(color, CircleShape))
+        Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 12.sp)
     }
 }
 
-// ── Helper: days in month ──────────────────────────────────────────
-private fun getDaysInMonth(month: Int, year: Int): Int {
-    return when (month) {
-        1 -> if (year % 4 == 0) 29 else 28   // February
-        3, 5, 8, 10 -> 30                      // Apr, Jun, Sep, Nov
-        else -> 31
+// Helpers
+private fun getDaysInMonth(month: Int, year: Int) = Calendar.getInstance().apply { set(year, month, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+private fun getFirstDayOfWeek(month: Int, year: Int) = Calendar.getInstance().apply { set(year, month, 1) }.get(Calendar.DAY_OF_WEEK) - 1
+
+private fun checkIsDateBooked(day: Int, month: Int, year: Int, unavailableDates: List<Date>): Boolean {
+    val cal = Calendar.getInstance()
+    return unavailableDates.any {
+        cal.time = it
+        cal.get(Calendar.DAY_OF_MONTH) == day && cal.get(Calendar.MONTH) == month && cal.get(Calendar.YEAR) == year
     }
 }
-
-// ── Helper: first day of week (0=Sun) ─────────────────────────────
-private fun getFirstDayOfWeek(month: Int, year: Int): Int {
-    val cal = java.util.Calendar.getInstance()
-    cal.set(year, month, 1)
-    return cal.get(java.util.Calendar.DAY_OF_WEEK) - 1
-}
-
-
