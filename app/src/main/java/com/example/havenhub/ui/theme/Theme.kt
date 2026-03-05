@@ -91,9 +91,10 @@ fun HavenHubTheme(
         }
     }
 
-   // HavenHubTheme(
-        //colorScheme = colorScheme,
-     // typography  = HavenTypography,
-        //  content   = content
-   // )
+    // ✅ FIXED: MaterialTheme call karni hai aapke content ke liye
+    MaterialTheme(
+        colorScheme = colorScheme,
+        // typography = HavenTypography, // Agar Type.kt mein HavenTypography hai toh ise uncomment karein
+        content = content
+    )
 }
