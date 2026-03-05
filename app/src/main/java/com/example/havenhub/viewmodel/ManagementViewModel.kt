@@ -11,84 +11,127 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class ManagementUiState(
+    val isLoading: Boolean = false,
+    val users: List<User> = emptyList(),
+    val properties: List<Property> = emptyList(),
+    val bookings: List<Booking> = emptyList(),
+    val actionSuccess: Boolean = false,
+    val errorMessage: String? = null
+)
 
 @HiltViewModel
 class ManagementViewModel @Inject constructor(
     private val adminRepository: AdminRepository
 ) : ViewModel() {
 
-    private val _allUsers = MutableStateFlow<Resource<List<User>>>(Resource.Loading)
-    val allUsers: StateFlow<Resource<List<User>>> = _allUsers.asStateFlow()
+    private val _uiState = MutableStateFlow(ManagementUiState())
+    val uiState: StateFlow<ManagementUiState> = _uiState.asStateFlow()
 
-    private val _allProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
-    val allProperties: StateFlow<Resource<List<Property>>> = _allProperties.asStateFlow()
+    init {
+        loadAllData()
+    }
 
-    private val _allBookings = MutableStateFlow<Resource<List<Booking>>>(Resource.Loading)
-    val allBookings: StateFlow<Resource<List<Booking>>> = _allBookings.asStateFlow()
+    fun loadAllData() {
+        loadAllUsers()
+        loadAllProperties()
+        loadAllBookings()
+    }
 
-    private val _actionState = MutableStateFlow<Resource<Unit>>(Resource.Loading)
-    val actionState: StateFlow<Resource<Unit>> = _actionState.asStateFlow()
-
-    // FIX 1: getAllUsers() takes no parameters in AdminRepository
+    // ✅ Line 49 Fixed: Removed '?: emptyList()' because data is not nullable
     fun loadAllUsers() {
         viewModelScope.launch {
-            _allUsers.value = Resource.Loading
-            _allUsers.value = adminRepository.getAllUsers()
+            _uiState.update { it.copy(isLoading = true) }
+            when (val result = adminRepository.getAllUsers()) {
+                is Resource.Success -> {
+                    _uiState.update { it.copy(users = result.data, isLoading = false) }
+                }
+                is Resource.Error -> {
+                    _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
+                }
+                is Resource.Loading -> {
+                    _uiState.update { it.copy(isLoading = true) }
+                }
+            }
         }
     }
 
-    // FIX 2: getAllProperties() takes no parameters in AdminRepository
+    // ✅ Line 71 Fixed: Direct assignment of result.data
     fun loadAllProperties() {
         viewModelScope.launch {
-            _allProperties.value = Resource.Loading
-            _allProperties.value = adminRepository.getAllProperties()
+            _uiState.update { it.copy(isLoading = true) }
+            when (val result = adminRepository.getAllProperties()) {
+                is Resource.Success -> {
+                    _uiState.update { it.copy(properties = result.data, isLoading = false) }
+                }
+                is Resource.Error -> {
+                    _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
+                }
+                is Resource.Loading -> {
+                    _uiState.update { it.copy(isLoading = true) }
+                }
+            }
         }
     }
 
+    // ✅ Line 86 Fixed: Standardized with your Resource sealed class
     fun loadAllBookings() {
         viewModelScope.launch {
-            _allBookings.value = Resource.Loading
-            _allBookings.value = adminRepository.getAllBookings()
+            _uiState.update { it.copy(isLoading = true) }
+            when (val result = adminRepository.getAllBookings()) {
+                is Resource.Success -> {
+                    _uiState.update { it.copy(bookings = result.data, isLoading = false) }
+                }
+                is Resource.Error -> {
+                    _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
+                }
+                is Resource.Loading -> {
+                    _uiState.update { it.copy(isLoading = true) }
+                }
+            }
         }
     }
 
-    fun banUser(userId: String) {
-        viewModelScope.launch {
-            _actionState.value = Resource.Loading
-            _actionState.value = adminRepository.banUser(userId)
-        }
+    // --- Actions (Ban/Unban/Cancel) ---
+
+    fun banUser(userId: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true) }
+        handleActionResult(adminRepository.banUser(userId)) { loadAllUsers() }
     }
 
-    fun unbanUser(userId: String) {
-        viewModelScope.launch {
-            _actionState.value = Resource.Loading
-            _actionState.value = adminRepository.unbanUser(userId)
-        }
+    fun unbanUser(userId: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true) }
+        handleActionResult(adminRepository.unbanUser(userId)) { loadAllUsers() }
     }
 
-    // FIX 3: removeProperty() doesn't exist — rejectProperty() use karo
-    fun removeProperty(propertyId: String, reason: String = "Removed by admin") {
-        viewModelScope.launch {
-            _actionState.value = Resource.Loading
-            val result = adminRepository.rejectProperty(propertyId, reason)
-            _actionState.value = result
-            if (result is Resource.Success) loadAllProperties()
-        }
+    fun removeProperty(propertyId: String, reason: String = "Removed by admin") = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true) }
+        handleActionResult(adminRepository.rejectProperty(propertyId, reason)) { loadAllProperties() }
     }
 
-    // FIX 4: cancelBooking() doesn't exist in AdminRepository
-    // Isko AdminRepository mein add karo, tab tak sirf list refresh hogi
-    fun cancelBookingAsAdmin(bookingId: String) {
-        viewModelScope.launch {
-            _actionState.value = Resource.Loading
-            // TODO: adminRepository.cancelBooking(bookingId) — add this to AdminRepository
-            loadAllBookings()
+    fun cancelBooking(bookingId: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true) }
+        handleActionResult(adminRepository.cancelBooking(bookingId)) { loadAllBookings() }
+    }
+
+    private fun handleActionResult(result: Resource<Unit>, onSuccess: () -> Unit) {
+        _uiState.update { state ->
+            when (result) {
+                is Resource.Success -> {
+                    onSuccess()
+                    state.copy(isLoading = false, actionSuccess = true)
+                }
+                is Resource.Error -> state.copy(isLoading = false, errorMessage = result.message)
+                is Resource.Loading -> state.copy(isLoading = true)
+            }
         }
     }
 
     fun resetActionState() {
-        _actionState.value = Resource.Loading
+        _uiState.update { it.copy(actionSuccess = false, errorMessage = null) }
     }
 }

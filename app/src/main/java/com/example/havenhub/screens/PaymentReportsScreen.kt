@@ -1,9 +1,10 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.*
@@ -14,7 +15,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.havenhub.ui.viewmodel.ReportsViewModel
+import com.example.havenhub.viewmodel.ReportsViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,9 +25,11 @@ fun PaymentReportsScreen(
     navController: NavController,
     viewModel: ReportsViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.paymentsUiState.collectAsState()
-    var selectedPeriod by remember { mutableStateOf("This Month") }
-    var selectedType by remember { mutableStateOf("All") }
+    // ✅ ViewModel ke 'uiState' ko observe kar rahe hain jo humne pehle fix kiya
+    val uiState by viewModel.uiState.collectAsState()
+    var selectedPeriod by remember { mutableStateOf("All") }
+
+    val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
 
     Scaffold(
         topBar = {
@@ -32,7 +37,7 @@ fun PaymentReportsScreen(
                 title = { Text("Payment Reports") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -47,14 +52,14 @@ fun PaymentReportsScreen(
         ) {
             // Period Filter
             item {
-                val periods = listOf("Today", "This Week", "This Month", "This Year")
+                val periods = listOf("All", "Today", "This Month")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     periods.forEach { period ->
                         FilterChip(
                             selected = selectedPeriod == period,
                             onClick = {
                                 selectedPeriod = period
-                                viewModel.loadPaymentReports(period)
+                                viewModel.loadAllReportsData() // Reload default data
                             },
                             label = { Text(period, style = MaterialTheme.typography.labelSmall) }
                         )
@@ -79,56 +84,50 @@ fun PaymentReportsScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             Column {
-                                Text("Total Revenue", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(uiState.totalRevenue, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+                                Text("Net Revenue", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "PKR ${String.format("%,.0f", uiState.stats.totalRevenue)}",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
                             }
                             HorizontalDivider()
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                RevenueStatItem("Gross", uiState.grossRevenue)
-                                RevenueStatItem("Refunds", uiState.totalRefunds, isNegative = true)
-                                RevenueStatItem("Platform Fee", uiState.platformFee)
-                                RevenueStatItem("Net", uiState.netRevenue)
+                                // Simple Breakdown from available stats
+                                RevenueStatItem("Total Sales", "PKR ${String.format("%,.0f", uiState.stats.totalRevenue)}")
+                                RevenueStatItem("Bookings", uiState.stats.totalBookings.toString())
                             }
                         }
                     }
                 }
             }
 
-            // Payment Type Filter
+            // Transaction List Section
             item {
-                Text("Transactions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Recent Transactions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
 
-            item {
-                val types = listOf("All", "Received", "Refunded", "Pending")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    types.forEach { type ->
-                        FilterChip(
-                            selected = selectedType == type,
-                            onClick = {
-                                selectedType = type
-                                viewModel.filterPaymentsByType(type)
-                            },
-                            label = { Text(type) }
+            if (!uiState.isLoading) {
+                if (uiState.payments.isEmpty()) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            Text("No transactions found", color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                } else {
+                    items(uiState.payments) { payment ->
+                        val dateString = payment.createdAt?.toDate()?.let { dateFormatter.format(it) } ?: "N/A"
+
+                        PaymentTransactionItem(
+                            transactionId = payment.paymentId,
+                            amount = "PKR ${String.format("%,.0f", payment.amount)}",
+                            date = dateString,
+                            status = payment.status.name
                         )
                     }
-                }
-            }
-
-            // Transaction List
-            if (!uiState.isLoading) {
-                items(uiState.transactions, key = { it.transactionId }) { tx ->
-                    PaymentTransactionItem(
-                        transactionId = tx.transactionId,
-                        propertyTitle = tx.propertyTitle,
-                        tenantName = tx.tenantName,
-                        amount = tx.amount,
-                        date = tx.date,
-                        type = tx.type
-                    )
                 }
             }
         }
@@ -136,14 +135,13 @@ fun PaymentReportsScreen(
 }
 
 @Composable
-private fun RevenueStatItem(label: String, value: String, isNegative: Boolean = false) {
+private fun RevenueStatItem(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             value,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+            fontWeight = FontWeight.SemiBold
         )
     }
 }
@@ -151,15 +149,13 @@ private fun RevenueStatItem(label: String, value: String, isNegative: Boolean = 
 @Composable
 private fun PaymentTransactionItem(
     transactionId: String,
-    propertyTitle: String,
-    tenantName: String,
     amount: String,
     date: String,
-    type: String
+    status: String
 ) {
-    val isRefund = type.lowercase() == "refunded"
+    val isFailed = status.contains("FAILED", ignoreCase = true) || status.contains("CANCELLED", ignoreCase = true)
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -169,37 +165,36 @@ private fun PaymentTransactionItem(
         ) {
             Surface(
                 shape = MaterialTheme.shapes.medium,
-                color = if (isRefund) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
+                color = if (isFailed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
                 modifier = Modifier.size(44.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = if (isRefund) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                        imageVector = if (isFailed) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                         contentDescription = null,
-                        tint = if (isRefund) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer
+                        tint = if (isFailed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
             }
 
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(propertyTitle, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                Text("By: $tenantName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("ID: $transactionId", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Text(date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
             }
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = if (isRefund) "-$amount" else amount,
+                    text = amount,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
-                    color = if (isRefund) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary
+                    color = if (isFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary
                 )
                 Surface(
                     shape = MaterialTheme.shapes.extraSmall,
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Text(
-                        type,
+                        status,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
@@ -208,5 +203,3 @@ private fun PaymentTransactionItem(
         }
     }
 }
-
-

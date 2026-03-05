@@ -1,9 +1,10 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Payment
@@ -16,8 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.havenhub.ui.navigation.Screen
-import com.havenhub.ui.viewmodel.ReportsViewModel
+import com.example.havenhub.viewmodel.ReportsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,8 +25,9 @@ fun ReportsScreen(
     navController: NavController,
     viewModel: ReportsViewModel = hiltViewModel()
 ) {
+    // ViewModel ke 'uiState' ko observe kar rahe hain
     val uiState by viewModel.uiState.collectAsState()
-    var selectedPeriod by remember { mutableStateOf("This Month") }
+    var selectedPeriod by remember { mutableStateOf("All Time") }
 
     Scaffold(
         topBar = {
@@ -34,7 +35,7 @@ fun ReportsScreen(
                 title = { Text("Reports") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -47,16 +48,16 @@ fun ReportsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Period Selector
+            // Period Selector logic (Filhal loadAllReportsData hi call kar rahe hain)
             item {
-                val periods = listOf("Today", "This Week", "This Month", "This Year")
+                val periods = listOf("All Time", "Today", "This Month")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     periods.forEach { period ->
                         FilterChip(
                             selected = selectedPeriod == period,
                             onClick = {
                                 selectedPeriod = period
-                                viewModel.loadReports(period)
+                                viewModel.loadAllReportsData() // Reset/Reload data
                             },
                             label = { Text(period, style = MaterialTheme.typography.labelSmall) }
                         )
@@ -64,14 +65,14 @@ fun ReportsScreen(
                 }
             }
 
-            // Summary Cards
             item {
                 Text("Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
 
+            // --- Summary Cards Section ---
             item {
                 if (uiState.isLoading) {
-                    Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 } else {
@@ -79,27 +80,27 @@ fun ReportsScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             ReportSummaryCard(
                                 title = "Total Revenue",
-                                value = uiState.totalRevenue,
+                                value = "PKR ${String.format("%,.0f", uiState.stats.totalRevenue)}",
                                 icon = Icons.Default.Payment,
                                 modifier = Modifier.weight(1f)
                             )
                             ReportSummaryCard(
                                 title = "Total Bookings",
-                                value = uiState.totalBookings,
+                                value = uiState.stats.totalBookings.toString(),
                                 icon = Icons.Default.BarChart,
                                 modifier = Modifier.weight(1f)
                             )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             ReportSummaryCard(
-                                title = "New Users",
-                                value = uiState.newUsers,
+                                title = "Total Users",
+                                value = uiState.stats.totalUsers.toString(),
                                 icon = Icons.Default.People,
                                 modifier = Modifier.weight(1f)
                             )
                             ReportSummaryCard(
-                                title = "Active Properties",
-                                value = uiState.activeProperties,
+                                title = "Active Props",
+                                value = uiState.stats.activeProperties.toString(),
                                 icon = Icons.Default.Home,
                                 modifier = Modifier.weight(1f)
                             )
@@ -108,48 +109,41 @@ fun ReportsScreen(
                 }
             }
 
-            // Report Sections
+            // --- Detailed Sections ---
+            item {
+                Text("Booking Status Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val total = uiState.stats.totalBookings.toFloat()
+
+                    // Completed Bookings Row
+                    BookingStatusRow(
+                        status = "Completed",
+                        count = uiState.stats.completedBookings,
+                        percentage = if (total > 0) (uiState.stats.completedBookings / total) * 100f else 0f
+                    )
+
+                    // Cancelled Bookings Row
+                    BookingStatusRow(
+                        status = "Cancelled",
+                        count = uiState.stats.cancelledBookings,
+                        percentage = if (total > 0) (uiState.stats.cancelledBookings / total) * 100f else 0f
+                    )
+                }
+            }
+
             item {
                 Text("Detailed Reports", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
 
             item {
                 ReportNavigationCard(
-                    title = "Payment Reports",
-                    description = "Revenue breakdown, transactions, refunds",
-                    onClick = { navController.navigate(Screen.PaymentReports.route) }
+                    title = "Payment Transactions",
+                    description = "View all ${uiState.payments.size} transactions",
+                    onClick = { /* Navigate to Payment List Screen */ }
                 )
-            }
-
-            // Booking Status Breakdown
-            if (!uiState.isLoading && uiState.bookingStatusBreakdown.isNotEmpty()) {
-                item {
-                    Text("Booking Status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                }
-
-                items(uiState.bookingStatusBreakdown) { item ->
-                    BookingStatusRow(
-                        status = item.status,
-                        count = item.count,
-                        percentage = item.percentage
-                    )
-                }
-            }
-
-            // Top Properties
-            if (!uiState.isLoading && uiState.topProperties.isNotEmpty()) {
-                item {
-                    Text("Top Properties", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                }
-
-                items(uiState.topProperties.take(5), key = { it.propertyId }) { property ->
-                    TopPropertyItem(
-                        rank = uiState.topProperties.indexOf(property) + 1,
-                        title = property.title,
-                        bookingsCount = property.bookingsCount,
-                        revenue = property.revenue
-                    )
-                }
             }
         }
     }
@@ -168,7 +162,7 @@ private fun ReportSummaryCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -182,17 +176,14 @@ private fun ReportNavigationCard(
 ) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Icon(Icons.Default.BarChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Default.BarChart, contentDescription = null)
         }
     }
 }
@@ -206,7 +197,7 @@ private fun BookingStatusRow(status: String, count: Int, percentage: Float) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(status, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text("$count (${String.format("%.1f", percentage)}%)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$count (${String.format("%.1f", percentage)}%)", style = MaterialTheme.typography.bodySmall)
             }
             LinearProgressIndicator(
                 progress = { percentage / 100f },
@@ -215,35 +206,3 @@ private fun BookingStatusRow(status: String, count: Int, percentage: Float) {
         }
     }
 }
-
-@Composable
-private fun TopPropertyItem(rank: Int, title: String, bookingsCount: Int, revenue: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("#$rank", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                Text("$bookingsCount bookings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            Text(revenue, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-        }
-    }
-}
-
-

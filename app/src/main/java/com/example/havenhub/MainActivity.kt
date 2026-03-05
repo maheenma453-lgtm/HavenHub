@@ -7,7 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.rememberNavController
-import com.example.havenhub.navigation.NavGraph
+// ✅ Sahi import: Aapki apni navigation file
+import com.example.havenhub.navigation.HavenHubNavGraph
 import com.example.havenhub.ui.theme.HavenHubTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -19,7 +20,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             HavenHubTheme {
                 val navController = rememberNavController()
-                NavGraph(navController = navController)
+                // ✅ Function name matched to your NavGraph file
+                HavenHubNavGraph(navController = navController)
             }
         }
     }
@@ -30,6 +32,6 @@ class MainActivity : ComponentActivity() {
 fun MainPreview() {
     HavenHubTheme {
         val navController = rememberNavController()
-        NavGraph(navController = navController)
+        HavenHubNavGraph(navController = navController)
     }
 }

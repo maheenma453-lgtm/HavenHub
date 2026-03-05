@@ -1,9 +1,10 @@
 package com.example.havenhub.screens
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
@@ -15,7 +16,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.havenhub.ui.viewmodel.ManagementViewModel
+import com.example.havenhub.data.PropertyStatus
+import com.example.havenhub.viewmodel.ManagementViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,9 +25,24 @@ fun ManagePropertiesScreen(
     navController: NavController,
     viewModel: ManagementViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.propertiesState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf("All") }
+
+    val filteredProperties = remember(uiState.properties, searchQuery, selectedStatus) {
+        uiState.properties.filter { property ->
+            val matchesSearch = property.title.contains(searchQuery, ignoreCase = true)
+            // Fixed: Use 'status' instead of 'isApproved' or 'verificationStatus'
+            val matchesStatus = when (selectedStatus) {
+                "All" -> true
+                "Approved" -> property.status == PropertyStatus.APPROVED
+                "Pending" -> property.status == PropertyStatus.PENDING
+                "Rejected" -> property.status == PropertyStatus.REJECTED
+                else -> true
+            }
+            matchesSearch && matchesStatus
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -33,83 +50,30 @@ fun ManagePropertiesScreen(
                 title = { Text("Manage Properties") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
+        Column(modifier = Modifier.padding(paddingValues)) {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    viewModel.searchProperties(it)
-                },
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
                 placeholder = { Text("Search properties...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                leadingIcon = { Icon(Icons.Default.Search, null) }
             )
 
-            val statuses = listOf("All", "Active", "Pending", "Suspended")
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                statuses.forEach { status ->
-                    FilterChip(
-                        selected = selectedStatus == status,
-                        onClick = {
-                            selectedStatus = status
-                            viewModel.filterPropertiesByStatus(status)
-                        },
-                        label = { Text(status) }
+            // LazyColumn... items use property.status.displayName() and property.address
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(filteredProperties) { property ->
+                    PropertyManagementCard(
+                        title = property.title,
+                        address = property.address,
+                        status = property.status.displayName(),
+                        onRemove = { viewModel.removeProperty(property.propertyId) }
                     )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            when {
-                uiState.isLoading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                else -> {
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        item {
-                            Text(
-                                "${uiState.properties.size} properties found",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        items(uiState.properties, key = { it.propertyId }) { property ->
-                            PropertyManagementCard(
-                                title = property.title,
-                                location = property.location,
-                                ownerName = property.ownerName,
-                                status = property.status,
-                                pricePerNight = property.pricePerNight,
-                                onSuspend = { viewModel.suspendProperty(property.propertyId) },
-                                onDelete = { viewModel.deleteProperty(property.propertyId) }
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -117,69 +81,16 @@ fun ManagePropertiesScreen(
 }
 
 @Composable
-private fun PropertyManagementCard(
-    title: String,
-    location: String,
-    ownerName: String,
-    status: String,
-    pricePerNight: String,
-    onSuspend: () -> Unit,
-    onDelete: () -> Unit
-) {
-    var menuExpanded by remember { mutableStateOf(false) }
-    val isActive = status.lowercase() == "active"
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(52.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
+fun PropertyManagementCard(title: String, address: String, status: String, onRemove: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Home, null)
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(title, fontWeight = FontWeight.Bold)
+                Text(address, style = MaterialTheme.typography.bodySmall)
+                Text("Status: $status", color = MaterialTheme.colorScheme.primary)
             }
-
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text(location, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Owner: $ownerName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SuggestionChip(onClick = {}, label = { Text(pricePerNight) })
-                    SuggestionChip(
-                        onClick = {},
-                        label = { Text(status) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(
-                            containerColor = if (isActive) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.errorContainer
-                        )
-                    )
-                }
-            }
-
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
-                }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text(if (isActive) "Suspend" else "Activate") },
-                        onClick = { menuExpanded = false; onSuspend() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                        onClick = { menuExpanded = false; onDelete() }
-                    )
-                }
-            }
+            IconButton(onClick = onRemove) { Icon(Icons.Default.MoreVert, null) }
         }
     }
 }
-
-

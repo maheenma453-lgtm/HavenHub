@@ -1,8 +1,12 @@
 package com.example.havenhub.navigation
 
+/**
+ * HavenHub Navigation Routes
+ * Is file mein app ki saari screens aur unke arguments defined hain.
+ */
 sealed class Screen(val route: String) {
 
-    // ── 1. AUTH ──────────────────────────────────────────────────────────────
+    // ── 1. AUTH & ONBOARDING ────────────────────────────────────────────────
     object Splash         : Screen("splash")
     object Onboarding     : Screen("onboarding")
     object SignIn         : Screen("sign_in")
@@ -10,7 +14,7 @@ sealed class Screen(val route: String) {
     object RoleSelection  : Screen("role_selection")
     object ForgotPassword : Screen("forgot_password")
 
-    // ── 2. MAIN / CORE ───────────────────────────────────────────────────────
+    // ── 2. MAIN CORE ────────────────────────────────────────────────────────
     object Home   : Screen("home")
     object Search : Screen("search")
     object Filter : Screen("filter")
@@ -116,33 +120,28 @@ sealed class Screen(val route: String) {
         fun createRoute(propertyId: String) = "vacation_calendar/$propertyId"
     }
 
-    // ── 12. ADMIN — DASHBOARD ────────────────────────────────────────────────
-    object AdminDashboard : Screen("admin_dashboard")
+    // ── 12. ADMIN — DASHBOARD & MANAGEMENT ───────────────────────────────────
+    object AdminDashboard   : Screen("admin_dashboard")
+    object ManageUsers      : Screen("manage_users")
+    object ManageProperties : Screen("manage_properties")
+    object ManageBookings   : Screen("manage_bookings")
 
     // ── 13. ADMIN — VERIFICATION ─────────────────────────────────────────────
     object VerifyProperties : Screen("verify_properties")
     object VerifyUsers      : Screen("verify_users")
 
-    object PropertyVerificationDetail :
-        Screen("property_verification_detail/{propertyId}") {
+    object PropertyVerificationDetail : Screen("property_verification_detail/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
-        fun createRoute(propertyId: String) =
-            "property_verification_detail/$propertyId"
+        fun createRoute(propertyId: String) = "property_verification_detail/$propertyId"
     }
 
-    object UserVerificationDetail :
-        Screen("user_verification_detail/{userId}") {
+    object UserVerificationDetail : Screen("user_verification_detail/{userId}") {
         const val ARG_USER_ID = "userId"
-        fun createRoute(userId: String) =
-            "user_verification_detail/$userId"
+        fun createRoute(userId: String) = "user_verification_detail/$userId"
     }
 
-    // ── 14. ADMIN — MANAGEMENT ───────────────────────────────────────────────
-    object ManageUsers      : Screen("manage_users")
-    object ManageProperties : Screen("manage_properties")
-    object ManageBookings   : Screen("manage_bookings")
-
-    // ── 15. ADMIN — REPORTS ──────────────────────────────────────────────────
+    // ── 14. ADMIN — REPORTS ──────────────────────────────────────────────────
+    // Reports aur PaymentReports ko humne ViewModel ke sath sync rakha hai
     object Reports        : Screen("reports")
     object PaymentReports : Screen("payment_reports")
 }

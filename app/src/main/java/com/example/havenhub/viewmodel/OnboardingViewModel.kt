@@ -2,50 +2,60 @@ package com.example.havenhub.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-// FIX: com.havenhub → com.example.havenhub
 import com.example.havenhub.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ✅ Onboarding ke liye UI State define ki
+data class OnboardingUiState(
+    val currentPage: Int = 0,
+    val totalPages: Int = 3,
+    val isOnboardingComplete: Boolean = false
+)
 
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _currentPage = MutableStateFlow(0)
-    val currentPage: StateFlow<Int> = _currentPage.asStateFlow()
-
-    private val _onboardingComplete = MutableStateFlow(false)
-    val onboardingComplete: StateFlow<Boolean> = _onboardingComplete.asStateFlow()
-
-    val totalPages = 3
+    private val _uiState = MutableStateFlow(OnboardingUiState())
+    val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
     fun nextPage() {
-        if (_currentPage.value < totalPages - 1) {
-            _currentPage.value++
-        } else {
-            completeOnboarding()
+        _uiState.update { state ->
+            if (state.currentPage < state.totalPages - 1) {
+                state.copy(currentPage = state.currentPage + 1)
+            } else {
+                // Last page par next dabane se onboarding khatam
+                state.copy(isOnboardingComplete = true)
+            }
         }
     }
 
     fun previousPage() {
-        if (_currentPage.value > 0) {
-            _currentPage.value--
+        _uiState.update { state ->
+            if (state.currentPage > 0) {
+                state.copy(currentPage = state.currentPage - 1)
+            } else {
+                state
+            }
         }
     }
 
     fun skipOnboarding() {
-        completeOnboarding()
+        _uiState.update { it.copy(isOnboardingComplete = true) }
     }
 
+    // Agar future mein repo mein flag save karna ho
     private fun completeOnboarding() {
-        // TODO: setOnboardingComplete() does not exist in AuthRepository
-        // Option A: Add it to AuthRepository (uses SharedPreferences or Firestore flag)
-        // Option B: Remove this call and handle navigation purely from _onboardingComplete state
-        _onboardingComplete.value = true
+        viewModelScope.launch {
+            // authRepository.saveOnboardingStatus(true) // Future use ke liye
+            _uiState.update { it.copy(isOnboardingComplete = true) }
+        }
     }
 }
