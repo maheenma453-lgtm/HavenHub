@@ -20,11 +20,9 @@ import javax.inject.Singleton
 object RepositoryModule {
 
     // ── Firebase SDK ─────────────────────────────────────────────────────────
-
-    @Provides
-    @Singleton
-    fun provideFirebaseAuth(): FirebaseAuth =
-        FirebaseAuth.getInstance()
+    // FIX: FirebaseAuth FirebaseModule mein already hai — yahan nahi
+    // FIX: FirebaseFirestore, FirebaseStorage, FirebaseMessaging sirf
+    //      yahan provide hain — FirebaseModule mein nahi hain
 
     @Provides
     @Singleton
@@ -74,33 +72,3 @@ object RepositoryModule {
         fcm: FirebaseMessaging
     ): FirebaseMessagingManager = FirebaseMessagingManager(firestore, fcm)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
