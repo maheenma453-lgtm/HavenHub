@@ -19,6 +19,11 @@ import androidx.navigation.NavController
 import com.example.havenhub.data.Property
 import com.example.havenhub.viewmodel.VerificationViewModel
 
+// ─────────────────────────────────────────────────────────────────
+// VerifyPropertiesScreen.kt
+// Compatible with VerificationViewModel + Property.kt
+// ─────────────────────────────────────────────────────────────────
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VerifyPropertiesScreen(
@@ -27,13 +32,32 @@ fun VerifyPropertiesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // ── Snackbar for errors/success ────────────────────────────────
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.resetActionState()
+        }
+    }
+    LaunchedEffect(uiState.actionSuccess) {
+        if (uiState.actionSuccess) {
+            snackbarHostState.showSnackbar("Action completed successfully")
+            viewModel.resetActionState()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Verify Properties") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 }
             )
@@ -41,24 +65,54 @@ fun VerifyPropertiesScreen(
     ) { paddingValues ->
         when {
             uiState.isLoading -> {
-                Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
                     CircularProgressIndicator()
                 }
             }
+
             uiState.pendingProperties.isEmpty() -> {
-                Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text("No properties to verify", style = MaterialTheme.typography.bodyLarge)
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "No properties to verify",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
                     }
                 }
             }
+
             else -> {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    item {
+                        Text(
+                            text = "${uiState.pendingProperties.size} pending",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                     items(uiState.pendingProperties, key = { it.propertyId }) { property ->
                         PendingPropertyCard(
                             property = property,
@@ -73,30 +127,61 @@ fun VerifyPropertiesScreen(
     }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// PendingPropertyCard
+// FIX: location.address → Property.kt mein direct `address` field
+//      hai aur `city` bhi — location object ka address nahi use kiya
+// ─────────────────────────────────────────────────────────────────
 @Composable
 fun PendingPropertyCard(property: Property, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Surface(
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.primaryContainer,
                 modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Home, contentDescription = null)
+                    Icon(
+                        imageVector = Icons.Default.Home,
+                        contentDescription = null
+                    )
                 }
             }
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(property.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                // ✅ Using address from location object
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = property.location.address.ifEmpty { property.city },
+                    text = property.title,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                // FIX: property.address direct field use kiya
+                // city fallback agar address empty ho
+                Text(
+                    text = property.address.ifEmpty { property.city },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Extra info — type aur price
+                Text(
+                    text = "${property.propertyType.displayName()} · ${property.formattedPrice}/night",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
             }
-            Button(onClick = onClick, modifier = Modifier.height(36.dp)) {
+
+            Button(
+                onClick = onClick,
+                modifier = Modifier.height(36.dp)
+            ) {
                 Text("Review", fontSize = 12.sp)
             }
         }

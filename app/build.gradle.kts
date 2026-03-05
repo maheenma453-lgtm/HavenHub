@@ -9,12 +9,12 @@ plugins {
 
 android {
     namespace = "com.example.havenhub"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.havenhub"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -70,6 +70,7 @@ dependencies {
 
     // ─── Hilt (Dependency Injection) ─────────────────────
     implementation("com.google.dagger:hilt-android:2.51.1")
+    implementation(libs.firebase.database)
     kapt("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
