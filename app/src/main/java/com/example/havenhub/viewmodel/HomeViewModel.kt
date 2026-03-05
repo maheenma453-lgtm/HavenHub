@@ -9,27 +9,26 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ✅ ZAROORI: Ye class ViewModel ke bahar magar file ke andar lazmi honi chahiye
+data class HomeUiState(
+    val featuredProperties: List<Property> = emptyList(),
+    val nearbyProperties: List<Property> = emptyList(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null
+)
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val propertyRepository: PropertyRepository
 ) : ViewModel() {
 
-    // ✅ Fix: Resource.Loading is an object, no brackets ()
-    private val _featuredProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
-    val featuredProperties: StateFlow<Resource<List<Property>>> = _featuredProperties.asStateFlow()
-
-    private val _nearbyProperties = MutableStateFlow<Resource<List<Property>>>(Resource.Loading)
-    val nearbyProperties: StateFlow<Resource<List<Property>>> = _nearbyProperties.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+    // ✅ StateFlow with explicit type to fix "Cannot infer type"
+    private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState())
+    val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
         loadHomeData()
@@ -37,37 +36,21 @@ class HomeViewModel @Inject constructor(
 
     fun loadHomeData() {
         viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                // Parallel calls
-                val job1 = launch { _featuredProperties.value = propertyRepository.getFeaturedProperties() }
-                val job2 = launch { _nearbyProperties.value = propertyRepository.getNearbyProperties() }
-                joinAll(job1, job2)
-            } catch (e: Exception) {
-                val errorMsg = e.localizedMessage ?: "Unknown Error"
-                _errorMessage.value = errorMsg
-                // ✅ Fix: Matching Resource.Error(message, code)
-                _featuredProperties.value = Resource.Error(errorMsg)
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
+                val featuredResult = propertyRepository.getFeaturedProperties()
+                val nearbyResult = propertyRepository.getNearbyProperties()
 
-    fun searchProperties(query: String) {
-        if (query.isBlank()) {
-            loadHomeData()
-            return
-        }
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                _featuredProperties.value = propertyRepository.searchPropertiesByName(query)
+                _uiState.update { state ->
+                    state.copy(
+                        featuredProperties = if (featuredResult is Resource.Success) featuredResult.data ?: emptyList() else emptyList(),
+                        nearbyProperties = if (nearbyResult is Resource.Success) nearbyResult.data ?: emptyList() else emptyList(),
+                        isLoading = false,
+                        errorMessage = if (featuredResult is Resource.Error) featuredResult.message else if (nearbyResult is Resource.Error) nearbyResult.message else null
+                    )
+                }
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage
-            } finally {
-                _isLoading.value = false
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
             }
         }
     }

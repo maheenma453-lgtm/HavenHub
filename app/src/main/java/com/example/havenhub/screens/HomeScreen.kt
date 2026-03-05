@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,28 +26,27 @@ import androidx.navigation.NavController
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
-import com.example.havenhub.utils.Resource
 import com.example.havenhub.viewmodel.HomeViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    // ── ViewModel States ──
-    val featuredState by viewModel.featuredProperties.collectAsState()
-    val nearbyState by viewModel.nearbyProperties.collectAsState()
+    // ✅ Latest Update: Collecting single UI State from ViewModel
+    val uiState by viewModel.uiState.collectAsState()
 
-    // ── Local UI State ──
+    // ── Local UI State for Filtering ──
     val categories = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
     var selectedCategory by remember { mutableStateOf("All") }
 
-    // Helper function to extract and filter data safely
-    fun getFilteredList(resource: Resource<List<Property>>): List<Property> {
-        val data = resource.getOrNull() ?: emptyList()
-        return if (selectedCategory == "All") data
-        else data.filter { it.propertyType.displayName() == selectedCategory }
-    }
+    // ✅ Filtering logic based on selected category
+    val filteredFeatured = if (selectedCategory == "All") uiState.featuredProperties
+    else uiState.featuredProperties.filter { it.propertyType.displayName() == selectedCategory }
+
+    val filteredNearby = if (selectedCategory == "All") uiState.nearbyProperties
+    else uiState.nearbyProperties.filter { it.propertyType.displayName() == selectedCategory }
 
     LazyColumn(
         modifier = Modifier
@@ -73,7 +73,11 @@ fun HomeScreen(
                     FilterChip(
                         selected = selectedCategory == category,
                         onClick = { selectedCategory = category },
-                        label = { Text(category) }
+                        label = { Text(category) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryBlue,
+                            selectedLabelColor = Color.White
+                        )
                     )
                 }
             }
@@ -84,16 +88,28 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(20.dp))
             SectionHeader("Featured Properties") {}
 
-            when (featuredState) {
-                is Resource.Loading -> LoadingShimmer()
-                is Resource.Error -> Text("Error: ${(featuredState as Resource.Error).message}", Modifier.padding(20.dp))
-                is Resource.Success -> {
-                    val list = getFilteredList(featuredState)
+            when {
+                uiState.isLoading -> LoadingShimmer()
+                uiState.errorMessage != null -> {
+                    Text(
+                        text = "Error: ${uiState.errorMessage}",
+                        modifier = Modifier.padding(20.dp),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                filteredFeatured.isEmpty() -> {
+                    Text(
+                        text = "No properties found in this category",
+                        modifier = Modifier.padding(20.dp),
+                        color = TextSecondary
+                    )
+                }
+                else -> {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        items(list) { property ->
+                        items(filteredFeatured) { property ->
                             FeaturedPropertyCard(property) {
                                 navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
                             }
@@ -110,22 +126,19 @@ fun HomeScreen(
         }
 
         // 5. Nearby Section List
-        when (nearbyState) {
-            is Resource.Loading -> item { LoadingShimmer() }
-            is Resource.Success -> {
-                val list = getFilteredList(nearbyState)
-                items(list.take(10)) { property ->
-                    NearbyPropertyCard(property) {
-                        navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
-                    }
+        if (uiState.isLoading && uiState.nearbyProperties.isEmpty()) {
+            item { LoadingShimmer() }
+        } else {
+            items(filteredNearby.take(10)) { property ->
+                NearbyPropertyCard(property) {
+                    navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
                 }
             }
-            else -> {}
         }
     }
 }
 
-// ── Reusable UI Components ──
+// ── UI Components ──
 
 @Composable
 fun HomeHeaderSection(onSearchClick: () -> Unit) {
@@ -145,7 +158,10 @@ fun HomeHeaderSection(onSearchClick: () -> Unit) {
             }
             Spacer(Modifier.height(20.dp))
             Surface(
-                modifier = Modifier.fillMaxWidth().height(52.dp).clickable { onSearchClick() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clickable { onSearchClick() },
                 shape = RoundedCornerShape(12.dp),
                 color = BackgroundWhite
             ) {
@@ -161,7 +177,13 @@ fun HomeHeaderSection(onSearchClick: () -> Unit) {
 
 @Composable
 fun SectionHeader(title: String, onSeeAll: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
         TextButton(onClick = onSeeAll) { Text("See All", color = PrimaryBlue) }
     }
@@ -170,7 +192,10 @@ fun SectionHeader(title: String, onSeeAll: () -> Unit) {
 @Composable
 fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.width(240.dp).height(230.dp).clickable { onClick() },
+        modifier = Modifier
+            .width(240.dp)
+            .height(230.dp)
+            .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = BackgroundWhite),
         elevation = CardDefaults.cardElevation(4.dp)
@@ -178,8 +203,20 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
         Column {
             Box(Modifier.fillMaxWidth().height(130.dp).background(SurfaceVariantLight), Alignment.Center) {
                 Text("🏠", fontSize = 40.sp)
-                Surface(Modifier.align(Alignment.TopEnd).padding(10.dp), color = PrimaryBlue, shape = RoundedCornerShape(8.dp)) {
-                    Text(property.formattedPrice, Modifier.padding(8.dp, 4.dp), color = BackgroundWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp),
+                    color = PrimaryBlue,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = property.formattedPrice,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
             Column(Modifier.padding(12.dp)) {
@@ -198,13 +235,22 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
 @Composable
 fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).clickable { onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = BackgroundWhite),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        Row(Modifier.padding(12.dp), Alignment.CenterVertically as Arrangement.Horizontal) {
-            Box(Modifier.size(80.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceVariantLight), Alignment.Center) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(SurfaceVariantLight),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("🏢", fontSize = 30.sp)
             }
             Spacer(Modifier.width(16.dp))
@@ -212,7 +258,7 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
                 Text(property.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
                 Text("${property.city} • ${property.propertyType.displayName()}", color = TextSecondary, fontSize = 13.sp)
                 Spacer(Modifier.height(4.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${property.formattedPrice}/night", fontWeight = FontWeight.ExtraBold, color = PrimaryBlue)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Star, null, tint = AccentAmber, modifier = Modifier.size(14.dp))
@@ -226,7 +272,12 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
 
 @Composable
 fun LoadingShimmer() {
-    Box(Modifier.fillMaxWidth().height(150.dp), Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(150.dp),
+        contentAlignment = Alignment.Center
+    ) {
         CircularProgressIndicator(color = PrimaryBlue)
     }
 }
