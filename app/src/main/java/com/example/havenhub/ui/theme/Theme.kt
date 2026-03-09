@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// ─── Dark Color Scheme ────────────────────────────────────────────────────────
+// ─── Dark Color Scheme ────────────────────────────────────────────
 private val DarkColorScheme = darkColorScheme(
     primary            = PrimaryBlueLight,
     onPrimary          = BackgroundDark,
@@ -25,9 +25,10 @@ private val DarkColorScheme = darkColorScheme(
     onSecondary        = BackgroundDark,
     secondaryContainer = SecondaryBlueDark,
 
-    tertiary           = AccentAmberLight,
+    // ✅ AccentAmber → AccentGold
+    tertiary           = AccentGoldLight,
     onTertiary         = BackgroundDark,
-    tertiaryContainer  = AccentAmberDark,
+    tertiaryContainer  = AccentGoldDark,
 
     background         = BackgroundDark,
     onBackground       = TextPrimaryDark,
@@ -40,7 +41,7 @@ private val DarkColorScheme = darkColorScheme(
     onError            = OnErrorRedDark
 )
 
-// ─── Light Color Scheme ───────────────────────────────────────────────────────
+// ─── Light Color Scheme ───────────────────────────────────────────
 private val LightColorScheme = lightColorScheme(
     primary            = PrimaryBlue,
     onPrimary          = OnPrimaryBlue,
@@ -50,9 +51,10 @@ private val LightColorScheme = lightColorScheme(
     onSecondary        = OnSecondary,
     secondaryContainer = SecondaryBlueLight,
 
-    tertiary           = AccentAmber,
-    onTertiary         = OnAccentAmber,
-    tertiaryContainer  = AccentAmberLight,
+    // ✅ AccentAmber → AccentGold
+    tertiary           = AccentGold,
+    onTertiary         = OnAccentGold,
+    tertiaryContainer  = AccentGoldLight,
 
     background         = BackgroundLight,
     onBackground       = TextPrimary,
@@ -65,12 +67,12 @@ private val LightColorScheme = lightColorScheme(
     onError            = OnErrorRed
 )
 
-// ─── Theme Entry Point ────────────────────────────────────────────────────────
+// ─── Theme Entry Point ────────────────────────────────────────────
 @Composable
 fun HavenHubTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme   : Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
-    content: @Composable () -> Unit
+    content     : @Composable () -> Unit
 ) {
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -85,16 +87,47 @@ fun HavenHubTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
+            // ✅ Status bar color — deep navy blue
+            window.statusBarColor = PrimaryBlue.toArgb()
             WindowCompat.getInsetsController(window, view)
-                .isAppearanceLightStatusBars = !darkTheme
+                .isAppearanceLightStatusBars = false
         }
     }
 
-    // ✅ FIXED: MaterialTheme call karni hai aapke content ke liye
     MaterialTheme(
         colorScheme = colorScheme,
-        // typography = HavenTypography, // Agar Type.kt mein HavenTypography hai toh ise uncomment karein
-        content = content
+        content     = content
     )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

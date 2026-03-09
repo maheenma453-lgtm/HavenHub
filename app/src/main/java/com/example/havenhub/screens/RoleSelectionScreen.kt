@@ -26,10 +26,7 @@ fun RoleSelectionScreen(
     navController : NavController,
     viewModel     : AuthViewModel = hiltViewModel()
 ) {
-    // ── ViewModel State ──
     val uiState by viewModel.uiState.collectAsState()
-
-    // Local state for UI highlighting
     var localSelectedRole by remember { mutableStateOf("") }
 
     Box(
@@ -46,65 +43,64 @@ fun RoleSelectionScreen(
             Spacer(modifier = Modifier.height(48.dp))
 
             Text(
-                text = "I am a...",
-                fontSize = 28.sp,
+                text       = "I am a...",
+                fontSize   = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                color      = TextPrimary
             )
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // Role Card: Regular User (Tenant)
+            // ── Tenant Card ──
             RoleCard(
-                emoji = "🏡",
-                title = "Regular User",
+                emoji       = "🏡",
+                title       = "Regular User",
                 description = "I'm looking for a property to rent for daily or monthly stay.",
-                isSelected = localSelectedRole == "tenant",
-                onClick = {
+                isSelected  = localSelectedRole == "tenant",
+                onClick     = {
                     localSelectedRole = "tenant"
-                    // Role ViewModel mein set karein taaki SignUp screen usay use kare
-                    viewModel.onRoleSelected("tenant")
+                    viewModel.onRoleSelected("tenant")   // ✅ TENANT
                 }
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Role Card: Property Owner (Landlord)
+            // ── Owner Card ──
             RoleCard(
-                emoji = "🏗️",
-                title = "Property Owner",
+                emoji       = "🏗️",
+                title       = "Property Owner",
                 description = "I want to list my properties and manage bookings.",
-                isSelected = localSelectedRole == "landlord",
-                onClick = {
+                isSelected  = localSelectedRole == "landlord",
+                onClick     = {
                     localSelectedRole = "landlord"
-                    viewModel.onRoleSelected("landlord")
+                    viewModel.onRoleSelected("landlord") // ✅ UserRole.LANDLORD se match
                 }
             )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Error Display (if any)
             uiState.errorMessage?.let {
-                Text(text = it, color = ErrorRed, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+                Text(
+                    text     = it,
+                    color    = ErrorRed,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
             }
 
-            // ── Continue Button ──
             Button(
-                onClick = {
-                    // ✅ Step: Role select karne ke baad SignUp screen par bhejna hai
-                    navController.navigate(Screen.SignUp.route)
-                },
-                enabled = localSelectedRole.isNotEmpty(),
+                onClick  = { navController.navigate(Screen.SignUp.route) },
+                enabled  = localSelectedRole.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape  = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryBlue,
+                    containerColor         = PrimaryBlue,
                     disabledContainerColor = BorderGray
                 )
             ) {
-                Text(text = "Continue", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text("Continue", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -114,13 +110,13 @@ fun RoleSelectionScreen(
 
 @Composable
 private fun RoleCard(
-    emoji: String,
-    title: String,
+    emoji      : String,
+    title      : String,
     description: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
+    isSelected : Boolean,
+    onClick    : () -> Unit
 ) {
-    val borderColor = if (isSelected) PrimaryBlue else BorderGray
+    val borderColor     = if (isSelected) PrimaryBlue else BorderGray
     val backgroundColor = if (isSelected) PrimaryBlue.copy(alpha = 0.06f) else SurfaceVariantLight
 
     Box(
@@ -151,15 +147,15 @@ private fun RoleCard(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = title,
-                    fontSize = 17.sp,
+                    text       = title,
+                    fontSize   = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (isSelected) PrimaryBlue else TextPrimary
+                    color      = if (isSelected) PrimaryBlue else TextPrimary
                 )
                 Text(
-                    text = description,
-                    fontSize = 13.sp,
-                    color = TextSecondary,
+                    text       = description,
+                    fontSize   = 13.sp,
+                    color      = TextSecondary,
                     lineHeight = 18.sp
                 )
             }
@@ -178,3 +174,23 @@ private fun RoleCard(
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -11,17 +11,16 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// ─────────────────────────────────────────────
-//  UI State
-// ─────────────────────────────────────────────
 data class AuthUiState(
-    val isLoading: Boolean = false,
-    val isLoggedIn: Boolean = false,
-    val currentUser: FirebaseUser? = null,
-    val errorMessage: String? = null,
-    val successMessage: String? = null,
-    val isPasswordResetSent: Boolean = false,
-    val selectedRole: String = "" // "tenant", "landlord", "admin"
+    val isLoading           : Boolean       = false,
+    val isLoggedIn          : Boolean       = false,
+    val currentUser         : FirebaseUser? = null,
+    val errorMessage        : String?       = null,
+    val successMessage      : String?       = null,
+    val isPasswordResetSent : Boolean       = false,
+    val selectedRole        : String        = "",
+    // ✅ NEW: login ke baad role yahan store hoga
+    val userRole            : String        = ""  // "tenant" / "owner" / "admin"
 )
 
 @HiltViewModel
@@ -32,7 +31,6 @@ class AuthViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
-    // Form fields
     private val _email = MutableStateFlow("")
     val email: StateFlow<String> = _email.asStateFlow()
 
@@ -45,7 +43,6 @@ class AuthViewModel @Inject constructor(
     private val _fullName = MutableStateFlow("")
     val fullName: StateFlow<String> = _fullName.asStateFlow()
 
-    // Validation errors
     private val _emailError = MutableStateFlow<String?>(null)
     val emailError: StateFlow<String?> = _emailError.asStateFlow()
 
@@ -73,15 +70,11 @@ class AuthViewModel @Inject constructor(
         _passwordError.value = null
     }
 
-    fun onConfirmPasswordChange(value: String) {
-        _confirmPassword.value = value
-    }
-
+    fun onConfirmPasswordChange(value: String) { _confirmPassword.value = value }
     fun onFullNameChange(value: String) {
         _fullName.value = value
         _nameError.value = null
     }
-
     fun onRoleSelected(role: String) {
         _uiState.update { it.copy(selectedRole = role) }
     }
@@ -92,16 +85,23 @@ class AuthViewModel @Inject constructor(
 
     private fun checkAuthState() {
         val firebaseUser = authRepository.currentUser
-        _uiState.update {
-            it.copy(
-                currentUser = firebaseUser,
-                isLoggedIn = firebaseUser != null
-            )
+        if (firebaseUser != null) {
+            // ✅ App open hone par bhi role fetch karo
+            viewModelScope.launch {
+                val role = authRepository.getUserRole(firebaseUser.uid)
+                _uiState.update {
+                    it.copy(
+                        currentUser = firebaseUser,
+                        isLoggedIn  = true,
+                        userRole    = role
+                    )
+                }
+            }
         }
     }
 
     // ─────────────────────────────────────────
-    //  Sign In
+    //  Sign In  ✅ FIXED: role fetch hoga
     // ─────────────────────────────────────────
 
     fun signIn() {
@@ -109,16 +109,22 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = authRepository.signIn(
-                email = _email.value.trim(),
+                email    = _email.value.trim(),
                 password = _password.value
             )
             when (result) {
-                is Resource.Success -> _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        isLoggedIn = true,
-                        currentUser = result.data
-                    )
+                is Resource.Success -> {
+                    // ✅ Firebase se role fetch karo
+                    val uid  = result.data?.uid ?: ""
+                    val role = authRepository.getUserRole(uid)
+                    _uiState.update {
+                        it.copy(
+                            isLoading   = false,
+                            isLoggedIn  = true,
+                            currentUser = result.data,
+                            userRole    = role   // "admin" / "owner" / "tenant"
+                        )
+                    }
                 }
                 is Resource.Error -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
@@ -129,7 +135,7 @@ class AuthViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────
-    //  Sign Up  →  registerUser() in Repository
+    //  Sign Up
     // ─────────────────────────────────────────
 
     fun signUp() {
@@ -145,9 +151,10 @@ class AuthViewModel @Inject constructor(
             when (result) {
                 is Resource.Success -> _uiState.update {
                     it.copy(
-                        isLoading = false,
-                        isLoggedIn = true,
-                        currentUser = result.data,
+                        isLoading      = false,
+                        isLoggedIn     = true,
+                        currentUser    = result.data,
+                        userRole       = _uiState.value.selectedRole,
                         successMessage = "Account created successfully!"
                     )
                 }
@@ -167,7 +174,7 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.signOut()
             _uiState.update { AuthUiState() }
-            _email.value = ""
+            _email.value    = ""
             _password.value = ""
         }
     }
@@ -188,9 +195,9 @@ class AuthViewModel @Inject constructor(
             when (result) {
                 is Resource.Success -> _uiState.update {
                     it.copy(
-                        isLoading = false,
+                        isLoading           = false,
                         isPasswordResetSent = true,
-                        successMessage = "Password reset email sent!"
+                        successMessage      = "Password reset email sent!"
                     )
                 }
                 is Resource.Error -> _uiState.update {
@@ -210,12 +217,17 @@ class AuthViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = authRepository.signInWithGoogle(idToken)
             when (result) {
-                is Resource.Success -> _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        isLoggedIn = true,
-                        currentUser = result.data
-                    )
+                is Resource.Success -> {
+                    val uid  = result.data?.uid ?: ""
+                    val role = authRepository.getUserRole(uid)
+                    _uiState.update {
+                        it.copy(
+                            isLoading   = false,
+                            isLoggedIn  = true,
+                            currentUser = result.data,
+                            userRole    = role
+                        )
+                    }
                 }
                 is Resource.Error -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
@@ -271,7 +283,25 @@ class AuthViewModel @Inject constructor(
     //  Error / Success
     // ─────────────────────────────────────────
 
-    fun clearError() = _uiState.update { it.copy(errorMessage = null) }
+    fun clearError()   = _uiState.update { it.copy(errorMessage = null) }
     fun clearSuccess() = _uiState.update { it.copy(successMessage = null) }
     fun isUserSignedIn(): Boolean = authRepository.isUserSignedIn()
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

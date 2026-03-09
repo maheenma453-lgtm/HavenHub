@@ -12,28 +12,46 @@ import javax.inject.Singleton
 
 @Singleton
 class AuthRepository @Inject constructor(
-    private val authManager: FirebaseAuthManager,
-    private val dataManager: FirebaseDataManager,
-    private val messagingManager: FirebaseMessagingManager
+    private val authManager      : FirebaseAuthManager,
+    private val dataManager      : FirebaseDataManager,
+    private val messagingManager : FirebaseMessagingManager
 ) {
 
     // ─────────────────────────────────────────────────────────────────────────
     // Session State
     // ─────────────────────────────────────────────────────────────────────────
 
-    val currentUser: FirebaseUser? get() = authManager.currentUser
-    val currentUserId: String? get() = authManager.currentUserId
+    val currentUser   : FirebaseUser? get() = authManager.currentUser
+    val currentUserId : String?       get() = authManager.currentUserId
     fun isUserSignedIn(): Boolean = authManager.isUserSignedIn()
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ✅ NEW: getUserRole — Firebase se user ka role fetch karo
+    // ─────────────────────────────────────────────────────────────────────────
+
+    suspend fun getUserRole(uid: String): String {
+        return try {
+            val result = dataManager.getUser(uid)
+            if (result is Resource.Success) {
+                // ✅ UserRole.LANDLORD → "landlord", TENANT → "tenant", ADMIN → "admin"
+                result.data.role.name.lowercase()
+            } else {
+                "tenant"
+            }
+        } catch (e: Exception) {
+            "tenant"
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Registration
     // ─────────────────────────────────────────────────────────────────────────
 
     suspend fun registerUser(
-        email: String,
-        password: String,
-        fullName: String,
-        role: String
+        email    : String,
+        password : String,
+        fullName : String,
+        role     : String
     ): Resource<FirebaseUser> {
         val authResult = authManager.registerWithEmail(email, password)
         if (authResult is Resource.Error) return authResult
@@ -118,3 +136,23 @@ class AuthRepository @Inject constructor(
     suspend fun sendPasswordResetEmail(email: String): Resource<Unit> =
         authManager.sendPasswordResetEmail(email)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

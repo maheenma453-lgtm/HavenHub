@@ -31,6 +31,9 @@ fun BookingConfirmationScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // ── Get first booking for payment details ──────────────────────
+    val booking = uiState.bookings.firstOrNull()
+
     // ── Animated checkmark (pop-in effect) ────────────────────────
     val scale by animateFloatAsState(
         targetValue   = 1f,
@@ -103,11 +106,14 @@ fun BookingConfirmationScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 BookingDetailRow(label = "Booking ID", value = "#${bookingId.take(8).uppercase()}")
-                BookingDetailRow(label = "Property ID", value = uiState.bookings.firstOrNull()?.propertyId ?: "-")
-                BookingDetailRow(label = "Status", value = "Pending")
-                BookingDetailRow(label = "Payment", value = "Pending")
+                BookingDetailRow(label = "Property ID", value = booking?.propertyId ?: "-")
+                BookingDetailRow(label = "Status",      value = "Pending")
+                BookingDetailRow(label = "Payment",     value = "Pending")
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = BorderGray)
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color    = BorderGray
+                )
 
                 // Total amount
                 Row(
@@ -116,7 +122,7 @@ fun BookingConfirmationScreen(
                 ) {
                     Text("Total Amount", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        text       = "PKR 12,000",
+                        text       = "PKR ${booking?.totalAmount?.toInt() ?: 12000}",
                         fontSize   = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color      = PrimaryBlue
@@ -148,7 +154,19 @@ fun BookingConfirmationScreen(
 
         // ── Action Buttons ─────────────────────────────────────────
         Button(
-            onClick = { navController.navigate(Screen.Payment.createRoute(bookingId)) },
+            onClick = {
+                // ✅ FIX: Screen.Payment.createRoute() needs 6 arguments
+                navController.navigate(
+                    Screen.Payment.createRoute(
+                        bookingId = bookingId,
+                        payerId   = booking?.tenantId     ?: "",
+                        payeeId   = booking?.landlordId   ?: "",
+                        payerName = booking?.tenantName   ?: "User",
+                        payeeName = booking?.landlordName ?: "Owner",
+                        amount    = booking?.totalAmount  ?: 12000.0
+                    )
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
@@ -193,6 +211,6 @@ private fun BookingDetailRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label, fontSize = 13.sp, color = TextSecondary)
-        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
+        Text(text = value,  fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
     }
 }

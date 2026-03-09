@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-// FIX: Correct Imports for your project structure
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.DashboardViewModel
@@ -30,7 +29,6 @@ fun AdminDashboardScreen(
     navController: NavController,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    // FIX: Sync with your ViewModel's UiState
     val uiState by viewModel.uiState.collectAsState()
     val stats = uiState.stats
 
@@ -38,12 +36,13 @@ fun AdminDashboardScreen(
         viewModel.loadDashboard()
     }
 
+    // ✅ bottomBar hata diya — NavGraph se mil raha hai
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Admin Dashboard", color = Color.White) },
                 actions = {
-                    IconButton(onClick = { /* Handle Notifications */ }) {
+                    IconButton(onClick = { navController.navigate(Screen.Notifications.route) }) {
                         Icon(Icons.Default.Notifications, null, tint = Color.White)
                     }
                 },
@@ -60,55 +59,95 @@ fun AdminDashboardScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFFF5F5F5)) // SurfaceGray
+                    .background(Color(0xFFF5F5F5))
                     .padding(paddingValues),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                // Header Greeting
+                // ── Header ────────────────────────────────────────────────
                 item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Brush.verticalGradient(listOf(PrimaryBlue, Color(0xFF003366))))
+                            .background(
+                                Brush.verticalGradient(listOf(PrimaryBlue, Color(0xFF003366)))
+                            )
                             .padding(20.dp)
                     ) {
                         Column {
-                            Text("Welcome, Admin 👋", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("Platform overview and management.", fontSize = 13.sp, color = Color.White.copy(0.8f))
+                            Text(
+                                "Welcome, Admin 👋",
+                                fontSize   = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = Color.White
+                            )
+                            Text(
+                                "Platform overview and management.",
+                                fontSize = 13.sp,
+                                color    = Color.White.copy(0.8f)
+                            )
                         }
                     }
                 }
 
-                // Stats Grid
+                // ── Stats Grid ────────────────────────────────────────────
                 item {
                     Spacer(Modifier.height(16.dp))
-                    Text("Platform Overview", fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp))
+                    Text(
+                        "Platform Overview",
+                        fontWeight = FontWeight.Bold,
+                        modifier   = Modifier.padding(horizontal = 16.dp)
+                    )
                     Spacer(Modifier.height(10.dp))
 
-                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(
+                        Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            AdminStatCard("🏠", "Properties", "${stats.totalProperties}", PrimaryBlue, Modifier.weight(1f))
-                            AdminStatCard("👥", "Total Bookings", "${stats.totalBookings}", Color(0xFF00ACC1), Modifier.weight(1f))
+                            AdminStatCard("🏠", "Properties",    "${stats.totalProperties}", PrimaryBlue,         Modifier.weight(1f))
+                            AdminStatCard("📋", "Total Bookings","${stats.totalBookings}",   Color(0xFF00ACC1),    Modifier.weight(1f))
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            AdminStatCard("⏳", "Pending", "${stats.pendingBookings}", Color(0xFFE67E22), Modifier.weight(1f))
-                            AdminStatCard("💰", "Revenue", "PKR ${"%,.0f".format(stats.totalEarnings)}", Color(0xFF2ECC71), Modifier.weight(1f))
+                            AdminStatCard("⏳", "Pending",       "${stats.pendingBookings}", Color(0xFFE67E22),    Modifier.weight(1f))
+                            AdminStatCard("💰", "Revenue",       "PKR ${"%,.0f".format(stats.totalEarnings)}", Color(0xFF2ECC71), Modifier.weight(1f))
                         }
                     }
                 }
 
-                // Quick Actions
+                // ── Quick Actions ─────────────────────────────────────────
                 item {
                     Spacer(Modifier.height(24.dp))
-                    Text("Quick Actions", fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp))
+                    Text(
+                        "Quick Actions",
+                        fontWeight = FontWeight.Bold,
+                        modifier   = Modifier.padding(horizontal = 16.dp)
+                    )
                     Spacer(Modifier.height(10.dp))
 
-                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ActionRow("Verify Properties", Icons.Default.CheckCircle, "verify_props") {
-                            // navController.navigate(Screen.ManageProperties.route) // Adjust based on your routes
+                    Column(
+                        Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AdminActionRow("Verify Properties", Icons.Default.CheckCircle) {
+                            navController.navigate(Screen.VerifyProperties.route)
                         }
-                        ActionRow("Manage Users", Icons.Default.People, "manage_users") {
-                            // navController.navigate(Screen.Dashboard.route)
+                        AdminActionRow("Verify Users", Icons.Default.VerifiedUser) {
+                            navController.navigate(Screen.VerifyUsers.route)
+                        }
+                        AdminActionRow("Manage Users", Icons.Default.People) {
+                            navController.navigate(Screen.ManageUsers.route)
+                        }
+                        AdminActionRow("Manage Properties", Icons.Default.Home) {
+                            navController.navigate(Screen.ManageProperties.route)
+                        }
+                        AdminActionRow("Manage Bookings", Icons.Default.CalendarMonth) {
+                            navController.navigate(Screen.ManageBookings.route)
+                        }
+                        AdminActionRow("View Reports", Icons.Default.BarChart) {
+                            navController.navigate(Screen.Reports.route)
+                        }
+                        AdminActionRow("Payment Reports", Icons.Default.Payment) {
+                            navController.navigate(Screen.PaymentReports.route)
                         }
                     }
                 }
@@ -117,12 +156,19 @@ fun AdminDashboardScreen(
     }
 }
 
+// ── Stat Card ─────────────────────────────────────────────────────
 @Composable
-fun AdminStatCard(emoji: String, label: String, value: String, color: Color, modifier: Modifier) {
+fun AdminStatCard(
+    emoji   : String,
+    label   : String,
+    value   : String,
+    color   : Color,
+    modifier: Modifier
+) {
     Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        modifier  = modifier,
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -134,14 +180,22 @@ fun AdminStatCard(emoji: String, label: String, value: String, color: Color, mod
     }
 }
 
+// ── Action Row ────────────────────────────────────────────────────
 @Composable
-fun ActionRow(label: String, icon: ImageVector, tag: String, onClick: () -> Unit) {
+fun AdminActionRow(
+    label  : String,
+    icon   : ImageVector,
+    onClick: () -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        modifier  = Modifier.fillMaxWidth().clickable { onClick() },
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(icon, null, tint = PrimaryBlue, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(16.dp))
             Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
@@ -149,3 +203,27 @@ fun ActionRow(label: String, icon: ImageVector, tag: String, onClick: () -> Unit
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

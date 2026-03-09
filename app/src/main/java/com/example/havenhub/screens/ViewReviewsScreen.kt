@@ -93,7 +93,7 @@ fun ViewReviewsScreen(
                                     Icon(
                                         imageVector        = if (s <= uiState.averageRating.toInt()) Icons.Default.Star else Icons.Default.StarBorder,
                                         contentDescription = null,
-                                        tint     = AccentAmber,
+                                        tint     = AccentGold,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -147,11 +147,11 @@ fun RatingBar(star: Int, count: Int, total: Int) {
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text("$star", fontSize = 12.sp, color = TextSecondary)
-        Icon(Icons.Default.Star, null, tint = AccentAmber, modifier = Modifier.size(12.dp))
+        Icon(Icons.Default.Star, null, tint = AccentGold, modifier = Modifier.size(12.dp))
         LinearProgressIndicator(
             progress = { fraction },
             modifier = Modifier.weight(1f).height(6.dp),
-            color    = AccentAmber
+            color    = AccentGold
         )
         Text("$count", fontSize = 11.sp, color = TextSecondary)
     }
@@ -192,7 +192,7 @@ fun ReviewCard(review: Review) {
                         Icon(
                             imageVector        = if (s <= review.overallRating.toInt()) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = null,
-                            tint     = AccentAmber,
+                            tint     = AccentGold,
                             modifier = Modifier.size(14.dp)
                         )
                     }

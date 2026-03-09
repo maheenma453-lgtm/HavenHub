@@ -31,14 +31,12 @@ fun AddReviewScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Local UI state
     var rating      by remember { mutableIntStateOf(0) }
     var reviewText  by remember { mutableStateOf("") }
     var cleanliness by remember { mutableIntStateOf(0) }
     var location    by remember { mutableIntStateOf(0) }
     var value       by remember { mutableIntStateOf(0) }
 
-    // Success hone par back navigate karo
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             navController.popBackStack()
@@ -56,8 +54,8 @@ fun AddReviewScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor        = PrimaryBlue,
-                    titleContentColor     = Color.White,
+                    containerColor             = PrimaryBlue,
+                    titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
@@ -72,7 +70,7 @@ fun AddReviewScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
 
-            // Property Info Card
+            // ── Property Info Card ─────────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(12.dp),
@@ -90,13 +88,22 @@ fun AddReviewScreen(
                     )
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text(propertyTitle, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
-                        Text("Booking ID: #${bookingId.take(8).uppercase()}", fontSize = 12.sp, color = TextSecondary)
+                        Text(
+                            propertyTitle,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize   = 14.sp,
+                            color      = TextPrimary
+                        )
+                        Text(
+                            "Booking ID: #${bookingId.take(8).uppercase()}",
+                            fontSize = 12.sp,
+                            color    = TextSecondary
+                        )
                     }
                 }
             }
 
-            // Overall Rating
+            // ── Overall Rating ─────────────────────────────────────
             Text("Overall Rating", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (1..5).forEach { star ->
@@ -104,7 +111,8 @@ fun AddReviewScreen(
                         Icon(
                             imageVector        = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = null,
-                            tint     = if (star <= rating) AccentAmber else TextSecondary,
+                            // ✅ AccentAmber → AccentGold
+                            tint     = if (star <= rating) AccentGold else TextSecondary,
                             modifier = Modifier.size(36.dp)
                         )
                     }
@@ -114,27 +122,35 @@ fun AddReviewScreen(
                         "$rating/5",
                         fontSize   = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color      = AccentAmber,
+                        // ✅ AccentAmber → AccentGold
+                        color      = AccentGold,
                         modifier   = Modifier.align(Alignment.CenterVertically)
                     )
                 }
             }
 
-            // Category Ratings
+            // ── Category Ratings ───────────────────────────────────
             Text("Category Ratings", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
-            CategoryRating("Cleanliness", cleanliness)    { cleanliness = it }
-            CategoryRating("Location", location)          { location    = it }
-            CategoryRating("Value for Money", value)      { value       = it }
+            CategoryRating("Cleanliness", cleanliness) { cleanliness = it }
+            CategoryRating("Location", location)       { location    = it }
+            CategoryRating("Value for Money", value)   { value       = it }
 
-            // Review Text
+            // ── Review Text ────────────────────────────────────────
             Text("Your Review", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
             OutlinedTextField(
                 value         = reviewText,
                 onValueChange = { if (it.length <= 500) reviewText = it },
-                modifier      = Modifier.fillMaxWidth().height(140.dp),
+                modifier      = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp),
                 placeholder   = { Text("Share your experience...") },
                 shape         = RoundedCornerShape(12.dp),
-                maxLines      = 6
+                maxLines      = 6,
+                colors        = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor   = AccentGold,
+                    focusedLabelColor    = PrimaryBlue,
+                    unfocusedBorderColor = BorderGray
+                )
             )
             Text(
                 "${reviewText.length}/500 characters",
@@ -143,7 +159,7 @@ fun AddReviewScreen(
                 modifier = Modifier.align(Alignment.End)
             )
 
-            // Submit Button
+            // ── Submit Button ──────────────────────────────────────
             Button(
                 onClick = {
                     viewModel.addReview(
@@ -153,10 +169,12 @@ fun AddReviewScreen(
                         comment    = reviewText
                     )
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape    = RoundedCornerShape(12.dp),
-                enabled  = rating > 0 && reviewText.isNotBlank() && !uiState.isLoading,
-                colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape   = RoundedCornerShape(12.dp),
+                enabled = rating > 0 && reviewText.isNotBlank() && !uiState.isLoading,
+                colors  = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(
@@ -169,7 +187,7 @@ fun AddReviewScreen(
                 }
             }
 
-            // Error Message
+            // ── Error Message ──────────────────────────────────────
             uiState.errorMessage?.let { error ->
                 Text(text = error, color = ErrorRed, fontSize = 14.sp)
             }
@@ -177,20 +195,30 @@ fun AddReviewScreen(
     }
 }
 
+// ── Category Rating Row ────────────────────────────────────────────
 @Composable
 fun CategoryRating(label: String, value: Int, onSelect: (Int) -> Unit) {
     Row(
         modifier          = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 13.sp, color = TextSecondary, modifier = Modifier.width(130.dp))
+        Text(
+            label,
+            fontSize = 13.sp,
+            color    = TextSecondary,
+            modifier = Modifier.width(130.dp)
+        )
         Row {
             (1..5).forEach { star ->
-                IconButton(onClick = { onSelect(star) }, modifier = Modifier.size(32.dp)) {
+                IconButton(
+                    onClick  = { onSelect(star) },
+                    modifier = Modifier.size(32.dp)
+                ) {
                     Icon(
                         imageVector        = if (star <= value) Icons.Default.Star else Icons.Default.StarBorder,
                         contentDescription = null,
-                        tint     = if (star <= value) AccentAmber else TextSecondary,
+                        // ✅ AccentAmber → AccentGold
+                        tint     = if (star <= value) AccentGold else TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -198,3 +226,39 @@ fun CategoryRating(label: String, value: Int, onSelect: (Int) -> Unit) {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

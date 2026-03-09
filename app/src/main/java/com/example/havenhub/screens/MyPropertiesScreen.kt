@@ -236,7 +236,7 @@ private fun MyPropertyCard(property: Property, onClick: () -> Unit, onEdit: () -
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(property.formattedPrice, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null, tint = AccentAmber, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Star, null, tint = AccentGold, modifier = Modifier.size(14.dp))
                         Text(" ${property.averageRating}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }

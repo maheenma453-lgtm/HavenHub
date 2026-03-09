@@ -168,7 +168,7 @@ private fun SearchResultItem(property: Property, onClick: () -> Unit) {
             Text(property.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text("${property.city} • ${property.propertyType.displayName()}", fontSize = 12.sp, color = TextSecondary)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("⭐ ${property.averageRating}", fontSize = 12.sp, color = AccentAmber)
+                Text("⭐ ${property.averageRating}", fontSize = 12.sp, color = AccentGold)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text("${property.formattedPrice}/night", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
             }

@@ -32,11 +32,6 @@ import com.example.havenhub.viewmodel.BookingViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-// ─────────────────────────────────────────────────────────────────
-// MyBookingsScreen.kt
-// Compatible with Booking.kt + BookingViewModel.kt
-// ─────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyBookingsScreen(
@@ -51,11 +46,9 @@ fun MyBookingsScreen(
 
     val uiState by viewModel.uiState.collectAsState()
 
-    // FIX: mutableIntStateOf instead of mutableStateOf for Int
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Pending", "Confirmed", "Checked In", "Completed", "Cancelled")
 
-    // FIX: BookingStatus enum se match — ACTIVE nahi hai, sahi values use ki
     val filteredBookings = uiState.bookings.filter { booking ->
         when (selectedTab) {
             0 -> booking.status == BookingStatus.PENDING
@@ -83,15 +76,15 @@ fun MyBookingsScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = BackgroundWhite
+                            tint               = BackgroundWhite
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryBlue,
-                    titleContentColor = BackgroundWhite,
+                    containerColor         = PrimaryBlue,
+                    titleContentColor      = BackgroundWhite,
                     navigationIconContentColor = BackgroundWhite
                 )
             )
@@ -105,20 +98,19 @@ fun MyBookingsScreen(
                 .padding(paddingValues)
         ) {
 
-            // FIX: TabRow deprecated → SecondaryTabRow (Material3)
             SecondaryScrollableTabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = BackgroundWhite,
-                contentColor = PrimaryBlue,
+                containerColor   = BackgroundWhite,
+                contentColor     = PrimaryBlue,
             ) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTab == index,
-                        onClick = { selectedTab = index },
+                        onClick  = { selectedTab = index },
                         text = {
                             Text(
-                                text = title,
-                                color = if (selectedTab == index) PrimaryBlue else TextSecondary,
+                                text     = title,
+                                color    = if (selectedTab == index) PrimaryBlue else TextSecondary,
                                 fontSize = 13.sp
                             )
                         }
@@ -139,14 +131,14 @@ fun MyBookingsScreen(
                             Text(text = "📋", fontSize = 52.sp)
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "No ${tabs[selectedTab]} Bookings",
-                                fontSize = 17.sp,
+                                text       = "No ${tabs[selectedTab]} Bookings",
+                                fontSize   = 17.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "Your ${tabs[selectedTab].lowercase()} bookings will appear here",
+                                text     = "Your ${tabs[selectedTab].lowercase()} bookings will appear here",
                                 fontSize = 13.sp,
-                                color = TextSecondary
+                                color    = TextSecondary
                             )
                         }
                     }
@@ -154,24 +146,31 @@ fun MyBookingsScreen(
 
                 else -> {
                     LazyColumn(
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding      = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(
                             items = filteredBookings,
-                            // FIX: booking.id nahi — bookingId hai Booking model mein
-                            key = { it.bookingId }
+                            key   = { it.bookingId }
                         ) { booking ->
                             BookingCard(
-                                booking = booking,
-                                onTap = {
+                                booking  = booking,
+                                onTap    = {
                                     navController.navigate(
                                         Screen.BookingDetails.createRoute(booking.bookingId)
                                     )
                                 },
+                                // ✅ FIX: Screen.Payment.createRoute ko 6 arguments chahiye
                                 onPayNow = {
                                     navController.navigate(
-                                        Screen.Payment.createRoute(booking.bookingId)
+                                        Screen.Payment.createRoute(
+                                            bookingId = booking.bookingId,
+                                            payerId   = booking.tenantId,
+                                            payeeId   = booking.landlordId,
+                                            payerName = booking.tenantName,
+                                            payeeName = booking.landlordName,
+                                            amount    = booking.totalAmount
+                                        )
                                     )
                                 }
                             )
@@ -188,45 +187,42 @@ fun MyBookingsScreen(
 // ─────────────────────────────────────────────────────────────────
 @Composable
 private fun BookingCard(
-    booking: Booking,
-    onTap: () -> Unit,
-    onPayNow: () -> Unit
+    booking  : Booking,
+    onTap    : () -> Unit,
+    onPayNow : () -> Unit
 ) {
-    // FIX: WarningAmber nahi — Orange use kiya; ACTIVE nahi — sahi enum values
     val (statusColor, statusText) = when (booking.status) {
-        BookingStatus.PENDING    -> Pair(MaterialTheme.colorScheme.tertiary,  "⏳ ${booking.status.displayName()}")
-        BookingStatus.CONFIRMED  -> Pair(SuccessGreen,                         "✓ ${booking.status.displayName()}")
-        BookingStatus.CHECKED_IN -> Pair(PrimaryBlue,                          "🏠 ${booking.status.displayName()}")
-        BookingStatus.COMPLETED  -> Pair(TextSecondary,                        "✓ ${booking.status.displayName()}")
-        BookingStatus.CANCELLED  -> Pair(ErrorRed,                             "✗ ${booking.status.displayName()}")
+        BookingStatus.PENDING    -> Pair(MaterialTheme.colorScheme.tertiary, "⏳ ${booking.status.displayName()}")
+        BookingStatus.CONFIRMED  -> Pair(SuccessGreen,                        "✓ ${booking.status.displayName()}")
+        BookingStatus.CHECKED_IN -> Pair(PrimaryBlue,                         "🏠 ${booking.status.displayName()}")
+        BookingStatus.COMPLETED  -> Pair(TextSecondary,                       "✓ ${booking.status.displayName()}")
+        BookingStatus.CANCELLED  -> Pair(ErrorRed,                            "✗ ${booking.status.displayName()}")
     }
 
-    // FIX: Timestamp? → String conversion helper
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
     val checkIn  = booking.checkInDate?.toDate()?.let  { dateFormatter.format(it) } ?: "—"
     val checkOut = booking.checkOutDate?.toDate()?.let { dateFormatter.format(it) } ?: "—"
 
     Card(
-        modifier = Modifier
+        modifier  = Modifier
             .fillMaxWidth()
             .clickable { onTap() },
-        shape = RoundedCornerShape(14.dp),
+        shape     = RoundedCornerShape(14.dp),
         elevation = CardDefaults.cardElevation(3.dp),
-        colors = CardDefaults.cardColors(containerColor = BackgroundWhite)
+        colors    = CardDefaults.cardColors(containerColor = BackgroundWhite)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
 
-            // Header: Property title + status badge
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment     = Alignment.CenterVertically
             ) {
                 Text(
-                    text = booking.propertyTitle,
-                    fontSize = 15.sp,
+                    text       = booking.propertyTitle,
+                    fontSize   = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+                    modifier   = Modifier.weight(1f)
                 )
                 Box(
                     modifier = Modifier
@@ -235,9 +231,9 @@ private fun BookingCard(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = statusText,
-                        fontSize = 11.sp,
-                        color = statusColor,
+                        text       = statusText,
+                        fontSize   = 11.sp,
+                        color      = statusColor,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -245,19 +241,16 @@ private fun BookingCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // FIX: propertyCity nahi — propertyAddress hai Booking model mein
             Text(
-                text = "📍 ${booking.propertyAddress}",
+                text     = "📍 ${booking.propertyAddress}",
                 fontSize = 12.sp,
-                color = TextSecondary
+                color    = TextSecondary
             )
 
             Spacer(modifier = Modifier.height(10.dp))
             HorizontalDivider(color = BorderGray, thickness = 0.5.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Dates & Guests row
-            // FIX: rentalPackage nahi — guestCount + totalNights use kiye
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 BookingInfoItem(label = "Check-In",  value = checkIn)
                 BookingInfoItem(label = "Check-Out", value = checkOut)
@@ -267,28 +260,26 @@ private fun BookingCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Price + Pay Now
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
                     Text(text = "Total", fontSize = 11.sp, color = TextSecondary)
-                    // FIX: totalPrice nahi — formattedTotal property use ki (already in Booking)
                     Text(
-                        text = booking.formattedTotal,
-                        fontSize = 16.sp,
+                        text       = booking.formattedTotal,
+                        fontSize   = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = PrimaryBlue
+                        color      = PrimaryBlue
                     )
                 }
 
                 if (booking.status == BookingStatus.PENDING) {
                     Button(
-                        onClick = onPayNow,
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                        onClick  = onPayNow,
+                        shape    = RoundedCornerShape(8.dp),
+                        colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                         modifier = Modifier.height(36.dp)
                     ) {
                         Text("Pay Now", fontSize = 13.sp)
@@ -299,16 +290,27 @@ private fun BookingCard(
     }
 }
 
-// Label-value pair
 @Composable
 private fun BookingInfoItem(label: String, value: String) {
     Column {
         Text(text = label, fontSize = 10.sp, color = TextSecondary)
         Text(
-            text = value,
-            fontSize = 13.sp,
+            text       = value,
+            fontSize   = 13.sp,
             fontWeight = FontWeight.Medium,
-            color = TextPrimary
+            color      = TextPrimary
         )
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+

@@ -224,7 +224,7 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
                 Text(property.city, color = TextSecondary, fontSize = 12.sp)
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Star, null, tint = AccentAmber, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Star, null, tint = AccentGold, modifier = Modifier.size(14.dp))
                     Text(" ${property.averageRating} • ${property.propertyType.displayName()}", fontSize = 12.sp)
                 }
             }
@@ -261,7 +261,7 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${property.formattedPrice}/night", fontWeight = FontWeight.ExtraBold, color = PrimaryBlue)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null, tint = AccentAmber, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Star, null, tint = AccentGold, modifier = Modifier.size(14.dp))
                         Text("${property.averageRating}", fontSize = 13.sp)
                     }
                 }

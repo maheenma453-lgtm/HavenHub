@@ -1,9 +1,5 @@
 package com.example.havenhub.navigation
 
-/**
- * HavenHub Navigation Routes
- * Is file mein app ki saari screens aur unke arguments defined hain.
- */
 sealed class Screen(val route: String) {
 
     // ── 1. AUTH & ONBOARDING ────────────────────────────────────────────────
@@ -54,17 +50,19 @@ sealed class Screen(val route: String) {
     }
 
     // ── 5. PAYMENT ───────────────────────────────────────────────────────────
-    object Payment : Screen("payment/{bookingId}") {
-        const val ARG_BOOKING_ID = "bookingId"
-        fun createRoute(bookingId: String) = "payment/$bookingId"
+    // ✅ UPDATED: PaymentScreen ke saare args URL mein hain
+    object Payment : Screen("payment/{bookingId}/{payerId}/{payeeId}/{payerName}/{payeeName}/{amount}") {
+        fun createRoute(
+            bookingId : String,
+            payerId   : String,
+            payeeId   : String,
+            payerName : String,
+            payeeName : String,
+            amount    : Double
+        ) = "payment/$bookingId/$payerId/$payeeId/$payerName/$payeeName/$amount"
     }
 
-    object PaymentMethod : Screen("payment_method/{bookingId}/{method}") {
-        const val ARG_BOOKING_ID = "bookingId"
-        const val ARG_METHOD     = "method"
-        fun createRoute(bookingId: String, method: String) =
-            "payment_method/$bookingId/$method"
-    }
+    object PaymentMethod : Screen("payment_method")
 
     object PaymentSuccess : Screen("payment_success/{bookingId}") {
         const val ARG_BOOKING_ID = "bookingId"
@@ -99,8 +97,7 @@ sealed class Screen(val route: String) {
 
     object NotificationDetail : Screen("notification_detail/{notificationId}") {
         const val ARG_NOTIFICATION_ID = "notificationId"
-        fun createRoute(notificationId: String) =
-            "notification_detail/$notificationId"
+        fun createRoute(notificationId: String) = "notification_detail/$notificationId"
     }
 
     // ── 10. MESSAGING ────────────────────────────────────────────────────────
@@ -141,7 +138,26 @@ sealed class Screen(val route: String) {
     }
 
     // ── 14. ADMIN — REPORTS ──────────────────────────────────────────────────
-    // Reports aur PaymentReports ko humne ViewModel ke sath sync rakha hai
     object Reports        : Screen("reports")
     object PaymentReports : Screen("payment_reports")
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
