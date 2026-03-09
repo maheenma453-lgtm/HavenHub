@@ -70,7 +70,7 @@ fun OnboardingScreen(
     // Navigation logic: Jab onboarding complete ho jaye
     LaunchedEffect(uiState.isOnboardingComplete) {
         if (uiState.isOnboardingComplete) {
-            navController.navigate(Screen.SignIn.route) {
+            navController.navigate(Screen.RoleSelection.route) {
                 popUpTo(Screen.Onboarding.route) { inclusive = true }
             }
         }

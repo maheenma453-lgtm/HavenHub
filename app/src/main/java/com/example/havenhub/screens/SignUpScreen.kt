@@ -172,42 +172,6 @@ fun SignUpScreen(
 
                 Spacer(Modifier.height(24.dp))
 
-                // ════════════════════════════════════════
-                // ── ROLE SELECTION (NAYA SECTION) ──
-                // ════════════════════════════════════════
-                Text(
-                    text = "I am a...",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    RoleCard(
-                        role = "Tenant",
-                        icon = Icons.Default.Person,
-                        description = "Looking for a place to rent",
-                        isSelected = uiState.selectedRole == "tenant",
-                        modifier = Modifier.weight(1f),
-                        onClick = { viewModel.onRoleSelected("tenant") }
-                    )
-
-                    RoleCard(
-                        role = "Landlord",
-                        icon = Icons.Default.Home,
-                        description = "I want to list my property",
-                        isSelected = uiState.selectedRole == "landlord",
-                        modifier = Modifier.weight(1f),
-                        onClick = { viewModel.onRoleSelected("landlord") }
-                    )
-                }
-                // ════════════════════════════════════════
-
                 // ── Global Error (role error bhi yahan dikhega) ──
                 uiState.errorMessage?.let {
                     Text(
