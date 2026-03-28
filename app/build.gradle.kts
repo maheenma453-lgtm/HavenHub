@@ -17,7 +17,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -54,23 +53,23 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
 
     // ─── Compose ────────────────────────────────────────
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
+    implementation(platform("androidx.compose:compose-bom:2025.12.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.foundation:foundation")
 
     // ─── Navigation ─────────────────────────────────────
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.navigation:navigation-compose:2.8.9")
 
     // ─── Lifecycle & ViewModel ───────────────────────────
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
 
-    // ─── Hilt (Dependency Injection) ─────────────────────
+    // ─── Hilt ────────────────────────────────────────────
     implementation("com.google.dagger:hilt-android:2.51.1")
-    implementation(libs.firebase.database)
     kapt("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
@@ -87,36 +86,24 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
 
-    // ─── Image Loading (Coil) ────────────────────────────
+    // ─── Image Loading ───────────────────────────────────
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // ─── DataStore (Settings/Preferences) ───────────────
+    // ─── DataStore ───────────────────────────────────────
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // ─── Google Auth ─────────────────────────────────────
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+
+    // ─── DateTime ────────────────────────────────────────
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
 
     // ─── Testing ─────────────────────────────────────────
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
-
-
-    // ─── Material 3 ──────────────────────────────────────────────────────────
-    implementation("androidx.compose.material3:material3:1.4.0")
-
-    // ─── Navigation Compose ───────────────────────────────────────────────────
-    implementation("androidx.navigation:navigation-compose:2.8.9")
-
-    // ─── Compose BOM (baaki sab compose versions manage karta hai) ────────────
-    implementation(platform("androidx.compose:compose-bom:2025.12.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material:material-icons-extended")
-
-
-
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.12.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
