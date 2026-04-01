@@ -1,12 +1,13 @@
 package com.example.havenhub.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,16 +15,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,8 +35,8 @@ import com.example.havenhub.viewmodel.AuthViewModel
 
 @Composable
 fun SignInScreen(
-    navController : NavController,
-    viewModel     : AuthViewModel = hiltViewModel()
+    navController: NavController,
+    viewModel    : AuthViewModel = hiltViewModel()
 ) {
     val uiState       by viewModel.uiState.collectAsState()
     val email         by viewModel.email.collectAsState()
@@ -46,288 +46,285 @@ fun SignInScreen(
 
     var passwordVisible by remember { mutableStateOf(false) }
 
-    // ── Role-based navigation ──────────────────────────────────────
-    LaunchedEffect(uiState.isLoggedIn, uiState.userRole) {
-        if (uiState.isLoggedIn && uiState.userRole.isNotEmpty()) {
-            val destination = when (uiState.userRole) {
-                "admin"    -> Screen.AdminDashboard.route
-                "landlord" -> Screen.Home.route
-                else       -> Screen.Home.route
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val alpha by animateFloatAsState(
+        targetValue   = if (visible) 1f else 0f,
+        animationSpec = tween(500, easing = EaseOut), label = "a"
+    )
+    val slide by animateFloatAsState(
+        targetValue   = if (visible) 0f else 24f,
+        animationSpec = tween(550, easing = EaseOutCubic), label = "s"
+    )
+
+    LaunchedEffect(uiState.isLoggedIn) {
+        if (uiState.isLoggedIn) {
+            val dest = when (uiState.userRole) {
+                "admin", "ADMIN" -> Screen.AdminDashboard.route
+                else             -> Screen.Home.route
             }
-            navController.navigate(destination) {
-                popUpTo(Screen.SignIn.route) { inclusive = true }
-            }
+            navController.navigate(dest) { popUpTo(0) { inclusive = true } }
         }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundLight)
+            .background(Color.White)
     ) {
-        // ── Top gradient header ────────────────────────────────────
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(280.dp)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(PrimaryBlue, PrimaryBlueDark)
-                    )
-                )
-        )
-
-        // ── Gold bottom border on header ───────────────────────────
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(3.dp)
-                .offset(y = 278.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(AccentGoldDark, AccentGold, AccentGoldLight, AccentGold, AccentGoldDark)
-                    )
-                )
-        )
-
         Column(
-            modifier = Modifier
+            modifier            = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            // Status bar space only
+            Spacer(modifier = Modifier.statusBarsPadding())
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // ── Logo ───────────────────────────────────────────────
-            Image(
-                painter            = painterResource(id = R.drawable.havenhub),
-                contentDescription = "HavenHub Logo",
-                modifier           = Modifier.size(100.dp)
-            )
+            // ── Logo + Brand ───────────────────────────────────────
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier            = Modifier.alpha(alpha)
+            ) {
+                Image(
+                    painter            = painterResource(id = R.drawable.havenhub),
+                    contentDescription = "HavenHub",
+                    contentScale       = ContentScale.Fit,
+                    modifier           = Modifier
+                        .fillMaxWidth(0.65f)
+                        .wrapContentHeight()
+                        //.padding(vertical = (-24).dp)
+                //cuts transparent padding from image
+                        .padding(vertical = 0.dp)
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // ── Brand Name ─────────────────────────────────────────
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = BackgroundWhite, fontWeight = FontWeight.Bold)) {
-                        append("HAVEN")
-                    }
-                    withStyle(SpanStyle(color = AccentGold, fontWeight = FontWeight.Bold)) {
-                        append("HUB")
-                    }
-                },
-                fontSize      = 28.sp,
-                letterSpacing = 2.sp
-            )
-            Text(
-                text          = "Smart Rental & Vacation Stay",
-                fontSize      = 11.sp,
-                color         = BackgroundWhite.copy(alpha = 0.75f),
-                letterSpacing = 0.5.sp
-            )
+                Text(
+                    "HavenHub",
+                    fontSize      = 26.sp,
+                    fontWeight    = FontWeight.ExtraBold,
+                    color         = PrimaryBlue,
+                    letterSpacing = (-0.5).sp
+                )
+                Text(
+                    "Smart Rental & Vacation Stay",
+                    fontSize = 12.sp,
+                    color    = TextSecondary,
+                    modifier = Modifier.padding(top = 3.dp)
+                )
+            }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Card ───────────────────────────────────────────────
+            // ── Form Card ──────────────────────────────────────────
             Card(
                 modifier  = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                    .alpha(alpha)
+                    .offset(y = (slide * 1.2f).dp),
                 shape     = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(10.dp),
-                colors    = CardDefaults.cardColors(containerColor = BackgroundWhite)
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                colors    = CardDefaults.cardColors(containerColor = Color.White)
             ) {
-                Column(modifier = Modifier.padding(24.dp)) {
+                Column(modifier = Modifier.padding(22.dp)) {
 
                     Text(
-                        "Sign In",
-                        fontSize   = 22.sp,
-                        fontWeight = FontWeight.Bold,
+                        "Welcome Back",
+                        fontSize   = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
                         color      = PrimaryBlue
                     )
                     Text(
-                        "Enter your credentials to continue",
-                        fontSize = 13.sp,
-                        color    = TextSecondary
+                        "Sign in to your account",
+                        fontSize = 12.sp,
+                        color    = TextSecondary,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
-
-                    // ── Gold accent line ───────────────────────────
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Box(
                         modifier = Modifier
-                            .width(36.dp)
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(AccentGold, AccentGoldLight)
-                                )
-                            )
+                            .width(36.dp).height(3.dp)
+                            .clip(CircleShape)
+                            .background(Brush.horizontalGradient(listOf(AccentGold, AccentGoldLight)))
                     )
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // ── Email ──────────────────────────────────────
-                    OutlinedTextField(
-                        value           = email,
-                        onValueChange   = { viewModel.onEmailChange(it) },
-                        label           = { Text("Email Address") },
-                        isError         = emailError != null,
-                        supportingText  = { emailError?.let { Text(it) } },
-                        leadingIcon     = { Icon(Icons.Default.Email, null, tint = PrimaryBlue) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        singleLine      = true,
-                        modifier        = Modifier.fillMaxWidth(),
-                        shape           = RoundedCornerShape(10.dp),
-                        colors          = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor   = AccentGold,
-                            focusedLabelColor    = PrimaryBlue,
-                            unfocusedBorderColor = BorderGray
-                        )
+                    val fieldColors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = AccentGold,
+                        focusedLabelColor    = PrimaryBlue,
+                        unfocusedBorderColor = BorderGray,
+                        errorBorderColor     = ErrorRed
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // ── Password ───────────────────────────────────
                     OutlinedTextField(
-                        value          = password,
-                        onValueChange  = { viewModel.onPasswordChange(it) },
-                        label          = { Text("Password") },
-                        isError        = passwordError != null,
-                        supportingText = { passwordError?.let { Text(it) } },
-                        leadingIcon    = { Icon(Icons.Default.Lock, null, tint = PrimaryBlue) },
-                        trailingIcon   = {
+                        value          = email,
+                        onValueChange  = { viewModel.onEmailChange(it) },
+                        label          = { Text("Email Address") },
+                        isError        = emailError != null,
+                        supportingText = { emailError?.let { Text(it, color = ErrorRed, fontSize = 11.sp) } },
+                        leadingIcon    = { Icon(Icons.Default.Email, null, tint = PrimaryBlue.copy(alpha = 0.7f)) },
+                        singleLine     = true,
+                        modifier       = Modifier.fillMaxWidth(),
+                        shape          = RoundedCornerShape(14.dp),
+                        colors         = fieldColors
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value                = password,
+                        onValueChange        = { viewModel.onPasswordChange(it) },
+                        label                = { Text("Password") },
+                        isError              = passwordError != null,
+                        supportingText       = { passwordError?.let { Text(it, color = ErrorRed, fontSize = 11.sp) } },
+                        leadingIcon          = { Icon(Icons.Default.Lock, null, tint = PrimaryBlue.copy(alpha = 0.7f)) },
+                        trailingIcon         = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     if (passwordVisible) Icons.Default.Visibility
                                     else Icons.Default.VisibilityOff,
-                                    null,
-                                    tint = TextSecondary
+                                    null, tint = TextSecondary
                                 )
                             }
                         },
                         visualTransformation = if (passwordVisible) VisualTransformation.None
                         else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        singleLine      = true,
-                        modifier        = Modifier.fillMaxWidth(),
-                        shape           = RoundedCornerShape(10.dp),
-                        colors          = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor   = AccentGold,
-                            focusedLabelColor    = PrimaryBlue,
-                            unfocusedBorderColor = BorderGray
-                        )
+                        singleLine           = true,
+                        modifier             = Modifier.fillMaxWidth(),
+                        shape                = RoundedCornerShape(14.dp),
+                        colors               = fieldColors
                     )
 
-                    // ── Forgot Password ────────────────────────────
                     TextButton(
                         onClick  = { navController.navigate(Screen.ForgotPassword.route) },
                         modifier = Modifier.align(Alignment.End)
                     ) {
                         Text(
                             "Forgot Password?",
-                            color      = AccentGold,
-                            fontSize   = 13.sp,
-                            fontWeight = FontWeight.Medium
+                            color      = AccentGoldDark,
+                            fontSize   = 12.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
 
-                    // ── Error ──────────────────────────────────────
                     uiState.errorMessage?.let {
-                        Text(
-                            it,
-                            color    = ErrorRed,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(ErrorRed.copy(alpha = 0.08f))
+                                .padding(11.dp)
+                        ) { Text(it, color = ErrorRed, fontSize = 12.sp) }
+                        Spacer(modifier = Modifier.height(10.dp))
                     }
 
-                    // ── Sign In Button ─────────────────────────────
                     Button(
                         onClick  = { viewModel.signIn() },
                         enabled  = !uiState.isLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape  = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape    = RoundedCornerShape(14.dp),
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor         = PrimaryBlue,
+                            disabledContainerColor = BorderGray
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                     ) {
                         if (uiState.isLoading) {
                             CircularProgressIndicator(
-                                color       = BackgroundWhite,
-                                modifier    = Modifier.size(20.dp),
+                                color       = Color.White,
+                                modifier    = Modifier.size(22.dp),
                                 strokeWidth = 2.dp
                             )
                         } else {
+                            Text(
+                                "Sign In",
+                                fontSize   = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = Color.White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // OR divider
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier          = Modifier.fillMaxWidth()
+                    ) {
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = BorderGray)
+                        Text("  or continue with  ", fontSize = 11.sp, color = TextSecondary)
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = BorderGray)
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Social buttons
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick  = { /* TODO: Google Sign In */ },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape    = RoundedCornerShape(12.dp),
+                            colors   = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
+                        ) {
                             Row(
                                 verticalAlignment     = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    "Sign In",
-                                    fontSize   = 16.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color      = BackgroundWhite
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("→", fontSize = 16.sp, color = AccentGold)
+                                Text("G", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF4285F4))
+                                Text("Google", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            }
+                        }
+                        OutlinedButton(
+                            onClick  = { /* TODO: Facebook Sign In */ },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape    = RoundedCornerShape(12.dp),
+                            colors   = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
+                        ) {
+                            Row(
+                                verticalAlignment     = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier         = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF1877F2)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("f", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                                }
+                                Text("Facebook", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                             }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(22.dp))
 
-            // ── Sign Up Link ───────────────────────────────────────
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Don't have an account? ", color = TextSecondary, fontSize = 14.sp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier          = Modifier.alpha(alpha)
+            ) {
+                Text("New here? ", color = TextSecondary, fontSize = 13.sp)
                 Text(
-                    "Sign Up",
-                    color      = AccentGold,
-                    fontSize   = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    "Create Account",
+                    color      = AccentGoldDark,
+                    fontSize   = 13.sp,
+                    fontWeight = FontWeight.Bold,
                     modifier   = Modifier.clickable {
-                        navController.navigate(Screen.SignUp.route)
+                        navController.navigate(Screen.RoleSelection.route)
                     }
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
