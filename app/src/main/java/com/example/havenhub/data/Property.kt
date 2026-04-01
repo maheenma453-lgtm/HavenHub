@@ -1,5 +1,6 @@
 package com.example.havenhub.data
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 
 /**
@@ -13,6 +14,7 @@ import com.google.firebase.firestore.ServerTimestamp
  */
 data class Property(
 
+    @DocumentId
     val propertyId: String = "",
 
     /** UID of the landlord who owns this property. */
@@ -175,3 +177,4 @@ enum class PropertyStatus {
         INACTIVE     -> "Inactive"
     }
 }
+

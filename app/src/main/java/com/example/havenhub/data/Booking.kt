@@ -1,6 +1,6 @@
 package com.example.havenhub.data
-
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 
 enum class BookingStatus {
@@ -21,6 +21,7 @@ enum class BookingStatus {
 
 
 data class Booking(
+    @DocumentId
     val bookingId: String = "",
 
     val tenantId: String = "",
