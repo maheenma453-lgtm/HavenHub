@@ -68,7 +68,7 @@ class FirebaseDataManager @Inject constructor(
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
             val snapshot = propertiesCollection
-                .whereEqualTo("isApproved", true)
+                .whereEqualTo("status", "APPROVED")
                 .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
