@@ -69,7 +69,7 @@ class FirebaseDataManager @Inject constructor(
         return try {
             val snapshot = propertiesCollection
                 .whereEqualTo("status", "APPROVED")
-                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .orderBy("createdAt",  Query.Direction.DESCENDING)
                 .get()
                 .await()
             Resource.Success(snapshot.toObjects(Property::class.java))
