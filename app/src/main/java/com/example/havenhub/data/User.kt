@@ -1,6 +1,6 @@
 package com.example.havenhub.data
+
 import com.google.firebase.Timestamp
-import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 
 /**
@@ -13,7 +13,8 @@ import com.google.firebase.firestore.ServerTimestamp
  */
 data class User(
 
-    @DocumentId
+    // ✅ FIX: @DocumentId hata diya — userId Firestore field se directly aayega
+    // Property.kt mein bhi yehi masla tha — same fix
     val userId: String = "",
 
     val fullName: String = "",
@@ -65,6 +66,7 @@ data class User(
     val createdAt: Timestamp? = null,
 
     val updatedAt: Timestamp? = null
+
 ) {
     /** Firebase requires a no-arg constructor for deserialization. */
     constructor() : this(userId = "")
@@ -119,5 +121,3 @@ enum class VerificationStatus {
         REJECTED     -> "Rejected"
     }
 }
-
-

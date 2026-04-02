@@ -11,17 +11,15 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.havenhub.screens.*
 
-// ── Auth screens — koi bhi navbar nahi ───────────────────────────
 private val authRoutes = listOf(
     Screen.Splash.route,
     Screen.Onboarding.route,
     Screen.RoleSelection.route,
-    Screen.SignUp.route,
+    "sign_up/{role}",
     Screen.SignIn.route,
     Screen.ForgotPassword.route
 )
 
-// ── Admin screens — admin navbar dikhega ─────────────────────────
 private val adminRoutes = listOf(
     Screen.AdminDashboard.route,
     Screen.ManageUsers.route,
@@ -43,7 +41,6 @@ fun HavenHubNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // ✅ Smart navbar logic
     val isAuthRoute  = currentRoute in authRoutes
     val isAdminRoute = currentRoute in adminRoutes ||
             currentRoute?.startsWith("property_verification_detail") == true ||
@@ -52,7 +49,7 @@ fun HavenHubNavGraph(
     Scaffold(
         bottomBar = {
             when {
-                isAuthRoute  -> { /* koi navbar nahi */ }
+                isAuthRoute  -> { }
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
                 else         -> BottomNavBar(
                     navController      = navController,
@@ -64,23 +61,35 @@ fun HavenHubNavGraph(
         NavHost(
             navController    = navController,
             startDestination = Screen.Splash.route,
-            modifier         = Modifier.padding(innerPadding)
+            modifier         = Modifier.padding(
+                bottom = innerPadding.calculateBottomPadding()
+            )
         ) {
+            composable(Screen.Splash.route)        { SplashScreen(navController) }
+            composable(Screen.Onboarding.route)    { OnboardingScreen(navController) }
+            composable(Screen.RoleSelection.route) { RoleSelectionScreen(navController) }
 
-            // ── 1. AUTH & ONBOARDING ──────────────────────────────────────
-            composable(Screen.Splash.route)         { SplashScreen(navController) }
-            composable(Screen.Onboarding.route)     { OnboardingScreen(navController) }
-            composable(Screen.RoleSelection.route)  { RoleSelectionScreen(navController) }
-            composable(Screen.SignUp.route)         { SignUpScreen(navController) }
+            // ✅ SignUp — role argument ke saath
+            composable(
+                route     = Screen.SignUp.route,
+                arguments = listOf(navArgument(Screen.SignUp.ARG_ROLE) {
+                    type         = NavType.StringType
+                    defaultValue = ""
+                })
+            ) { back ->
+                SignUpScreen(
+                    navController = navController,
+                    selectedRole  = back.arguments?.getString(Screen.SignUp.ARG_ROLE) ?: ""
+                )
+            }
+
             composable(Screen.SignIn.route)         { SignInScreen(navController) }
             composable(Screen.ForgotPassword.route) { ForgotPasswordScreen(navController) }
 
-            // ── 2. MAIN CORE ──────────────────────────────────────────────
             composable(Screen.Home.route)   { HomeScreen(navController) }
             composable(Screen.Search.route) { SearchScreen(navController) }
             composable(Screen.Filter.route) { FilterScreen(navController) }
 
-            // ── 3. PROPERTY ───────────────────────────────────────────────
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
             composable(Screen.AddProperty.route)  { AddPropertyScreen(navController) }
             composable(Screen.MyProperties.route) { MyPropertiesScreen(navController) }
@@ -105,12 +114,8 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── 4. BOOKING ────────────────────────────────────────────────
             composable(Screen.MyBookings.route) {
-                MyBookingsScreen(
-                    navController = navController,
-                    userId        = ""
-                )
+                MyBookingsScreen(navController = navController, userId = "")
             }
 
             composable(
@@ -143,7 +148,6 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── 5. PAYMENT ────────────────────────────────────────────────
             composable(
                 route = "payment/{bookingId}/{payerId}/{payeeId}/{payerName}/{payeeName}/{amount}",
                 arguments = listOf(
@@ -157,18 +161,16 @@ fun HavenHubNavGraph(
             ) { back ->
                 PaymentScreen(
                     navController = navController,
-                    bookingId     = back.arguments?.getString("bookingId")               ?: "",
-                    payerId       = back.arguments?.getString("payerId")                 ?: "",
-                    payeeId       = back.arguments?.getString("payeeId")                 ?: "",
-                    payerName     = back.arguments?.getString("payerName")               ?: "",
-                    payeeName     = back.arguments?.getString("payeeName")               ?: "",
+                    bookingId     = back.arguments?.getString("bookingId")                ?: "",
+                    payerId       = back.arguments?.getString("payerId")                  ?: "",
+                    payeeId       = back.arguments?.getString("payeeId")                  ?: "",
+                    payerName     = back.arguments?.getString("payerName")                ?: "",
+                    payeeName     = back.arguments?.getString("payeeName")                ?: "",
                     amount        = back.arguments?.getString("amount")?.toDoubleOrNull() ?: 0.0
                 )
             }
 
-            composable(Screen.PaymentMethod.route) {
-                PaymentMethodScreen(navController)
-            }
+            composable(Screen.PaymentMethod.route) { PaymentMethodScreen(navController) }
 
             composable(
                 route     = Screen.PaymentSuccess.route,
@@ -180,7 +182,6 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── 6. REVIEW ─────────────────────────────────────────────────
             composable(
                 route     = Screen.AddReview.route,
                 arguments = listOf(navArgument(Screen.AddReview.ARG_PROPERTY_ID) { type = NavType.StringType })
@@ -203,11 +204,9 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── 7. PROFILE ────────────────────────────────────────────────
             composable(Screen.Profile.route)     { ProfileScreen(navController) }
             composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
 
-            // ── 8. SETTINGS ───────────────────────────────────────────────
             composable(Screen.Settings.route)             { SettingsScreen(navController) }
             composable(Screen.AccountSettings.route)      { AccountSettingsScreen(navController) }
             composable(Screen.NotificationSettings.route) { NotificationSettingsScreen(navController) }
@@ -215,7 +214,6 @@ fun HavenHubNavGraph(
             composable(Screen.About.route)                { AboutScreen(navController) }
             composable(Screen.HelpAndSupport.route)       { HelpAndSupportScreen(navController) }
 
-            // ── 9. NOTIFICATIONS ──────────────────────────────────────────
             composable(Screen.Notifications.route) { NotificationsScreen(navController) }
 
             composable(
@@ -228,7 +226,6 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── 10. MESSAGING ─────────────────────────────────────────────
             composable(Screen.MessageList.route) { MessageListScreen(navController) }
 
             composable(
@@ -243,7 +240,6 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── 11. VACATION ──────────────────────────────────────────────
             composable(Screen.VacationRentals.route) { VacationRentalsScreen(navController) }
             composable(Screen.PreBooking.route)      { PreBookingScreen(navController) }
 
@@ -257,13 +253,11 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── 12. ADMIN — DASHBOARD ─────────────────────────────────────
             composable(Screen.AdminDashboard.route)   { AdminDashboardScreen(navController) }
             composable(Screen.ManageUsers.route)      { ManageUsersScreen(navController) }
             composable(Screen.ManageProperties.route) { ManagePropertiesScreen(navController) }
             composable(Screen.ManageBookings.route)   { ManageBookingsScreen(navController) }
 
-            // ── 13. ADMIN — VERIFICATION ──────────────────────────────────
             composable(Screen.VerifyProperties.route) { VerifyPropertiesScreen(navController) }
             composable(Screen.VerifyUsers.route)      { VerifyUsersScreen(navController) }
 
@@ -287,33 +281,8 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── 14. ADMIN — REPORTS ───────────────────────────────────────
             composable(Screen.Reports.route)        { ReportsScreen(navController) }
             composable(Screen.PaymentReports.route) { PaymentReportsScreen(navController) }
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

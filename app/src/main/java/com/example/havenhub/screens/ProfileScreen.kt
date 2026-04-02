@@ -31,18 +31,20 @@ import com.example.havenhub.viewmodel.ProfileViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
-    navController  : NavController,
+    navController   : NavController,
     profileViewModel: ProfileViewModel = hiltViewModel(),
-    authViewModel  : AuthViewModel = hiltViewModel()
+    authViewModel   : AuthViewModel    = hiltViewModel()
 ) {
     val uiState     by profileViewModel.uiState.collectAsState()
     val authUiState by authViewModel.uiState.collectAsState()
 
-    // Logout hone par login screen pe navigate karo
-    LaunchedEffect(authUiState.isLoggedIn) {
-        if (!authUiState.isLoggedIn) {
+    // ✅ FIX: currentUser check karo — agar Firebase mein user logged in hai
+    // toh isLoggedIn=false hone par bhi screen stay karegi jab tak checkAuthState() complete na ho
+    // ✅ FIX: isLoading=true hone tak wait karo — checkAuthState() complete hone do
+    LaunchedEffect(authUiState.isLoggedIn, authUiState.isLoading) {
+        if (!authUiState.isLoading && !authUiState.isLoggedIn) {
             navController.navigate(Screen.SignIn.route) {
-                popUpTo(Screen.Home.route) { inclusive = true }
+                popUpTo(0) { inclusive = true }
             }
         }
     }
@@ -70,7 +72,8 @@ fun ProfileScreen(
         }
     ) { padding ->
 
-        if (uiState.isLoading) {
+        // ✅ Loading state — jab tak auth check ho raha hai
+        if (authUiState.currentUser != null && (authUiState.isLoading || uiState.isLoading)) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = PrimaryBlue)
             }
@@ -84,8 +87,6 @@ fun ProfileScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
-            // ── Header ────────────────────────────────────────────
             Box(
                 modifier         = Modifier
                     .fillMaxWidth()
@@ -126,14 +127,13 @@ fun ProfileScreen(
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
-                            text     = uiState.user?.role?.displayName() ?: "-",
-                            color    = PrimaryBlue,
-                            fontSize = 12.sp,
+                            text       = uiState.user?.role?.displayName() ?: "-",
+                            color      = PrimaryBlue,
+                            fontSize   = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                            modifier   = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
                     }
-                    // Verification badge
                     if (uiState.user?.isVerified == true) {
                         Spacer(Modifier.height(4.dp))
                         Surface(
@@ -141,18 +141,17 @@ fun ProfileScreen(
                             shape = RoundedCornerShape(20.dp)
                         ) {
                             Text(
-                                text     = "Verified",
-                                color    = SuccessGreen,
-                                fontSize = 11.sp,
+                                text       = "Verified",
+                                color      = SuccessGreen,
+                                fontSize   = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                modifier   = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                             )
                         }
                     }
                 }
             }
 
-            // ── Stats ──────────────────────────────────────────────
             Row(
                 modifier              = Modifier
                     .fillMaxWidth()
@@ -177,7 +176,6 @@ fun ProfileScreen(
 
             HorizontalDivider(color = BorderGray)
 
-            // ── Menu Items ─────────────────────────────────────────
             Spacer(Modifier.height(8.dp))
             ProfileMenuItem(
                 icon    = Icons.Default.BookOnline,
@@ -191,6 +189,16 @@ fun ProfileScreen(
                     onClick = { navController.navigate(Screen.MyProperties.route) }
                 )
             }
+
+            // ✅ Admin Dashboard button — sirf admin ko dikhao
+            if (authUiState.userRole == "admin") {
+                ProfileMenuItem(
+                    icon    = Icons.Default.AdminPanelSettings,
+                    label   = "Admin Dashboard",
+                    onClick = { navController.navigate(Screen.AdminDashboard.route) }
+                )
+            }
+
             ProfileMenuItem(
                 icon    = Icons.Default.Settings,
                 label   = "Settings",
@@ -218,7 +226,6 @@ fun ProfileScreen(
             )
             Spacer(Modifier.height(24.dp))
 
-            // Error Message
             uiState.errorMessage?.let { error ->
                 Text(text = error, color = ErrorRed, fontSize = 14.sp)
             }
@@ -259,7 +266,12 @@ fun ProfileMenuItem(
             ) {
                 Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(14.dp))
-                Text(label, fontSize = 15.sp, color = if (tint == ErrorRed) ErrorRed else TextPrimary, modifier = Modifier.weight(1f))
+                Text(
+                    label,
+                    fontSize = 15.sp,
+                    color    = if (tint == ErrorRed) ErrorRed else TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
                 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
             }
         }

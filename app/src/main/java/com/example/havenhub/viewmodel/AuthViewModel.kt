@@ -1,5 +1,6 @@
 package com.example.havenhub.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.repository.AuthRepository
@@ -54,32 +55,41 @@ class AuthViewModel @Inject constructor(
     init { checkAuthState() }
 
     // ── Field Updates ────────────────────────────────────────────
-    fun onEmailChange(value: String)    { _email.value = value;    _emailError.value = null }
-    fun onPasswordChange(value: String) { _password.value = value; _passwordError.value = null }
+    fun onEmailChange(value: String)           { _email.value = value;    _emailError.value = null }
+    fun onPasswordChange(value: String)        { _password.value = value; _passwordError.value = null }
     fun onConfirmPasswordChange(value: String) { _confirmPassword.value = value }
-    fun onFullNameChange(value: String) { _fullName.value = value; _nameError.value = null }
-    fun onRoleSelected(role: String)    { _uiState.update { it.copy(selectedRole = role) } }
+    fun onFullNameChange(value: String)        { _fullName.value = value; _nameError.value = null }
+    fun onRoleSelected(role: String)           { _uiState.update { it.copy(selectedRole = role) } }
 
     // ── Auth Check on App Start ───────────────────────────────────
     private fun checkAuthState() {
         val firebaseUser = authRepository.currentUser
+        Log.d("HAVEN_AUTH", "checkAuthState: uid = ${firebaseUser?.uid}")
+
         if (firebaseUser != null) {
             viewModelScope.launch {
+                _uiState.update { it.copy(isLoading = true) }
+                Log.d("HAVEN_AUTH", "Fetching role for uid = ${firebaseUser.uid}")
+
                 val role = authRepository.getUserRole(firebaseUser.uid)
+                Log.d("HAVEN_AUTH", "Role fetched = '$role'")
+
                 _uiState.update {
                     it.copy(
+                        isLoading   = false,
                         currentUser = firebaseUser,
                         isLoggedIn  = true,
                         userRole    = role
                     )
                 }
+                Log.d("HAVEN_AUTH", "DONE — isLoggedIn=true userRole='$role'")
             }
+        } else {
+            Log.d("HAVEN_AUTH", "No user logged in")
         }
     }
 
-    // ── ✅ FIXED Sign In ──────────────────────────────────────────
-    // Bug: getUserRole slow hoti thi — ab isLoggedIn=true hote hi
-    // navigate karo, role background mein fetch hogi
+    // ── Sign In ───────────────────────────────────────────────────
     fun signIn() {
         if (!validateSignInForm()) return
         viewModelScope.launch {
@@ -93,30 +103,32 @@ class AuthViewModel @Inject constructor(
             when (result) {
                 is Resource.Success -> {
                     val uid = result.data?.uid ?: ""
+                    Log.d("HAVEN_AUTH", "signIn success uid = $uid")
 
-                    // ✅ Pehle isLoggedIn=true set karo — navigation immediately trigger ho
+                    val role = authRepository.getUserRole(uid)
+                    Log.d("HAVEN_AUTH", "signIn role = '$role'")
+
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
                             isLoggedIn  = true,
                             currentUser = result.data,
-                            userRole    = "loading" // placeholder — role baad mein aayegi
+                            userRole    = role
                         )
                     }
-
-                    // ✅ Background mein role fetch karo
-                    val role = authRepository.getUserRole(uid)
-                    _uiState.update { it.copy(userRole = role) }
                 }
-                is Resource.Error -> _uiState.update {
-                    it.copy(isLoading = false, errorMessage = result.message)
+                is Resource.Error -> {
+                    Log.d("HAVEN_AUTH", "signIn error = ${result.message}")
+                    _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
+                    }
                 }
                 is Resource.Loading -> Unit
             }
         }
     }
 
-    // ── ✅ FIXED Sign Up ──────────────────────────────────────────
+    // ── Sign Up ───────────────────────────────────────────────────
     fun signUp() {
         if (!validateSignUpForm()) return
         viewModelScope.launch {
@@ -131,7 +143,6 @@ class AuthViewModel @Inject constructor(
 
             when (result) {
                 is Resource.Success -> {
-                    // ✅ Immediately navigate — role already known from selectedRole
                     _uiState.update {
                         it.copy(
                             isLoading      = false,
@@ -150,7 +161,7 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Sign Out ─────────────────────────────────────────────────
+    // ── Sign Out ──────────────────────────────────────────────────
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
@@ -160,7 +171,7 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Forgot Password ──────────────────────────────────────────
+    // ── Forgot Password ───────────────────────────────────────────
     fun sendPasswordResetEmail() {
         val emailVal = _email.value.trim()
         if (!ValidationUtils.isValidEmail(emailVal)) {
@@ -172,8 +183,11 @@ class AuthViewModel @Inject constructor(
             val result = authRepository.sendPasswordResetEmail(emailVal)
             when (result) {
                 is Resource.Success -> _uiState.update {
-                    it.copy(isLoading = false, isPasswordResetSent = true,
-                        successMessage = "Password reset email sent!")
+                    it.copy(
+                        isLoading           = false,
+                        isPasswordResetSent = true,
+                        successMessage      = "Password reset email sent!"
+                    )
                 }
                 is Resource.Error -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
@@ -183,7 +197,7 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Google Sign In ───────────────────────────────────────────
+    // ── Google Sign In ────────────────────────────────────────────
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -191,12 +205,15 @@ class AuthViewModel @Inject constructor(
             when (result) {
                 is Resource.Success -> {
                     val uid  = result.data?.uid ?: ""
-                    _uiState.update {
-                        it.copy(isLoading = false, isLoggedIn = true,
-                            currentUser = result.data, userRole = "loading")
-                    }
                     val role = authRepository.getUserRole(uid)
-                    _uiState.update { it.copy(userRole = role) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading   = false,
+                            isLoggedIn  = true,
+                            currentUser = result.data,
+                            userRole    = role
+                        )
+                    }
                 }
                 is Resource.Error -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
@@ -206,7 +223,7 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Validation ───────────────────────────────────────────────
+    // ── Validation ────────────────────────────────────────────────
     private fun validateSignInForm(): Boolean {
         var isValid = true
         if (!ValidationUtils.isValidEmail(_email.value.trim())) {

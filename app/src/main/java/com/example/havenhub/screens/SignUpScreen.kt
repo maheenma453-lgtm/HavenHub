@@ -38,8 +38,16 @@ import com.example.havenhub.viewmodel.AuthViewModel
 @Composable
 fun SignUpScreen(
     navController: NavController,
+    selectedRole : String = "",           // ✅ Naya parameter
     viewModel    : AuthViewModel = hiltViewModel()
 ) {
+    // ✅ Role ek baar set karo jab screen open ho
+    LaunchedEffect(selectedRole) {
+        if (selectedRole.isNotEmpty()) {
+            viewModel.onRoleSelected(selectedRole)
+        }
+    }
+
     val uiState         by viewModel.uiState.collectAsState()
     val fullName        by viewModel.fullName.collectAsState()
     val email           by viewModel.email.collectAsState()
@@ -76,8 +84,6 @@ fun SignUpScreen(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
-        // ── Back arrow ─────────────────────────────────────────────
         Row(
             modifier          = Modifier
                 .fillMaxWidth()
@@ -94,10 +100,6 @@ fun SignUpScreen(
             }
         }
 
-        // ── Logo ───────────────────────────────────────────────────
-        // fillMaxWidth(0.65f) — responsive width
-        // NO aspectRatio — logo ki actual height use hogi, transparent padding nahi
-        // wrapContentHeight — sirf content ki height lega
         Image(
             painter            = painterResource(id = R.drawable.havenhub),
             contentDescription = "HavenHub",
@@ -106,13 +108,11 @@ fun SignUpScreen(
                 .fillMaxWidth(0.65f)
                 .wrapContentHeight()
                 .padding(vertical = 0.dp)
-                //.padding(vertical = (-24).dp)
                 .alpha(alpha)
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ── Brand name ─────────────────────────────────────────────
         Text(
             "HavenHub",
             fontSize      = 22.sp,
@@ -130,7 +130,7 @@ fun SignUpScreen(
                 .alpha(alpha)
         )
 
-        // Role badge
+        // ✅ Role badge
         if (uiState.selectedRole.isNotEmpty()) {
             Box(
                 modifier = Modifier
@@ -148,7 +148,6 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(10.dp))
         }
 
-        // ── Form Card ──────────────────────────────────────────────
         Card(
             modifier  = Modifier
                 .fillMaxWidth()
