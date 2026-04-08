@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,6 +29,7 @@ import androidx.navigation.NavController
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
+import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,14 +38,11 @@ fun HomeScreen(
     navController: NavController,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    // ✅ Latest Update: Collecting single UI State from ViewModel
     val uiState by viewModel.uiState.collectAsState()
 
-    // ── Local UI State for Filtering ──
     val categories = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
     var selectedCategory by remember { mutableStateOf("All") }
 
-    // ✅ Filtering logic based on selected category
     val filteredFeatured = if (selectedCategory == "All") uiState.featuredProperties
     else uiState.featuredProperties.filter { it.propertyType.displayName() == selectedCategory }
 
@@ -54,14 +55,12 @@ fun HomeScreen(
             .background(BackgroundWhite),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
-        // 1. Header Section
         item {
             HomeHeaderSection(onSearchClick = {
                 navController.navigate(Screen.Search.route)
             })
         }
 
-        // 2. Category Chips
         item {
             Spacer(modifier = Modifier.height(20.dp))
             SectionHeader("Browse by Type") {}
@@ -83,7 +82,6 @@ fun HomeScreen(
             }
         }
 
-        // 3. Featured Section
         item {
             Spacer(modifier = Modifier.height(20.dp))
             SectionHeader("Featured Properties") {}
@@ -119,13 +117,11 @@ fun HomeScreen(
             }
         }
 
-        // 4. Nearby Section Header
         item {
             Spacer(modifier = Modifier.height(20.dp))
             SectionHeader("Nearby Properties") {}
         }
 
-        // 5. Nearby Section List
         if (uiState.isLoading && uiState.nearbyProperties.isEmpty()) {
             item { LoadingShimmer() }
         } else {
@@ -137,8 +133,6 @@ fun HomeScreen(
         }
     }
 }
-
-// ── UI Components ──
 
 @Composable
 fun HomeHeaderSection(onSearchClick: () -> Unit) {
@@ -201,8 +195,13 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column {
-            Box(Modifier.fillMaxWidth().height(130.dp).background(SurfaceVariantLight), Alignment.Center) {
-                Text("🏠", fontSize = 40.sp)
+            Box(Modifier.fillMaxWidth().height(130.dp)) {
+                Image(
+                    painter = painterResource(id = getPropertyImage(property.propertyId)),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -244,15 +243,14 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
+            Image(
+                painter = painterResource(id = getPropertyImage(property.propertyId)),
+                contentDescription = null,
                 modifier = Modifier
                     .size(80.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(SurfaceVariantLight),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("🏢", fontSize = 30.sp)
-            }
+                    .clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(property.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)

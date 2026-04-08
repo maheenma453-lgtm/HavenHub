@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,14 +19,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import coil.compose.AsyncImage
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
+import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.PropertyViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,17 +37,14 @@ fun PropertyDetailScreen(
     propertyId: String,
     viewModel: PropertyViewModel = hiltViewModel()
 ) {
-    // ── ViewModel State Observation ──
     val uiState by viewModel.uiState.collectAsState()
     val property = uiState.propertyDetail
     val isLoading = uiState.isLoading
 
-    // Load property detail on start
     LaunchedEffect(propertyId) {
         viewModel.loadPropertyDetail(propertyId)
     }
 
-    // Local UI State for Wishlist
     var isSaved by remember { mutableStateOf(false) }
 
     Box(
@@ -68,14 +67,13 @@ fun PropertyDetailScreen(
                     // ── Photo Gallery ──
                     item {
                         Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
-                            AsyncImage(
-                                model = property.coverImageUrl,
+                            Image(
+                                painter = painterResource(id = getPropertyImage(propertyId)),
                                 contentDescription = "Property Image",
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
 
-                            // Top gradient for button visibility (Using Color.Transparent)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -87,7 +85,6 @@ fun PropertyDetailScreen(
                                     )
                             )
 
-                            // Back Button
                             IconButton(
                                 onClick = { navController.popBackStack() },
                                 modifier = Modifier
@@ -99,7 +96,6 @@ fun PropertyDetailScreen(
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TextPrimary)
                             }
 
-                            // Photo count badge
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
@@ -109,7 +105,7 @@ fun PropertyDetailScreen(
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "📷 ${property.imageUrls.size} Photos",
+                                    text = "📷 1 Photo",
                                     fontSize = 12.sp,
                                     color = BackgroundWhite
                                 )
@@ -228,8 +224,6 @@ fun PropertyDetailScreen(
         }
     }
 }
-
-// ── Helper Components ──
 
 @Composable
 fun BadgeBox(label: String, color: Color) {
