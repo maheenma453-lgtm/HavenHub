@@ -5,7 +5,6 @@ import com.google.firebase.firestore.Query
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.Payment
 import com.example.havenhub.data.Property
-import com.example.havenhub.data.PropertyVerification
 import com.example.havenhub.data.User
 import com.example.havenhub.utils.Resource
 import kotlinx.coroutines.tasks.await
@@ -17,11 +16,10 @@ class AdminRepository @Inject constructor(
     private val firestore: FirebaseFirestore
 ) {
 
-    private val usersCollection         = firestore.collection("users")
-    private val propertiesCollection    = firestore.collection("properties")
-    private val bookingsCollection      = firestore.collection("bookings")
-    private val paymentsCollection      = firestore.collection("payments")
-    private val verificationsCollection = firestore.collection("property_verifications")
+    private val usersCollection      = firestore.collection("users")
+    private val propertiesCollection = firestore.collection("properties")
+    private val bookingsCollection   = firestore.collection("bookings")
+    private val paymentsCollection   = firestore.collection("payments")
 
     // --- User Management ---
     suspend fun getAllUsers(): Resource<List<User>> {
@@ -65,17 +63,31 @@ class AdminRepository @Inject constructor(
     // --- Booking Management ---
     suspend fun getAllBookings(): Resource<List<Booking>> {
         return try {
-            val snapshot = bookingsCollection.orderBy("createdAt", Query.Direction.DESCENDING).get().await()
+            val snapshot = bookingsCollection
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .get()
+                .await()
+            // ✅ FIX — sirf toObjects use karo, status String hai Booking mein
+            // bookingStatus computed property khud handle kar leti hai
             Resource.Success(snapshot.toObjects(Booking::class.java))
         } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch bookings") }
     }
 
-    // ✅ FIXED: Missing function added
+    // --- Confirm Booking ---
+    suspend fun confirmBooking(bookingId: String): Resource<Unit> {
+        return try {
+            bookingsCollection.document(bookingId).update(
+                mapOf("status" to "CONFIRMED")
+            ).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to confirm booking") }
+    }
+
     suspend fun cancelBooking(bookingId: String): Resource<Unit> {
         return try {
             bookingsCollection.document(bookingId).update(
                 mapOf(
-                    "status" to "CANCELLED",
+                    "status"      to "CANCELLED",
                     "cancelledAt" to com.google.firebase.Timestamp.now(),
                     "cancelledBy" to "ADMIN"
                 )

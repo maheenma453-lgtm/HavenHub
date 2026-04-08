@@ -49,13 +49,14 @@ fun MyBookingsScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Pending", "Confirmed", "Checked In", "Completed", "Cancelled")
 
+    // ✅ FIX — booking.status String hai, .name se compare karo
     val filteredBookings = uiState.bookings.filter { booking ->
         when (selectedTab) {
-            0 -> booking.status == BookingStatus.PENDING
-            1 -> booking.status == BookingStatus.CONFIRMED
-            2 -> booking.status == BookingStatus.CHECKED_IN
-            3 -> booking.status == BookingStatus.COMPLETED
-            4 -> booking.status == BookingStatus.CANCELLED
+            0 -> booking.status == BookingStatus.PENDING.name
+            1 -> booking.status == BookingStatus.CONFIRMED.name
+            2 -> booking.status == BookingStatus.CHECKED_IN.name
+            3 -> booking.status == BookingStatus.COMPLETED.name
+            4 -> booking.status == BookingStatus.CANCELLED.name
             else -> true
         }
     }
@@ -83,8 +84,8 @@ fun MyBookingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor         = PrimaryBlue,
-                    titleContentColor      = BackgroundWhite,
+                    containerColor             = PrimaryBlue,
+                    titleContentColor          = BackgroundWhite,
                     navigationIconContentColor = BackgroundWhite
                 )
             )
@@ -160,7 +161,6 @@ fun MyBookingsScreen(
                                         Screen.BookingDetails.createRoute(booking.bookingId)
                                     )
                                 },
-                                // ✅ FIX: Screen.Payment.createRoute ko 6 arguments chahiye
                                 onPayNow = {
                                     navController.navigate(
                                         Screen.Payment.createRoute(
@@ -191,12 +191,15 @@ private fun BookingCard(
     onTap    : () -> Unit,
     onPayNow : () -> Unit
 ) {
-    val (statusColor, statusText) = when (booking.status) {
-        BookingStatus.PENDING    -> Pair(MaterialTheme.colorScheme.tertiary, "⏳ ${booking.status.displayName()}")
-        BookingStatus.CONFIRMED  -> Pair(SuccessGreen,                        "✓ ${booking.status.displayName()}")
-        BookingStatus.CHECKED_IN -> Pair(PrimaryBlue,                         "🏠 ${booking.status.displayName()}")
-        BookingStatus.COMPLETED  -> Pair(TextSecondary,                       "✓ ${booking.status.displayName()}")
-        BookingStatus.CANCELLED  -> Pair(ErrorRed,                            "✗ ${booking.status.displayName()}")
+    // ✅ FIX — bookingStatus computed property use karo (String -> Enum convert)
+    val bookingStatus = booking.bookingStatus
+
+    val (statusColor, statusText) = when (bookingStatus) {
+        BookingStatus.PENDING    -> Pair(MaterialTheme.colorScheme.tertiary, "⏳ ${bookingStatus.displayName()}")
+        BookingStatus.CONFIRMED  -> Pair(SuccessGreen,                        "✓ ${bookingStatus.displayName()}")
+        BookingStatus.CHECKED_IN -> Pair(PrimaryBlue,                         "🏠 ${bookingStatus.displayName()}")
+        BookingStatus.COMPLETED  -> Pair(TextSecondary,                       "✓ ${bookingStatus.displayName()}")
+        BookingStatus.CANCELLED  -> Pair(ErrorRed,                            "✗ ${bookingStatus.displayName()}")
     }
 
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
@@ -275,7 +278,8 @@ private fun BookingCard(
                     )
                 }
 
-                if (booking.status == BookingStatus.PENDING) {
+                // ✅ FIX — bookingStatus use karo
+                if (bookingStatus == BookingStatus.PENDING) {
                     Button(
                         onClick  = onPayNow,
                         shape    = RoundedCornerShape(8.dp),
@@ -302,15 +306,3 @@ private fun BookingInfoItem(label: String, value: String) {
         )
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-

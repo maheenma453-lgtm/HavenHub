@@ -30,13 +30,12 @@ fun ManageBookingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     var selectedStatus by remember { mutableStateOf("All") }
 
-    // Date formatting helper for Timestamps
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
 
-    // Filtering logic
+    // ✅ FIX — booking.status String hai, .name mat lagao
     val filteredBookings = remember(uiState.bookings, selectedStatus) {
         if (selectedStatus == "All") uiState.bookings
-        else uiState.bookings.filter { it.status.name.equals(selectedStatus, ignoreCase = true) }
+        else uiState.bookings.filter { it.status.equals(selectedStatus, ignoreCase = true) }
     }
 
     Scaffold(
@@ -53,7 +52,6 @@ fun ManageBookingsScreen(
     ) { paddingValues ->
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
 
-            // Status Filter Chips
             val statuses = listOf("All", "Pending", "Confirmed", "Completed", "Cancelled")
             Row(
                 modifier = Modifier
@@ -65,8 +63,8 @@ fun ManageBookingsScreen(
                 statuses.forEach { status ->
                     FilterChip(
                         selected = selectedStatus == status,
-                        onClick = { selectedStatus = status },
-                        label = { Text(status) }
+                        onClick  = { selectedStatus = status },
+                        label    = { Text(status) }
                     )
                 }
             }
@@ -77,7 +75,7 @@ fun ManageBookingsScreen(
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding      = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     item {
@@ -89,18 +87,18 @@ fun ManageBookingsScreen(
                     }
 
                     items(filteredBookings, key = { it.bookingId }) { booking ->
-                        // Converting Timestamp to readable string
-                        val checkIn = booking.checkInDate?.toDate()?.let { dateFormatter.format(it) } ?: "N/A"
+                        val checkIn  = booking.checkInDate?.toDate()?.let  { dateFormatter.format(it) } ?: "N/A"
                         val checkOut = booking.checkOutDate?.toDate()?.let { dateFormatter.format(it) } ?: "N/A"
 
                         BookingManagementCard(
                             propertyTitle = booking.propertyTitle,
-                            tenantName = booking.tenantName,
-                            dateRange = "$checkIn - $checkOut",
-                            totalAmount = booking.formattedTotal, // Getter from Booking class
-                            status = booking.status.displayName(), // Enum function
-                            isCancellable = booking.isCancellable, // Logic from Booking class
-                            onCancel = { viewModel.cancelBooking(booking.bookingId) } // ✅ Now matches ViewModel
+                            tenantName    = booking.tenantName,
+                            dateRange     = "$checkIn - $checkOut",
+                            totalAmount   = booking.formattedTotal,
+                            // ✅ FIX — bookingStatus computed property use karo
+                            status        = booking.bookingStatus.displayName(),
+                            isCancellable = booking.isCancellable,
+                            onCancel      = { viewModel.cancelBooking(booking.bookingId) }
                         )
                     }
                 }
@@ -111,24 +109,24 @@ fun ManageBookingsScreen(
 
 @Composable
 private fun BookingManagementCard(
-    propertyTitle: String,
-    tenantName: String,
-    dateRange: String,
-    totalAmount: String,
-    status: String,
-    isCancellable: Boolean,
-    onCancel: () -> Unit
+    propertyTitle : String,
+    tenantName    : String,
+    dateRange     : String,
+    totalAmount   : String,
+    status        : String,
+    isCancellable : Boolean,
+    onCancel      : () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier          = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape    = MaterialTheme.shapes.medium,
+                color    = MaterialTheme.colorScheme.secondaryContainer,
                 modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -139,26 +137,34 @@ private fun BookingManagementCard(
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(propertyTitle, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                 Text("Tenant: $tenantName", style = MaterialTheme.typography.bodySmall)
-                Text(dateRange, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    dateRange,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(totalAmount, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     SuggestionChip(
                         onClick = {},
-                        label = { Text(status, style = MaterialTheme.typography.labelSmall) }
+                        label   = { Text(status, style = MaterialTheme.typography.labelSmall) }
                     )
                 }
             }
 
-            // Options menu: only shows if booking is cancellable (Pending/Confirmed)
             if (isCancellable) {
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Options")
                     }
-                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenu(
+                        expanded          = menuExpanded,
+                        onDismissRequest  = { menuExpanded = false }
+                    ) {
                         DropdownMenuItem(
-                            text = { Text("Cancel Booking", color = MaterialTheme.colorScheme.error) },
+                            text    = { Text("Cancel Booking", color = MaterialTheme.colorScheme.error) },
                             onClick = {
                                 menuExpanded = false
                                 onCancel()

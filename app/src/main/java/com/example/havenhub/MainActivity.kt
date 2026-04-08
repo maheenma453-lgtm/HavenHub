@@ -5,7 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.navigation.compose.rememberNavController
-import com.example.havenhub.navigation.HavenHubNavGraph
+import com.example.havenhub.navigation.HavenHubNavGraph  // ✅ NavGraph → HavenHubNavGraph
 import com.example.havenhub.ui.theme.HavenHubTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             HavenHubTheme {
                 val navController = rememberNavController()
-                HavenHubNavGraph(navController = navController)
+                HavenHubNavGraph(navController = navController)  // ✅ NavGraph → HavenHubNavGraph
             }
         }
     }

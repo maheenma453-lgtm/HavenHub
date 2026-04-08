@@ -3,13 +3,7 @@ package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.BookingStatus
-import com.example.havenhub.data.Property
-import com.example.havenhub.data.Payment
-import com.example.havenhub.data.Booking
-import com.example.havenhub.repository.AuthRepository
-import com.example.havenhub.repository.BookingRepository
-import com.example.havenhub.repository.PaymentRepository
-import com.example.havenhub.repository.PropertyRepository
+import com.example.havenhub.repository.AdminRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +14,6 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import javax.inject.Inject
 
-// Dashboard Stats Data Class
 data class DashboardStats(
     val totalProperties: Int = 0,
     val totalBookings: Int = 0,
@@ -38,10 +31,7 @@ data class DashboardUiState(
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val propertyRepository: PropertyRepository,
-    private val bookingRepository: BookingRepository,
-    private val paymentRepository: PaymentRepository,
-    private val authRepository: AuthRepository
+    private val adminRepository: AdminRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -53,29 +43,24 @@ class DashboardViewModel @Inject constructor(
 
     fun loadDashboard() {
         viewModelScope.launch {
-            val userId = authRepository.currentUser?.uid ?: return@launch
             _uiState.update { it.copy(isLoading = true) }
 
-            // Fetching results from repositories
-            val propertiesResult = propertyRepository.getMyProperties(userId)
+            val propertiesResult = adminRepository.getAllProperties()
+            val bookingsResult = adminRepository.getAllBookings()
+            val paymentsResult = adminRepository.getAllPayments()
 
-            // ✅ FIXED: Using 'getLandlordBookings' instead of 'getUserBookings'
-            // Kyunke aapki repository mein yahi naam hai.
-            val bookings = bookingRepository.getLandlordBookings(userId)
-
-            val paymentsResult = paymentRepository.getLandlordPayments(userId)
-
-            // Handling Property Results
-            val properties = if (propertiesResult is Resource.Success<List<Property>>) {
-                propertiesResult.data ?: emptyList()
+            val properties = if (propertiesResult is Resource.Success) {
+                propertiesResult.data
             } else emptyList()
 
-            // Handling Payment Results
-            val payments = if (paymentsResult is Resource.Success<List<Payment>>) {
-                paymentsResult.data ?: emptyList()
+            val bookings = if (bookingsResult is Resource.Success) {
+                bookingsResult.data
             } else emptyList()
 
-            // Calculations
+            val payments = if (paymentsResult is Resource.Success) {
+                paymentsResult.data
+            } else emptyList()
+
             val totalEarnings = payments.sumOf { it.amount }
 
             val cal = Calendar.getInstance()
@@ -86,25 +71,27 @@ class DashboardViewModel @Inject constructor(
                 payment.createdAt?.let { timestamp ->
                     val pCal = Calendar.getInstance()
                     pCal.time = timestamp.toDate()
-                    pCal.get(Calendar.MONTH) == currentMonth && pCal.get(Calendar.YEAR) == currentYear
+                    pCal.get(Calendar.MONTH) == currentMonth &&
+                            pCal.get(Calendar.YEAR) == currentYear
                 } ?: false
             }.sumOf { it.amount }
 
             val avgRating = if (properties.isNotEmpty()) {
-                properties.map { it.averageRating.toDouble() }.average().takeIf { !it.isNaN() } ?: 0.0
+                properties.map { it.averageRating.toDouble() }
+                    .average()
+                    .takeIf { !it.isNaN() } ?: 0.0
             } else 0.0
 
-            // Final State Update
             _uiState.update {
                 it.copy(
                     isLoading = false,
                     stats = DashboardStats(
-                        totalProperties = properties.size,
-                        totalBookings = bookings.size, // 'bookings' is already a List from your Repo
-                        pendingBookings = bookings.count { b -> b.status == BookingStatus.PENDING },
-                        totalEarnings = totalEarnings,
+                        totalProperties   = properties.size,
+                        totalBookings     = bookings.size,
+                        pendingBookings   = bookings.count { b -> b.status == BookingStatus.PENDING.name },
+                        totalEarnings     = totalEarnings,
                         thisMonthEarnings = thisMonthEarnings,
-                        averageRating = avgRating
+                        averageRating     = avgRating
                     )
                 )
             }

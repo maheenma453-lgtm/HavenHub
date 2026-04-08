@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Payment
 import com.example.havenhub.data.PaymentStatus
 import com.example.havenhub.repository.AdminRepository
-import com.example.havenhub.repository.PaymentRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +15,6 @@ import kotlinx.coroutines.launch
 import java.util.Date
 import javax.inject.Inject
 
-// ✅ Reports ke liye UI State define ki
 data class ReportsUiState(
     val isLoading: Boolean = false,
     val stats: AdminReportStats = AdminReportStats(),
@@ -38,8 +36,8 @@ data class AdminReportStats(
 
 @HiltViewModel
 class ReportsViewModel @Inject constructor(
-    private val adminRepository: AdminRepository,
-    private val paymentRepository: PaymentRepository
+    private val adminRepository: AdminRepository
+    // ✅ paymentRepository removed — never used
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReportsUiState())
@@ -49,36 +47,32 @@ class ReportsViewModel @Inject constructor(
         loadAllReportsData()
     }
 
-    // ✅ Unified loading method
     fun loadAllReportsData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            // Sab data parallel mein fetch karne ke liye
             val usersResult = adminRepository.getAllUsers()
             val propertiesResult = adminRepository.getAllProperties()
             val bookingsResult = adminRepository.getAllBookings()
             val paymentsResult = adminRepository.getAllPayments()
 
-            // Check for critical errors (Users lazmi hain stats ke liye)
             if (usersResult is Resource.Error) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = usersResult.message) }
                 return@launch
             }
 
-            // Data extraction using your Resource class logic
             val users = (usersResult as? Resource.Success)?.data ?: emptyList()
             val properties = (propertiesResult as? Resource.Success)?.data ?: emptyList()
             val bookings = (bookingsResult as? Resource.Success)?.data ?: emptyList()
             val allPayments = (paymentsResult as? Resource.Success)?.data ?: emptyList()
 
-            // Stats Calculation
             val totalRevenue = allPayments
                 .filter { it.status == PaymentStatus.COMPLETED }
                 .sumOf { it.amount }
 
-            val completed = bookings.count { it.status.name == "COMPLETED" }
-            val cancelled = bookings.count { it.status.name == "CANCELLED" }
+            // ✅ Fixed: use .name on enum directly (lines 80-81 fix)
+            val completed = bookings.count { it.status == "COMPLETED" }
+            val cancelled = bookings.count { it.status == "CANCELLED" }
 
             _uiState.update { state ->
                 state.copy(
@@ -98,14 +92,11 @@ class ReportsViewModel @Inject constructor(
         }
     }
 
-    // ✅ Date Filter logic with UI State update
     fun loadFilteredPayments(startDate: Date? = null, endDate: Date? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            val result = adminRepository.getAllPayments()
-
-            when (result) {
+            when (val result = adminRepository.getAllPayments()) { // ✅ variable moved into 'when'
                 is Resource.Success -> {
                     var payments = result.data
                     if (startDate != null && endDate != null) {

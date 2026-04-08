@@ -19,22 +19,33 @@ import androidx.navigation.NavController
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.PaymentStatus
+import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.BookingViewModel
+import com.google.firebase.auth.FirebaseAuth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingScreen(
     navController: NavController,
-    propertyId: String,
-    viewModel: BookingViewModel = hiltViewModel()
+    propertyId   : String,
+    viewModel    : BookingViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Success hone par back navigate karo
+    // ✅ Fix 1 — currentUser Firebase se
+    val currentUser = FirebaseAuth.getInstance().currentUser
+
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
-            navController.popBackStack()
+            val bookingId = uiState.createdBookingId
+            if (!bookingId.isNullOrEmpty()) {
+                navController.navigate(
+                    Screen.BookingConfirmation.createRoute(bookingId)
+                ) {
+                    popUpTo(Screen.Booking.route) { inclusive = true }
+                }
+            }
             viewModel.clearMessages()
         }
     }
@@ -42,15 +53,20 @@ fun BookingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Complete Booking", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text("Complete Booking", fontWeight = FontWeight.Bold)
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = null
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryBlue,
-                    titleContentColor = Color.White,
+                    containerColor             = PrimaryBlue,
+                    titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
@@ -65,18 +81,24 @@ fun BookingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // ── Order Summary Card ──────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+                shape    = RoundedCornerShape(12.dp),
+                colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Order Summary", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(
+                        text       = "Order Summary",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Property ID: $propertyId", color = TextSecondary)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Total Amount: Rs. 12,000", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text       = "Total Amount: Rs. 12,000",
+                        fontWeight = FontWeight.SemiBold
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("Status: Pending", color = TextSecondary)
                 }
@@ -84,14 +106,16 @@ fun BookingScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Confirm & Pay Button ────────────────────────────
             Button(
                 onClick = {
                     val booking = Booking(
-                        propertyId = propertyId,
-                        totalAmount = 12000.0,
-                        status = BookingStatus.PENDING,
-                        paymentStatus = PaymentStatus.PENDING
+                        propertyId    = propertyId,
+                        tenantId      = currentUser?.uid ?: "",
+                        tenantName    = currentUser?.displayName ?: "",
+                        totalAmount   = 12000.0,
+                        // ✅ Fix 2 & 3 — .name use karo kyunki fields String hain
+                        status        = BookingStatus.PENDING.name,
+                        paymentStatus = PaymentStatus.PENDING.name
                     )
                     viewModel.createBooking(booking)
                 },
@@ -99,28 +123,27 @@ fun BookingScreen(
                     .fillMaxWidth()
                     .height(54.dp),
                 enabled = !uiState.isLoading,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                shape   = RoundedCornerShape(12.dp),
+                colors  = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
+                        modifier    = Modifier.size(20.dp),
+                        color       = Color.White,
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Confirm & Pay", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Confirm & Pay",
+                        fontSize   = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
-            // ── Error Message ───────────────────────────────────
             uiState.errorMessage?.let { error ->
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = error,
-                    color = Color.Red,
-                    fontSize = 14.sp
-                )
+                Text(text = error, color = Color.Red, fontSize = 14.sp)
             }
         }
     }

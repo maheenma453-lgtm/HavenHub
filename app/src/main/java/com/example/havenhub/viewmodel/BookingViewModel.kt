@@ -18,7 +18,8 @@ data class BookingUiState(
     val isLoading: Boolean = false,
     val bookings: List<Booking> = emptyList(),
     val errorMessage: String? = null,
-    val actionSuccess: Boolean = false
+    val actionSuccess: Boolean = false,
+    val createdBookingId : String?       = null
 )
 
 @HiltViewModel

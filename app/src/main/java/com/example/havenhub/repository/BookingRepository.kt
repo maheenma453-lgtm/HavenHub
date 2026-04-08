@@ -15,20 +15,21 @@ class BookingRepository @Inject constructor(
     private val realtimeListener: FirebaseRealtimeListener
 ) {
     suspend fun createBooking(booking: Booking): Resource<String> {
-        val pendingBooking = booking.copy(status = BookingStatus.PENDING)
+        // ✅ FIX — BookingStatus.PENDING.name (String hai Booking.status)
+        val pendingBooking = booking.copy(status = BookingStatus.PENDING.name)
         return dataManager.createBooking(pendingBooking)
     }
 
     suspend fun getTenantBookings(userId: String): List<Booking> {
         val resource = dataManager.getBookingsByUser(userId)
-        // FIX: Added explicit type check to resolve 'One type argument expected' error
-        return if (resource is Resource.Success<List<Booking>>) resource.data ?: emptyList() else emptyList()
+        // ✅ FIX — type argument remove, simple is check kaafi hai
+        return if (resource is Resource.Success) resource.data ?: emptyList() else emptyList()
     }
 
     suspend fun getLandlordBookings(userId: String): List<Booking> {
-        val resource = dataManager.getBookingsByUser(userId)
-        // FIX: Same fix for landlord bookings
-        return if (resource is Resource.Success<List<Booking>>) resource.data ?: emptyList() else emptyList()
+        val resource = dataManager.getBookingsByLandlord(userId)
+        // ✅ FIX — same fix
+        return if (resource is Resource.Success) resource.data ?: emptyList() else emptyList()
     }
 
     suspend fun updateBookingStatus(bookingId: String, status: BookingStatus): Resource<Unit> {

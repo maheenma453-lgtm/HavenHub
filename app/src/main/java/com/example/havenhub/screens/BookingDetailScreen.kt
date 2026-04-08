@@ -50,8 +50,8 @@ fun BookingDetailsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryBlue,
-                    titleContentColor = Color.White,
+                    containerColor             = PrimaryBlue,
+                    titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
@@ -81,16 +81,14 @@ fun BookingDetailsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // Status Badge
-            StatusBadge(status = booking.status.displayName())
+            // ✅ FIX — bookingStatus computed property use karo, String pe displayName() nahi hoti
+            StatusBadge(status = booking.bookingStatus.displayName())
 
-            // Property Info
             SectionCard(title = "Property") {
                 InfoRow(label = "Title",   value = booking.propertyTitle)
                 InfoRow(label = "Address", value = booking.propertyAddress)
             }
 
-            // Stay Details
             SectionCard(title = "Stay Details") {
                 InfoRow(label = "Check-In",  value = booking.checkInDate?.toDate()?.toString() ?: "-")
                 InfoRow(label = "Check-Out", value = booking.checkOutDate?.toDate()?.toString() ?: "-")
@@ -98,13 +96,13 @@ fun BookingDetailsScreen(
                 InfoRow(label = "Nights",    value = "${booking.totalNights} Night(s)")
             }
 
-            // Payment Summary
             SectionCard(title = "Payment Summary") {
-                InfoRow(label = "Price/Night",     value = "PKR ${booking.pricePerNight.toInt()}")
-                InfoRow(label = "Subtotal",        value = "PKR ${booking.subtotal.toInt()}")
-                InfoRow(label = "Service Fee",     value = "PKR ${booking.serviceFee.toInt()}")
-                InfoRow(label = "Security Deposit",value = "PKR ${booking.securityDeposit.toInt()}")
-                InfoRow(label = "Payment Status",  value = booking.paymentStatus.name)
+                InfoRow(label = "Price/Night",      value = "PKR ${booking.pricePerNight.toInt()}")
+                InfoRow(label = "Subtotal",         value = "PKR ${booking.subtotal.toInt()}")
+                InfoRow(label = "Service Fee",      value = "PKR ${booking.serviceFee.toInt()}")
+                InfoRow(label = "Security Deposit", value = "PKR ${booking.securityDeposit.toInt()}")
+                // ✅ FIX — paymentStatus already String hai, .name mat lagao
+                InfoRow(label = "Payment Status",   value = booking.paymentStatus)
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = BorderGray)
                 InfoRow(
                     label      = "Total Amount",
@@ -114,22 +112,19 @@ fun BookingDetailsScreen(
                 )
             }
 
-            // Host Info
             SectionCard(title = "Host Information") {
                 InfoRow(label = "Host", value = booking.landlordName)
             }
 
-            // Booking Info
             SectionCard(title = "Booking Info") {
                 InfoRow(label = "Booking ID", value = "#${booking.bookingId.take(8).uppercase()}")
                 InfoRow(label = "Tenant",     value = booking.tenantName)
                 InfoRow(label = "Booked On",  value = booking.createdAt?.toDate()?.toString() ?: "-")
             }
 
-            // Action Buttons
             if (booking.isCancellable) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
@@ -152,7 +147,6 @@ fun BookingDetailsScreen(
                 }
             }
 
-            // Error Message
             uiState.errorMessage?.let { error ->
                 Text(text = error, color = ErrorRed, fontSize = 14.sp)
             }
@@ -220,7 +214,9 @@ fun InfoRow(
     bold       : Boolean = false
 ) {
     Row(
-        modifier              = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier              = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label, color = TextSecondary, fontSize = 14.sp)

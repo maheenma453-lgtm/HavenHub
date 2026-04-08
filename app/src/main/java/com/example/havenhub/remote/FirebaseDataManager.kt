@@ -69,7 +69,7 @@ class FirebaseDataManager @Inject constructor(
         return try {
             val snapshot = propertiesCollection
                 .whereEqualTo("status", "APPROVED")
-                .orderBy("createdAt",  Query.Direction.DESCENDING)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
             Resource.Success(snapshot.toObjects(Property::class.java))
@@ -124,7 +124,7 @@ class FirebaseDataManager @Inject constructor(
 
     suspend fun createBooking(booking: Booking): Resource<String> {
         return try {
-            val docRef = bookingsCollection.document()
+            val docRef     = bookingsCollection.document()
             val newBooking = booking.copy(bookingId = docRef.id)
             docRef.set(newBooking).await()
             Resource.Success(docRef.id)
@@ -133,6 +133,7 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
+    // ✅ Tenant bookings
     suspend fun getBookingsByUser(userId: String): Resource<List<Booking>> {
         return try {
             val snapshot = bookingsCollection
@@ -146,10 +147,38 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
+    // ✅ Landlord bookings — ADDED
+    suspend fun getBookingsByLandlord(landlordId: String): Resource<List<Booking>> {
+        return try {
+            val snapshot = bookingsCollection
+                .whereEqualTo("landlordId", landlordId)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .get()
+                .await()
+            Resource.Success(snapshot.toObjects(Booking::class.java))
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch landlord bookings")
+        }
+    }
+
+    // ✅ Single booking by ID — ADDED
+    suspend fun getBookingById(bookingId: String): Resource<Booking> {
+        return try {
+            val snapshot = bookingsCollection.document(bookingId).get().await()
+            val booking  = snapshot.toObject(Booking::class.java)
+                ?: return Resource.Error("Booking not found")
+            Resource.Success(booking)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch booking")
+        }
+    }
+
+    // ✅ Status update
     suspend fun updateBookingStatus(bookingId: String, status: String): Resource<Unit> {
         return try {
             bookingsCollection.document(bookingId)
-                .update("status", status).await()
+                .update("status", status)
+                .await()
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to update booking status")
@@ -160,7 +189,7 @@ class FirebaseDataManager @Inject constructor(
 
     suspend fun addReview(review: Review): Resource<String> {
         return try {
-            val docRef = reviewsCollection.document()
+            val docRef    = reviewsCollection.document()
             val newReview = review.copy(reviewId = docRef.id)
             docRef.set(newReview).await()
             Resource.Success(docRef.id)
@@ -182,30 +211,3 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

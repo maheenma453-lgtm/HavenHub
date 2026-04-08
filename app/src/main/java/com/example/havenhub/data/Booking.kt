@@ -1,4 +1,5 @@
 package com.example.havenhub.data
+
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
@@ -19,52 +20,71 @@ enum class BookingStatus {
     }
 }
 
-
 data class Booking(
     @DocumentId
     val bookingId: String = "",
 
-    val tenantId: String = "",
-    val tenantName: String = "",
-    val landlordId: String = "",
-    val landlordName: String = "",
-    val propertyId: String = "",
-    val propertyTitle: String = "",
+    val tenantId      : String = "",
+    val tenantName    : String = "",
+    val landlordId    : String = "",
+    val landlordName  : String = "",
+    val propertyId    : String = "",
+    val propertyTitle : String = "",
     val propertyCoverUrl: String = "",
-    val propertyAddress: String = "",
+    val propertyAddress : String = "",
 
-    val checkInDate: Timestamp? = null,
-    val checkOutDate: Timestamp? = null,
-    val totalNights: Int = 0,
-    val guestCount: Int = 1,
+    val checkInDate  : Timestamp? = null,
+    val checkOutDate : Timestamp? = null,
+    val totalNights  : Int = 0,
+    val guestCount   : Int = 1,
 
-    val pricePerNight: Double = 0.0,
-    val subtotal: Double = 0.0,
-    val serviceFee: Double = 0.0,
+    val pricePerNight  : Double = 0.0,
+    val subtotal       : Double = 0.0,
+    val serviceFee     : Double = 0.0,
     val securityDeposit: Double = 0.0,
-    val totalAmount: Double = 0.0,
+    val totalAmount    : Double = 0.0,
 
-    val status: BookingStatus = BookingStatus.PENDING,
-    val hasReview: Boolean = false,
-    val paymentId: String = "",
-    val paymentStatus: PaymentStatus = PaymentStatus.PENDING,
+    // ✅ FIX — String rakho enum nahi, Firebase String save/read karta hai
+    val status        : String = BookingStatus.PENDING.name,
+    val hasReview     : Boolean = false,
+    val paymentId     : String = "",
+    val paymentStatus : String = PaymentStatus.PENDING.name, // ✅ yeh bhi String
 
     val cancellationReason: String = "",
-    val cancelledBy: String = "",
-    val cancelledAt: Timestamp? = null,
+    val cancelledBy       : String = "",
+    val cancelledAt       : Timestamp? = null,
 
     @ServerTimestamp
     val createdAt: Timestamp? = null,
     val updatedAt: Timestamp? = null
 ) {
+    // ✅ No-arg constructor — Firestore ke liye zaroori
     constructor() : this(bookingId = "")
+
+    // ✅ Computed property — String se enum convert karo
+    val bookingStatus: BookingStatus
+        get() = try {
+            BookingStatus.valueOf(status)
+        } catch (e: Exception) {
+            BookingStatus.PENDING
+        }
+
+    // ✅ Computed property — paymentStatus enum
+    val paymentStatusEnum: PaymentStatus
+        get() = try {
+            PaymentStatus.valueOf(paymentStatus)
+        } catch (e: Exception) {
+            PaymentStatus.PENDING
+        }
 
     val formattedTotal: String
         get() = "PKR ${"%,.0f".format(totalAmount)}"
 
+    // ✅ bookingStatus use karo status ki jagah
     val isCancellable: Boolean
-        get() = status == BookingStatus.PENDING || status == BookingStatus.CONFIRMED
+        get() = bookingStatus == BookingStatus.PENDING ||
+                bookingStatus == BookingStatus.CONFIRMED
 
     val canReview: Boolean
-        get() = status == BookingStatus.COMPLETED && !hasReview
+        get() = bookingStatus == BookingStatus.COMPLETED && !hasReview
 }
