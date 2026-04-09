@@ -1,7 +1,6 @@
 package com.example.havenhub.repository
 
 import com.example.havenhub.data.User
-import com.example.havenhub.data.UserRole
 import com.example.havenhub.remote.FirebaseAuthManager
 import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.remote.FirebaseMessagingManager
@@ -17,24 +16,15 @@ class AuthRepository @Inject constructor(
     private val messagingManager : FirebaseMessagingManager
 ) {
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Session State
-    // ─────────────────────────────────────────────────────────────────────────
-
     val currentUser   : FirebaseUser? get() = authManager.currentUser
     val currentUserId : String?       get() = authManager.currentUserId
     fun isUserSignedIn(): Boolean = authManager.isUserSignedIn()
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // ✅ NEW: getUserRole — Firebase se user ka role fetch karo
-    // ─────────────────────────────────────────────────────────────────────────
 
     suspend fun getUserRole(uid: String): String {
         return try {
             val result = dataManager.getUser(uid)
             if (result is Resource.Success) {
-                // ✅ UserRole.LANDLORD → "landlord", TENANT → "tenant", ADMIN → "admin"
-                result.data.role.name.lowercase()
+                result.data.role.lowercase()
             } else {
                 "tenant"
             }
@@ -42,10 +32,6 @@ class AuthRepository @Inject constructor(
             "tenant"
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Registration
-    // ─────────────────────────────────────────────────────────────────────────
 
     suspend fun registerUser(
         email    : String,
@@ -62,7 +48,7 @@ class AuthRepository @Inject constructor(
             userId     = firebaseUser.uid,
             email      = email,
             fullName   = fullName,
-            role       = UserRole.valueOf(role.uppercase()),
+            role       = role.uppercase(), // ✅ FIX: directly String store karo
             isVerified = false
         )
 
@@ -76,10 +62,6 @@ class AuthRepository @Inject constructor(
 
         return Resource.Success(firebaseUser)
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Sign In
-    // ─────────────────────────────────────────────────────────────────────────
 
     suspend fun signIn(email: String, password: String): Resource<FirebaseUser> {
         val authResult = authManager.signInWithEmail(email, password)
@@ -104,7 +86,7 @@ class AuthRepository @Inject constructor(
                 userId          = firebaseUser.uid,
                 email           = firebaseUser.email ?: "",
                 fullName        = firebaseUser.displayName ?: "",
-                role            = UserRole.TENANT,
+                role            = "TENANT", // ✅ FIX: String directly
                 profileImageUrl = firebaseUser.photoUrl?.toString() ?: ""
             )
             dataManager.saveUser(user)
@@ -118,10 +100,6 @@ class AuthRepository @Inject constructor(
         return Resource.Success(firebaseUser)
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Sign Out
-    // ─────────────────────────────────────────────────────────────────────────
-
     suspend fun signOut() {
         authManager.currentUserId?.let { uid ->
             messagingManager.clearDeviceToken(uid)
@@ -129,30 +107,6 @@ class AuthRepository @Inject constructor(
         authManager.signOut()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Password Reset
-    // ─────────────────────────────────────────────────────────────────────────
-
     suspend fun sendPasswordResetEmail(email: String): Resource<Unit> =
         authManager.sendPasswordResetEmail(email)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

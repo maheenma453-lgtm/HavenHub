@@ -34,19 +34,19 @@ fun HomeScreen(
     navController: NavController,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    // ✅ Latest Update: Collecting single UI State from ViewModel
+    // UI State collect karna
     val uiState by viewModel.uiState.collectAsState()
 
-    // ── Local UI State for Filtering ──
+    // Filter Categories
     val categories = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
     var selectedCategory by remember { mutableStateOf("All") }
 
-    // ✅ Filtering logic based on selected category
+    // ✅ FIX: propertyType (String) ki jagah propertyTypeEnum use kiya hai filtering ke liye
     val filteredFeatured = if (selectedCategory == "All") uiState.featuredProperties
-    else uiState.featuredProperties.filter { it.propertyType.displayName() == selectedCategory }
+    else uiState.featuredProperties.filter { it.propertyTypeEnum.displayName() == selectedCategory }
 
     val filteredNearby = if (selectedCategory == "All") uiState.nearbyProperties
-    else uiState.nearbyProperties.filter { it.propertyType.displayName() == selectedCategory }
+    else uiState.nearbyProperties.filter { it.propertyTypeEnum.displayName() == selectedCategory }
 
     LazyColumn(
         modifier = Modifier
@@ -225,7 +225,8 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Star, null, tint = AccentGold, modifier = Modifier.size(14.dp))
-                    Text(" ${property.averageRating} • ${property.propertyType.displayName()}", fontSize = 12.sp)
+                    // ✅ FIX: propertyTypeEnum use kiya hai
+                    Text(" ${property.averageRating} • ${property.propertyTypeEnum.displayName()}", fontSize = 12.sp)
                 }
             }
         }
@@ -256,7 +257,8 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(property.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
-                Text("${property.city} • ${property.propertyType.displayName()}", color = TextSecondary, fontSize = 13.sp)
+                // ✅ FIX: propertyTypeEnum use kiya hai
+                Text("${property.city} • ${property.propertyTypeEnum.displayName()}", color = TextSecondary, fontSize = 13.sp)
                 Spacer(Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${property.formattedPrice}/night", fontWeight = FontWeight.ExtraBold, color = PrimaryBlue)

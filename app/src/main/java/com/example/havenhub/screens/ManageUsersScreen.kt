@@ -24,18 +24,20 @@ fun ManageUsersScreen(
     navController: NavController,
     viewModel: ManagementViewModel = hiltViewModel()
 ) {
-    // ✅ Fix: viewModel.uiState use karein jo humne abhi banaya hai
     val uiState by viewModel.uiState.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf("All") }
 
-    // Search aur Filter logic UI level par handle kar rahe hain
+    // ✅ FIX: user.role (String) ki jagah user.userRole (Enum) use kiya hai filtering ke liye
     val filteredUsers = remember(uiState.users, searchQuery, selectedRole) {
         uiState.users.filter { user ->
             val matchesSearch = user.fullName.contains(searchQuery, ignoreCase = true) ||
                     user.email.contains(searchQuery, ignoreCase = true)
-            val matchesRole = if (selectedRole == "All") true else user.role.displayName() == selectedRole
+
+            val matchesRole = if (selectedRole == "All") true
+            else user.userRole.displayName() == selectedRole
+
             matchesSearch && matchesRole
         }
     }
@@ -99,7 +101,7 @@ fun ManageUsersScreen(
                 ) {
                     item {
                         Text(
-                            "${filteredUsers.size} users found",
+                            text = "${filteredUsers.size} users found",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -109,9 +111,9 @@ fun ManageUsersScreen(
                         UserManagementCard(
                             fullName = user.fullName,
                             email = user.email,
-                            role = user.role.displayName(),
+                            // ✅ FIX: user.role.displayName() ko badal kar user.userRole.displayName() kiya
+                            role = user.userRole.displayName(),
                             isVerified = user.isVerified,
-                            // ✅ Fix: Repository functions ke mutabiq calls
                             onBan = { viewModel.banUser(user.userId) },
                             onUnban = { viewModel.unbanUser(user.userId) }
                         )
@@ -133,7 +135,10 @@ private fun UserManagementCard(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -144,7 +149,7 @@ private fun UserManagementCard(
             Surface(
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Person, contentDescription = null)
@@ -152,19 +157,37 @@ private fun UserManagementCard(
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(fullName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(fullName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                 Text(email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SuggestionChip(onClick = {}, label = { Text(role) })
-                    if (!isVerified) {
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text("Not Verified") },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Role Badge
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = MaterialTheme.shapes.extraSmall
+                    ) {
+                        Text(
+                            text = role,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall
                         )
+                    }
+
+                    if (!isVerified) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = MaterialTheme.shapes.extraSmall
+                        ) {
+                            Text(
+                                text = "Unverified",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
                     }
                 }
             }
@@ -175,7 +198,7 @@ private fun UserManagementCard(
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(
-                        text = { Text("Ban User") },
+                        text = { Text("Ban User", color = MaterialTheme.colorScheme.error) },
                         onClick = { menuExpanded = false; onBan() }
                     )
                     DropdownMenuItem(
