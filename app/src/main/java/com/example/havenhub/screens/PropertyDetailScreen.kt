@@ -120,7 +120,7 @@ fun PropertyDetailScreen(
                                 if (property.isAvailable) {
                                     BadgeBox("✓ Available", SuccessGreen)
                                 }
-                                BadgeBox(property.propertyType.displayName(), PrimaryBlue)
+                                BadgeBox(property.propertyType.toString(), PrimaryBlue)
                             }
 
                             Spacer(modifier = Modifier.height(12.dp))
