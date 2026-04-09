@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.havenhub.data.Property
 import com.example.havenhub.data.PropertyType
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.PropertyViewModel
@@ -47,11 +46,9 @@ fun EditPropertyScreen(
     navController : NavController,
     viewModel     : PropertyViewModel = hiltViewModel()
 ) {
-    // ── ViewModel State Observation ──
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // ── Form Fields ──
     var title             by remember { mutableStateOf("") }
     var description       by remember { mutableStateOf("") }
     var propertyType      by remember { mutableStateOf("Apartment") }
@@ -63,27 +60,28 @@ fun EditPropertyScreen(
     var city              by remember { mutableStateOf("") }
     var address           by remember { mutableStateOf("") }
 
-    // ── Image State ──
     var existingImageUrls by remember { mutableStateOf(listOf<String>()) }
     var newImageUris      by remember { mutableStateOf(listOf<Uri>()) }
     var removedImageUrls  by remember { mutableStateOf(setOf<String>()) }
 
-    var isFormInitialized  by remember { mutableStateOf(false) }
-    var hasUnsavedChanges  by remember { mutableStateOf(false) }
-    var showDiscardDialog  by remember { mutableStateOf(false) }
+    var isFormInitialized by remember { mutableStateOf(false) }
+    var hasUnsavedChanges by remember { mutableStateOf(false) }
+    var showDiscardDialog by remember { mutableStateOf(false) }
 
-    // ── Load property on Start ──
     LaunchedEffect(propertyId) {
         viewModel.loadPropertyDetail(propertyId)
     }
 
-    // ── Populate form from uiState ──
+    // ✅ FIX: propertyType ab String hai, .displayName() directly call karo
     LaunchedEffect(uiState.propertyDetail) {
         uiState.propertyDetail?.let { prop ->
             if (!isFormInitialized) {
                 title             = prop.title
                 description       = prop.description
-                propertyType      = prop.propertyType.displayName()
+                // ✅ FIX: prop.propertyType is now String — convert to display name via enum
+                propertyType      = try {
+                    PropertyType.valueOf(prop.propertyType).displayName()
+                } catch (e: Exception) { "Apartment" }
                 pricePerNight     = prop.pricePerNight.toString()
                 bedrooms          = prop.bedrooms.toString()
                 bathrooms         = prop.bathrooms.toString()
@@ -97,7 +95,6 @@ fun EditPropertyScreen(
         }
     }
 
-    // ── Handle Result ──
     LaunchedEffect(uiState.actionSuccess, uiState.errorMessage) {
         if (uiState.actionSuccess) {
             viewModel.clearMessages()
@@ -138,20 +135,23 @@ fun EditPropertyScreen(
         bottomBar = {
             EditPropertyBottomBar(isLoading = uiState.isLoading) {
                 uiState.propertyDetail?.let { currentProp ->
-                    val propTypeEnum = PropertyType.entries.find { it.displayName() == propertyType } ?: currentProp.propertyType
+                    // ✅ FIX: propertyType String store karo — enum nahi
+                    val propTypeString = PropertyType.entries
+                        .find { it.displayName() == propertyType }
+                        ?.name ?: currentProp.propertyType
 
                     val updatedProperty = currentProp.copy(
-                        title = title,
-                        description = description,
-                        propertyType = propTypeEnum,
+                        title         = title,
+                        description   = description,
+                        propertyType  = propTypeString, // ✅ String
                         pricePerNight = pricePerNight.toDoubleOrNull() ?: currentProp.pricePerNight,
-                        bedrooms = bedrooms.toIntOrNull() ?: currentProp.bedrooms,
-                        bathrooms = bathrooms.toIntOrNull() ?: currentProp.bathrooms,
-                        areaSqFt = area.toDoubleOrNull(),
-                        amenities = selectedAmenities.toList(),
-                        city = city,
-                        address = address,
-                        imageUrls = existingImageUrls.filterNot { it in removedImageUrls }
+                        bedrooms      = bedrooms.toIntOrNull() ?: currentProp.bedrooms,
+                        bathrooms     = bathrooms.toIntOrNull() ?: currentProp.bathrooms,
+                        areaSqFt      = area.toDoubleOrNull(),
+                        amenities     = selectedAmenities.toList(),
+                        city          = city,
+                        address       = address,
+                        imageUrls     = existingImageUrls.filterNot { it in removedImageUrls }
                     )
                     viewModel.updateProperty(updatedProperty, newImageUris)
                 }
@@ -164,21 +164,38 @@ fun EditPropertyScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 20.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 item { Spacer(Modifier.height(4.dp)) }
 
-                // --- Form Sections ---
                 item {
                     EditSectionCard("Basic Information", Icons.Default.Info) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            OutlinedTextField(value = title, onValueChange = { title = it; hasUnsavedChanges = true }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(value = description, onValueChange = { description = it; hasUnsavedChanges = true }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
+                            OutlinedTextField(
+                                value = title,
+                                onValueChange = { title = it; hasUnsavedChanges = true },
+                                label = { Text("Title") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = description,
+                                onValueChange = { description = it; hasUnsavedChanges = true },
+                                label = { Text("Description") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3
+                            )
                             Text("Property Type", fontWeight = FontWeight.Medium)
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(EDIT_PROPERTY_TYPES) { type ->
-                                    FilterChip(selected = propertyType == type, onClick = { propertyType = type; hasUnsavedChanges = true }, label = { Text(type) })
+                                    FilterChip(
+                                        selected = propertyType == type,
+                                        onClick = { propertyType = type; hasUnsavedChanges = true },
+                                        label = { Text(type) }
+                                    )
                                 }
                             }
                         }
@@ -188,10 +205,26 @@ fun EditPropertyScreen(
                 item {
                     EditSectionCard("Pricing & Details", Icons.Default.AttachMoney) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            OutlinedTextField(value = pricePerNight, onValueChange = { pricePerNight = it; hasUnsavedChanges = true }, label = { Text("Price/Night") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(
+                                value = pricePerNight,
+                                onValueChange = { pricePerNight = it; hasUnsavedChanges = true },
+                                label = { Text("Price/Night") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                OutlinedTextField(value = bedrooms, onValueChange = { bedrooms = it; hasUnsavedChanges = true }, label = { Text("Beds") }, modifier = Modifier.weight(1f))
-                                OutlinedTextField(value = bathrooms, onValueChange = { bathrooms = it; hasUnsavedChanges = true }, label = { Text("Baths") }, modifier = Modifier.weight(1f))
+                                OutlinedTextField(
+                                    value = bedrooms,
+                                    onValueChange = { bedrooms = it; hasUnsavedChanges = true },
+                                    label = { Text("Beds") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedTextField(
+                                    value = bathrooms,
+                                    onValueChange = { bathrooms = it; hasUnsavedChanges = true },
+                                    label = { Text("Baths") },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
                     }
@@ -203,10 +236,16 @@ fun EditPropertyScreen(
                             EDIT_AMENITIES_LIST.chunked(3).forEach { row ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     row.forEach { am ->
-                                        FilterChip(selected = am in selectedAmenities, onClick = {
-                                            selectedAmenities = if (am in selectedAmenities) selectedAmenities - am else selectedAmenities + am
-                                            hasUnsavedChanges = true
-                                        }, label = { Text(am, fontSize = 10.sp) }, modifier = Modifier.weight(1f))
+                                        FilterChip(
+                                            selected = am in selectedAmenities,
+                                            onClick = {
+                                                selectedAmenities = if (am in selectedAmenities)
+                                                    selectedAmenities - am else selectedAmenities + am
+                                                hasUnsavedChanges = true
+                                            },
+                                            label = { Text(am, fontSize = 10.sp) },
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                 }
                             }
@@ -215,10 +254,12 @@ fun EditPropertyScreen(
                 }
 
                 item {
-                    EditPhotoSection(existingImageUrls, removedImageUrls, newImageUris,
+                    EditPhotoSection(
+                        existingImageUrls, removedImageUrls, newImageUris,
                         { removedImageUrls = removedImageUrls + it; hasUnsavedChanges = true },
                         { newImageUris = newImageUris + it; hasUnsavedChanges = true },
-                        { newImageUris = newImageUris - it; hasUnsavedChanges = true })
+                        { newImageUris = newImageUris - it; hasUnsavedChanges = true }
+                    )
                 }
 
                 item { Spacer(Modifier.height(20.dp)) }
@@ -228,7 +269,11 @@ fun EditPropertyScreen(
 }
 
 @Composable
-private fun EditSectionCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, content: @Composable () -> Unit) {
+private fun EditSectionCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -236,7 +281,10 @@ private fun EditSectionCard(title: String, icon: androidx.compose.ui.graphics.ve
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
                 Icon(icon, null, tint = PrimaryBlue, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(title, fontWeight = FontWeight.SemiBold)
@@ -247,8 +295,17 @@ private fun EditSectionCard(title: String, icon: androidx.compose.ui.graphics.ve
 }
 
 @Composable
-private fun EditPhotoSection(existing: List<String>, removed: Set<String>, new: List<Uri>, onRemoveOld: (String) -> Unit, onAddNew: (List<Uri>) -> Unit, onRemoveNew: (Uri) -> Unit) {
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { onAddNew(it) }
+private fun EditPhotoSection(
+    existing: List<String>,
+    removed: Set<String>,
+    new: List<Uri>,
+    onRemoveOld: (String) -> Unit,
+    onAddNew: (List<Uri>) -> Unit,
+    onRemoveNew: (Uri) -> Unit
+) {
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { onAddNew(it) }
     val activeOld = existing.filterNot { it in removed }
 
     EditSectionCard("Photos", Icons.Default.PhotoLibrary) {
@@ -257,7 +314,10 @@ private fun EditPhotoSection(existing: List<String>, removed: Set<String>, new: 
                 items(activeOld) { url -> EditableImageItem(url) { onRemoveOld(url) } }
                 items(new) { uri -> EditableImageItem(uri) { onRemoveNew(uri) } }
             }
-            OutlinedButton(onClick = { launcher.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { launcher.launch("image/*") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Icon(Icons.Default.AddPhotoAlternate, null)
                 Text(" Add More Photos")
             }
@@ -268,8 +328,19 @@ private fun EditPhotoSection(existing: List<String>, removed: Set<String>, new: 
 @Composable
 private fun EditableImageItem(model: Any?, onRemove: () -> Unit) {
     Box(modifier = Modifier.size(90.dp).clip(RoundedCornerShape(10.dp))) {
-        AsyncImage(model = model, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(0.5f), CircleShape).size(24.dp)) {
+        AsyncImage(
+            model = model,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .background(Color.Black.copy(0.5f), CircleShape)
+                .size(24.dp)
+        ) {
             Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
         }
     }
@@ -285,8 +356,9 @@ private fun EditPropertyBottomBar(isLoading: Boolean, onSave: () -> Unit) {
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(PrimaryBlue)
         ) {
-            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-            else {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+            } else {
                 Icon(Icons.Default.Save, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Save Changes")

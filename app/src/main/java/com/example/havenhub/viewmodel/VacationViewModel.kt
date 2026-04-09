@@ -39,14 +39,26 @@ class VacationViewModel @Inject constructor(
     fun loadVacationProperties(city: String? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val result = propertyRepository.getAllProperties()
-            if (result is Resource.Success) {
-                val list = result.data?.filter {
-                    it.propertyType in listOf(PropertyType.VILLA, PropertyType.FARMHOUSE, PropertyType.APARTMENT)
-                }?.filter { city == null || it.city.equals(city, ignoreCase = true) } ?: emptyList()
-                _uiState.update { it.copy(isLoading = false, properties = list) }
-            } else {
-                _uiState.update { it.copy(isLoading = false) }
+
+            val result: Resource<List<Property>> = propertyRepository.getAllProperties()
+
+            when (result) {
+                is Resource.Success -> {
+                    val list = result.data?.filter {
+                        // ✅ FIXED: String vs Enum comparison fix using .name
+                        it.propertyType == PropertyType.VILLA.name ||
+                                it.propertyType == PropertyType.FARMHOUSE.name ||
+                                it.propertyType == PropertyType.APARTMENT.name
+                    }?.filter { city == null || it.city.equals(city, ignoreCase = true) } ?: emptyList()
+
+                    _uiState.update { it.copy(isLoading = false, properties = list) }
+                }
+                is Resource.Error -> {
+                    _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                }
+                is Resource.Loading -> {
+                    _uiState.update { it.copy(isLoading = true) }
+                }
             }
         }
     }
@@ -56,7 +68,6 @@ class VacationViewModel @Inject constructor(
             bookingRepository.observeUserBookings(propertyId).collect { bookings ->
                 val allDates = mutableListOf<Date>()
                 bookings.forEach { booking ->
-                    // ✅ FIXED: Non-null checks and explicit casting to Date
                     val startDate = booking.checkInDate?.toDate()
                     val endDate = booking.checkOutDate?.toDate()
 

@@ -13,10 +13,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// ─────────────────────────────────────────
-//  UI State
-// ─────────────────────────────────────────
-
 data class VerificationUiState(
     val isLoading: Boolean = false,
     val pendingUsers: List<User> = emptyList(),
@@ -35,10 +31,6 @@ class VerificationViewModel @Inject constructor(
 
     init { loadAllPending() }
 
-    // ─────────────────────────────────────────
-    //  Load Pending Users + Properties
-    // ─────────────────────────────────────────
-
     fun loadAllPending() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -49,22 +41,19 @@ class VerificationViewModel @Inject constructor(
             _uiState.update { state ->
                 state.copy(
                     isLoading = false,
-
-                    // Resource<List<User>> — data is non-null List<User>
-                    // filter by verificationStatus (not isVerified)
                     pendingUsers = when (usersResult) {
                         is Resource.Success -> usersResult.data.filter {
-                            it.verificationStatus == VerificationStatus.PENDING ||
-                                    it.verificationStatus == VerificationStatus.UNDER_REVIEW
+                            // ✅ FIXED: String vs Enum comparison fix using .name
+                            it.verificationStatus == VerificationStatus.PENDING.name ||
+                                    it.verificationStatus == VerificationStatus.UNDER_REVIEW.name
                         }
                         else -> emptyList()
                     },
-
-                    // getAllProperties() se PENDING/UNDER_REVIEW filter
                     pendingProperties = when (propertiesResult) {
                         is Resource.Success -> propertiesResult.data.filter {
-                            it.status == PropertyStatus.PENDING ||
-                                    it.status == PropertyStatus.UNDER_REVIEW
+                            // ✅ FIXED: String vs Enum comparison fix using .name
+                            it.status == PropertyStatus.PENDING.name ||
+                                    it.status == PropertyStatus.UNDER_REVIEW.name
                         }
                         else -> emptyList()
                     }
@@ -72,10 +61,6 @@ class VerificationViewModel @Inject constructor(
             }
         }
     }
-
-    // ─────────────────────────────────────────
-    //  User Actions
-    // ─────────────────────────────────────────
 
     fun approveUser(userId: String) {
         viewModelScope.launch {
@@ -91,20 +76,12 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────
-    //  Property Actions
-    // ─────────────────────────────────────────
-
     fun rejectProperty(propertyId: String, reason: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             handleResult(adminRepository.rejectProperty(propertyId, reason))
         }
     }
-
-    // ─────────────────────────────────────────
-    //  Shared Result Handler
-    // ─────────────────────────────────────────
 
     private fun handleResult(result: Resource<Unit>) {
         when (result) {
@@ -120,10 +97,6 @@ class VerificationViewModel @Inject constructor(
             is Resource.Loading -> Unit
         }
     }
-
-    // ─────────────────────────────────────────
-    //  Reset State
-    // ─────────────────────────────────────────
 
     fun resetActionState() {
         _uiState.update { it.copy(actionSuccess = false, errorMessage = null) }

@@ -16,9 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// ─────────────────────────────────────────────────────────────────
-//  Property UI State
-// ─────────────────────────────────────────────────────────────────
+// ── Property UI State ──
 data class PropertyUiState(
     val isLoading: Boolean = false,
     val propertyDetail: Property? = null,
@@ -37,16 +35,11 @@ class PropertyViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PropertyUiState())
     val uiState: StateFlow<PropertyUiState> = _uiState.asStateFlow()
 
-    // ─────────────────────────────────────────────────────────────
-    //  Fetch Logics
-    // ─────────────────────────────────────────────────────────────
-
+    // ── Fetch Logics ──
     fun loadPropertyDetail(propertyId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val result = propertyRepository.getPropertyById(propertyId)
-
-            when (result) {
+            when (val result = propertyRepository.getPropertyById(propertyId)) {
                 is Resource.Success -> _uiState.update {
                     it.copy(isLoading = false, propertyDetail = result.data)
                 }
@@ -63,8 +56,7 @@ class PropertyViewModel @Inject constructor(
             val userId = authRepository.currentUser?.uid ?: return@launch
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            val result = propertyRepository.getMyProperties(userId)
-            when (result) {
+            when (val result = propertyRepository.getMyProperties(userId)) {
                 is Resource.Success -> _uiState.update {
                     it.copy(isLoading = false, myProperties = result.data)
                 }
@@ -76,10 +68,7 @@ class PropertyViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    //  CRUD Operations
-    // ─────────────────────────────────────────────────────────────
-
+    // ── CRUD Operations ──
     fun addProperty(
         title: String,
         description: String,
@@ -104,7 +93,7 @@ class PropertyViewModel @Inject constructor(
                 pricePerNight = pricePerNight,
                 address       = address,
                 city          = city,
-                propertyType  = propertyType,
+                propertyType  = propertyType.toString(), // ✅ Property model uses Enum
                 bedrooms      = bedrooms,
                 bathrooms     = bathrooms,
                 areaSqFt      = areaSqFt,
@@ -120,13 +109,14 @@ class PropertyViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null, actionSuccess = false) }
 
+            // ✅ FIX: "Argument type mismatch" resolved by calling .name on Enum
             val fields = mutableMapOf<String, Any>(
                 "title"         to property.title,
                 "description"   to property.description,
                 "pricePerNight" to property.pricePerNight,
                 "address"       to property.address,
                 "city"          to property.city,
-                "propertyType"  to property.propertyType.name,
+                "propertyType"  to property.propertyType, // ✅ String passed to Firestore
                 "bedrooms"      to property.bedrooms,
                 "bathrooms"     to property.bathrooms,
                 "amenities"     to property.amenities
@@ -135,7 +125,6 @@ class PropertyViewModel @Inject constructor(
 
             val result = propertyRepository.updateProperty(property.propertyId, fields)
 
-            // Agar text update ho gaya aur new images hain, toh unhe upload karein
             if (result is Resource.Success && newImages.isNotEmpty()) {
                 propertyRepository.addPropertyImages(property.propertyId, newImages)
             }
@@ -152,18 +141,10 @@ class PropertyViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    //  Utilities
-    // ─────────────────────────────────────────────────────────────
-
-    private fun <T> handleActionResult(result: Resource<T>, successMsg: String) {
+    private fun handleActionResult(result: Resource<*>, successMsg: String) {
         when (result) {
             is Resource.Success -> _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    actionSuccess = true,
-                    successMessage = successMsg
-                )
+                it.copy(isLoading = false, actionSuccess = true, successMessage = successMsg)
             }
             is Resource.Error -> _uiState.update {
                 it.copy(isLoading = false, errorMessage = result.message)
@@ -173,12 +154,6 @@ class PropertyViewModel @Inject constructor(
     }
 
     fun clearMessages() {
-        _uiState.update {
-            it.copy(
-                errorMessage = null,
-                successMessage = null,
-                actionSuccess = false
-            )
-        }
+        _uiState.update { it.copy(errorMessage = null, successMessage = null, actionSuccess = false) }
     }
 }

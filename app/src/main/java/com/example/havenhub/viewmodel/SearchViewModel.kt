@@ -12,16 +12,11 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// ─────────────────────────────────────────────
-//  Search UI State
-// ─────────────────────────────────────────────
 data class SearchUiState(
     val isLoading: Boolean = false,
     val searchQuery: String = "",
     val searchResults: List<Property> = emptyList(),
     val errorMessage: String? = null,
-
-    // Filter States
     val minPrice: Double? = null,
     val maxPrice: Double? = null,
     val selectedCity: String? = null,
@@ -38,44 +33,28 @@ class SearchViewModel @Inject constructor(
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
-        // Initial search to load properties
         performSearch()
         setupAutoSearch()
     }
 
-    // ─────────────────────────────────────────
-    //  Auto Search Logic (Debounce)
-    // ─────────────────────────────────────────
     @OptIn(FlowPreview::class)
     private fun setupAutoSearch() {
         viewModelScope.launch {
             _uiState
                 .map { it.searchQuery }
-                .debounce(500) // 500ms wait after user stops typing
+                .debounce(500)
                 .distinctUntilChanged()
-                .collect {
-                    performSearch()
-                }
+                .collect { performSearch() }
         }
     }
-
-    // ─────────────────────────────────────────
-    //  Field Updates
-    // ─────────────────────────────────────────
 
     fun onQueryChange(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
     }
 
-    // ─────────────────────────────────────────
-    //  Perform Search & Filtering
-    // ─────────────────────────────────────────
-
     fun performSearch() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
-            // Fetching all properties from repository
             val result = propertyRepository.getAllProperties()
 
             when (result) {
@@ -83,7 +62,6 @@ class SearchViewModel @Inject constructor(
                     val currentState = _uiState.value
                     var filteredList = result.data
 
-                    // 1. Search Query Filter (Title, City, Address)
                     if (currentState.searchQuery.isNotBlank()) {
                         val q = currentState.searchQuery.lowercase().trim()
                         filteredList = filteredList.filter {
@@ -93,7 +71,6 @@ class SearchViewModel @Inject constructor(
                         }
                     }
 
-                    // 2. Price Range Filter
                     currentState.minPrice?.let { min ->
                         filteredList = filteredList.filter { it.pricePerNight >= min }
                     }
@@ -101,31 +78,23 @@ class SearchViewModel @Inject constructor(
                         filteredList = filteredList.filter { it.pricePerNight <= max }
                     }
 
-                    // 3. City Filter
                     currentState.selectedCity?.let { city ->
                         filteredList = filteredList.filter { it.city.equals(city, ignoreCase = true) }
                     }
 
-                    // 4. Property Type Filter (Enum based)
+                    // ✅ FIX: Comparison logic fixed to avoid Type Mismatch
                     currentState.propertyType?.let { type ->
-                        filteredList = filteredList.filter { it.propertyType == type }
+                        filteredList = filteredList.filter { it.propertyType == type.toString() }
                     }
 
-                    // 5. Bedroom Count Filter
                     currentState.minBedrooms?.let { min ->
                         filteredList = filteredList.filter { it.bedrooms >= min }
                     }
 
-                    _uiState.update { it.copy(
-                        isLoading = false,
-                        searchResults = filteredList
-                    ) }
+                    _uiState.update { it.copy(isLoading = false, searchResults = filteredList) }
                 }
                 is Resource.Error -> {
-                    _uiState.update { it.copy(
-                        isLoading = false,
-                        errorMessage = result.message
-                    ) }
+                    _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
                 }
                 is Resource.Loading -> {
                     _uiState.update { it.copy(isLoading = true) }
@@ -134,34 +103,16 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────
-    //  Filter Actions
-    // ─────────────────────────────────────────
-
-    fun applyFilters(
-        minPrice: Double?,
-        maxPrice: Double?,
-        city: String?,
-        type: PropertyType?,
-        bedrooms: Int?
-    ) {
+    fun applyFilters(minPrice: Double?, maxPrice: Double?, city: String?, type: PropertyType?, bedrooms: Int?) {
         _uiState.update { it.copy(
-            minPrice = minPrice,
-            maxPrice = maxPrice,
-            selectedCity = city,
-            propertyType = type,
-            minBedrooms = bedrooms
+            minPrice = minPrice, maxPrice = maxPrice, selectedCity = city, propertyType = type, minBedrooms = bedrooms
         ) }
         performSearch()
     }
 
     fun clearFilters() {
         _uiState.update { it.copy(
-            minPrice = null,
-            maxPrice = null,
-            selectedCity = null,
-            propertyType = null,
-            minBedrooms = null
+            minPrice = null, maxPrice = null, selectedCity = null, propertyType = null, minBedrooms = null
         ) }
         performSearch()
     }

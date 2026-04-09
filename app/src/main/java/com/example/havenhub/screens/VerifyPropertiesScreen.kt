@@ -5,12 +5,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight // ✅ ChevronRight ki jagah sahi import
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -19,11 +21,6 @@ import androidx.navigation.NavController
 import com.example.havenhub.data.Property
 import com.example.havenhub.viewmodel.VerificationViewModel
 
-// ─────────────────────────────────────────────────────────────────
-// VerifyPropertiesScreen.kt
-// Compatible with VerificationViewModel + Property.kt
-// ─────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VerifyPropertiesScreen(
@@ -31,15 +28,15 @@ fun VerifyPropertiesScreen(
     viewModel: VerificationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-
-    // ── Snackbar for errors/success ────────────────────────────────
     val snackbarHostState = remember { SnackbarHostState() }
+
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.resetActionState()
         }
     }
+
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             snackbarHostState.showSnackbar("Action completed successfully")
@@ -51,75 +48,60 @@ fun VerifyPropertiesScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Verify Properties") },
+                title = { Text("Verify Properties", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         }
     ) { paddingValues ->
-        when {
-            uiState.isLoading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            when {
+                uiState.isLoading -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
-            }
 
-            uiState.pendingProperties.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                uiState.pendingProperties.isEmpty() -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                         )
-                        Text(
-                            text = "No properties to verify",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = "No properties to verify", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
-            }
 
-            else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item {
-                        Text(
-                            text = "${uiState.pendingProperties.size} pending",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        item {
+                            Text(
+                                text = "${uiState.pendingProperties.size} Pending Review",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                    items(uiState.pendingProperties, key = { it.propertyId }) { property ->
-                        PendingPropertyCard(
-                            property = property,
-                            onClick = {
-                                navController.navigate("verify_detail/${property.propertyId}")
-                            }
-                        )
+                        items(uiState.pendingProperties, key = { it.propertyId }) { property ->
+                            // ✅ Navigation route fixed
+                            AdminPropertyCard(
+                                property = property,
+                                onClick = {
+                                    navController.navigate("property_verification_detail/${property.propertyId}")
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -127,16 +109,12 @@ fun VerifyPropertiesScreen(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// PendingPropertyCard
-// FIX: location.address → Property.kt mein direct `address` field
-//      hai aur `city` bhi — location object ka address nahi use kiya
-// ─────────────────────────────────────────────────────────────────
 @Composable
-fun PendingPropertyCard(property: Property, onClick: () -> Unit) {
+fun AdminPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        onClick = onClick
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -145,13 +123,10 @@ fun PendingPropertyCard(property: Property, onClick: () -> Unit) {
             Surface(
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(50.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Home,
-                        contentDescription = null
-                    )
+                    Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -161,29 +136,33 @@ fun PendingPropertyCard(property: Property, onClick: () -> Unit) {
                 Text(
                     text = property.title,
                     fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1
                 )
-                // FIX: property.address direct field use kiya
-                // city fallback agar address empty ho
+
                 Text(
                     text = property.address.ifEmpty { property.city },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // Extra info — type aur price
+
+                // ✅ Manual Logic to fix displayName() error
+                val typeLabel = property.propertyType.lowercase().replaceFirstChar { it.uppercase() }
+
                 Text(
-                    text = "${property.propertyType.displayName()} · ${property.formattedPrice}/night",
+                    text = "$typeLabel · ${property.formattedPrice}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
-            Button(
-                onClick = onClick,
-                modifier = Modifier.height(36.dp)
-            ) {
-                Text("Review", fontSize = 12.sp)
-            }
+            // ✅ ChevronRight ki jagah sahi icon jo error nahi dega
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline
+            )
         }
     }
 }

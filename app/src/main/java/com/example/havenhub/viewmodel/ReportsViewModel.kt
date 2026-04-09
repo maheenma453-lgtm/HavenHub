@@ -85,7 +85,7 @@ class ReportsViewModel @Inject constructor(
                         completedBookings = completed,
                         cancelledBookings = cancelled,
                         totalProperties = properties.size,
-                        activeProperties = properties.count { it.status.name == "APPROVED" }
+                        activeProperties = properties.count { it.status== "APPROVED" }
                     )
                 )
             }
