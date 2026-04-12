@@ -3,10 +3,8 @@ package com.example.havenhub.screens
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
@@ -15,8 +13,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -24,296 +20,233 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.viewmodel.AuthViewModel
+import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.BookingViewModel
-import com.example.havenhub.viewmodel.HomeViewModel
 
 @Composable
 fun BookingConfirmationScreen(
-    navController: NavController,
-    bookingId    : String,
-    viewModel    : BookingViewModel = hiltViewModel()
+    navController : NavController,
+    bookingId     : String,
+    viewModel     : BookingViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // ✅ BookingViewModel se booking load karo
     LaunchedEffect(bookingId) {
         viewModel.loadBookingById(bookingId)
     }
 
+    // ✅ currentBooking use karo
     val booking = uiState.currentBooking
 
-    // Bounce animation for checkmark
-    val scale = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        scale.animateTo(
-            targetValue   = 1f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness    = Spring.StiffnessLow
-            )
-        )
-    }
+    val scale by animateFloatAsState(
+        targetValue   = 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness    = Spring.StiffnessLow
+        ),
+        label = "confirmScale"
+    )
 
-    Scaffold(
-        containerColor = Color(0xFFF8FAFC),
-        bottomBar = {
-            Surface(
-                modifier        = Modifier.fillMaxWidth(),
-                color           = Color.White,
-                shadowElevation = 8.dp
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BackgroundWhite)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(60.dp))
+
+        // ── Animated Success Circle ──
+        Box(
+            modifier = Modifier
+                .scale(scale)
+                .size(110.dp)
+                .clip(CircleShape)
+                .background(SuccessGreen),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector        = Icons.Default.Check,
+                contentDescription = "Confirmed",
+                tint               = BackgroundWhite,
+                modifier           = Modifier.size(56.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text       = "Booking Submitted!",
+            fontSize   = 26.sp,
+            fontWeight = FontWeight.Bold,
+            color      = TextPrimary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text       = "Booking request bhej di gayi hai.\nAdmin approve karne ke baad confirm hogi.",
+            fontSize   = 14.sp,
+            color      = TextSecondary,
+            textAlign  = TextAlign.Center,
+            lineHeight = 21.sp
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // ── Booking Summary Card ──
+        if (uiState.isLoading) {
+            CircularProgressIndicator(color = PrimaryBlue)
+        } else {
+            Card(
+                modifier  = Modifier.fillMaxWidth(),
+                shape     = RoundedCornerShape(16.dp),
+                colors    = CardDefaults.cardColors(containerColor = SurfaceVariantLight),
+                elevation = CardDefaults.cardElevation(0.dp)
             ) {
-                // ── Sirf View My Bookings — Pay Now hata diya ────
-                Button(
-                    onClick = {
-                        navController.navigate(Screen.MyBookings.route) {
-                            popUpTo(Screen.Home.route)
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 16.dp)
-                        .height(56.dp),
-                    shape  = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF0D1B3E),
-                        contentColor   = Color.White
-                    )
-                ) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        "View My Bookings",
-                        fontSize   = 16.sp,
+                        "Booking Details",
+                        fontSize   = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
-                }
-            }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // ── Header with checkmark animation ──────────────────
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(260.dp)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF0D1B3E).copy(alpha = 0.08f),
-                                Color.Transparent
-                            )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    BookingDetailRow(
+                        label = "Booking ID",
+                        value = "#${bookingId.take(8).uppercase()}"
+                    )
+                    BookingDetailRow(
+                        label = "Property",
+                        value = booking?.propertyTitle ?: "-"
+                    )
+                    BookingDetailRow(
+                        label = "Location",
+                        value = booking?.propertyAddress ?: "-"
+                    )
+                    BookingDetailRow(
+                        label = "Tenant",
+                        value = booking?.tenantName ?: "-"
+                    )
+                    BookingDetailRow(
+                        label = "Status",
+                        value = booking?.bookingStatus?.displayName() ?: "Pending"
+                    )
+                    BookingDetailRow(
+                        label = "Payment",
+                        value = booking?.paymentStatusEnum?.displayName() ?: "Pending"
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color    = BorderGray
+                    )
+
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Total Amount",
+                            fontSize   = 15.sp,
+                            fontWeight = FontWeight.Bold
                         )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    // Animated checkmark circle
+                        Text(
+                            text       = booking?.formattedTotal ?: "PKR 0",
+                            fontSize   = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = PrimaryBlue
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Box(
                         modifier = Modifier
-                            .scale(scale.value)
-                            .size(100.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF4CAF50)),
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(WarningOrange.copy(alpha = 0.12f))
+                            .padding(10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector        = Icons.Default.Check,
-                            contentDescription = null,
-                            tint               = Color.White,
-                            modifier           = Modifier.size(50.dp)
-                        )
-                    }
-                    Spacer(Modifier.height(20.dp))
-                    Text(
-                        text       = "Booking Submitted!",
-                        fontSize   = 26.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color      = Color(0xFF0D1B3E)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text     = "Your request is being processed",
-                        fontSize = 15.sp,
-                        color    = Color(0xFF64748B)
-                    )
-                }
-            }
-
-            // ── Booking Details Card ──────────────────────────────
-            if (uiState.isLoading) {
-                Box(
-                    Modifier.fillMaxWidth().height(200.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color(0xFF0D1B3E))
-                }
-            } else {
-                Card(
-                    modifier  = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    shape     = RoundedCornerShape(24.dp),
-                    colors    = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
-                ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        // Header row
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment     = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Booking Details",
-                                fontSize   = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = Color(0xFF1E293B)
-                            )
-                            Surface(
-                                color = Color(0xFFF1F5F9),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    "#${bookingId.take(8).uppercase()}",
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                    fontSize   = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color      = Color(0xFF64748B)
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(20.dp))
-
-                        DetailRow(label = "Property", value = booking?.propertyTitle ?: "-")
-                        DetailRow(label = "Location", value = booking?.propertyAddress ?: "-", isMultiLine = true)
-                        DetailRow(label = "Tenant",   value = booking?.tenantName ?: "-")
-
-                        StatusBadgeRow(
-                            label      = "Status",
-                            status     = booking?.bookingStatus?.displayName() ?: "Pending",
-                            badgeColor = Color(0xFFF59E0B)
-                        )
-
-                        Spacer(Modifier.height(16.dp))
-                        HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
-                        Spacer(Modifier.height(16.dp))
-
-                        // Total amount
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment     = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Total Amount",
-                                fontSize = 15.sp,
-                                color    = Color(0xFF64748B)
-                            )
-                            Text(
-                                text       = booking?.formattedTotal ?: "PKR 0",
-                                fontSize   = 22.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color      = Color(0xFF0D1B3E)
-                            )
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-                        HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
-                        Spacer(Modifier.height(12.dp))
-
-                        // Info note
                         Text(
-                            text      = "💡 You can pay from My Bookings → Pending tab",
-                            fontSize  = 12.sp,
-                            color     = Color(0xFF64748B),
-                            textAlign = TextAlign.Center,
-                            modifier  = Modifier.fillMaxWidth()
+                            text       = "Payment Pending",
+                            fontSize   = 13.sp,
+                            color      = WarningOrange,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
+        }
 
-            Spacer(Modifier.height(24.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
-            uiState.errorMessage?.let { error ->
-                Text(
-                    text      = error,
-                    color     = Color.Red,
-                    fontSize  = 13.sp,
-                    modifier  = Modifier.padding(horizontal = 24.dp),
-                    textAlign = TextAlign.Center
-                )
-            }
+        // ── Action Buttons ──
+        Button(
+            onClick = {
+                if (booking != null) {
+                    navController.navigate(
+                        Screen.Payment.createRoute(
+                            bookingId = bookingId,
+                            payerId   = booking.tenantId,
+                            payeeId   = booking.landlordId,
+                            payerName = booking.tenantName,
+                            payeeName = booking.landlordName,
+                            amount    = booking.totalAmount
+                        )
+                    )
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape    = RoundedCornerShape(12.dp),
+            colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+            enabled  = booking != null && !uiState.isLoading
+        ) {
+            Text("Pay Now", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
 
-            Spacer(Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = {
+                navController.navigate(Screen.MyBookings.route) {
+                    popUpTo(Screen.Home.route)
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Pay Later — View Bookings", fontSize = 14.sp, color = PrimaryBlue)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        uiState.errorMessage?.let { error ->
+            Text(text = error, color = ErrorRed, fontSize = 14.sp)
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Reusable components
-// ─────────────────────────────────────────────────────────────
-
 @Composable
-private fun DetailRow(
-    label      : String,
-    value      : String,
-    isMultiLine: Boolean = false
-) {
+private fun BookingDetailRow(label: String, value: String) {
     Row(
         modifier              = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            label,
-            fontSize = 14.sp,
-            color    = Color(0xFF94A3B8),
-            modifier = Modifier.weight(1f)
-        )
+        Text(text = label, fontSize = 13.sp, color = TextSecondary)
         Text(
             text       = value,
-            fontSize   = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color      = Color(0xFF334155),
-            textAlign  = TextAlign.End,
-            modifier   = Modifier.weight(1.5f),
-            maxLines   = if (isMultiLine) 2 else 1
+            fontSize   = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color      = TextPrimary
         )
-    }
-}
-
-@Composable
-private fun StatusBadgeRow(
-    label     : String,
-    status    : String,
-    badgeColor: Color
-) {
-    Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically
-    ) {
-        Text(label, fontSize = 14.sp, color = Color(0xFF94A3B8))
-        Surface(
-            color = badgeColor.copy(alpha = 0.12f),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Text(
-                text     = status,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                fontSize   = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color      = badgeColor
-            )
-        }
     }
 }
