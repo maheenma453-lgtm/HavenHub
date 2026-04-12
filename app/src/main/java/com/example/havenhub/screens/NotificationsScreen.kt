@@ -53,7 +53,7 @@ fun NotificationsScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
-                                    .background(PrimaryBlue)
+                                    .background(Color.White.copy(alpha = 0.2f))
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 Text(
@@ -116,84 +116,71 @@ fun NotificationsScreen(
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 items(uiState.notifications, key = { it.notificationId }) { notification ->
+                    val enumType = try {
+                        NotificationType.valueOf(notification.type)
+                    } catch (e: Exception) {
+                        NotificationType.BOOKING_REQUESTED
+                    }
+
                     NotificationCard(
                         item    = notification,
+                        enumType = enumType,
                         onClick = {
                             viewModel.markAsRead(notification.notificationId, userId)
-                            // Deep link navigation based on type
-                            when (notification.type) {
+
+                            when (enumType) {
                                 NotificationType.BOOKING_CONFIRMED,
                                 NotificationType.BOOKING_CANCELLED,
                                 NotificationType.BOOKING_REMINDER,
                                 NotificationType.BOOKING_COMPLETED,
                                 NotificationType.BOOKING_REQUESTED -> {
                                     if (notification.referenceId.isNotEmpty()) {
-                                        navController.navigate(
-                                            Screen.BookingDetails.createRoute(notification.referenceId)
-                                        )
-                                    }
-                                }
-                                NotificationType.PAYMENT_RECEIVED,
-                                NotificationType.PAYMENT_FAILED,
-                                NotificationType.REFUND_ISSUED -> {
-                                    if (notification.referenceId.isNotEmpty()) {
-                                        navController.navigate(
-                                            Screen.PaymentSuccess.createRoute(notification.referenceId)
-                                        )
+                                        navController.navigate(Screen.BookingDetails.createRoute(notification.referenceId))
                                     }
                                 }
                                 NotificationType.NEW_MESSAGE -> {
                                     if (notification.referenceId.isNotEmpty()) {
-                                        navController.navigate(
-                                            Screen.Chat.createRoute(notification.referenceId)
-                                        )
+                                        navController.navigate(Screen.Chat.createRoute(notification.referenceId))
                                     }
                                 }
-                                else -> { }
+                                else -> {
+                                    navController.navigate("notification_detail/${notification.notificationId}")
+                                }
                             }
                         }
                     )
                 }
             }
         }
-
-        // Error Message
-        uiState.errorMessage?.let { error ->
-            Text(
-                text     = error,
-                color    = ErrorRed,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(16.dp)
-            )
-        }
     }
 }
 
 @Composable
-fun NotificationCard(item: Notification, onClick: () -> Unit) {
-    val bgColor = if (item.isRead) MaterialTheme.colorScheme.surface
-    else PrimaryBlue.copy(alpha = 0.07f)
+fun NotificationCard(item: Notification, enumType: NotificationType, onClick: () -> Unit) {
+    val bgColor = if (item.isRead) Color.Transparent else PrimaryBlue.copy(alpha = 0.05f)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bgColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
-            modifier         = Modifier
-                .size(44.dp)
+            modifier = Modifier
+                .size(40.dp)
                 .clip(CircleShape)
-                .background(notificationColor(item.type).copy(alpha = 0.15f)),
+                // ✅ Changed to call screenNotificationColor
+                .background(screenNotificationColor(enumType).copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector        = notificationIcon(item.type),
+                // ✅ Changed to call screenNotificationIcon
+                imageVector = screenNotificationIcon(enumType),
                 contentDescription = null,
-                tint     = notificationColor(item.type),
-                modifier = Modifier.size(22.dp)
+                tint = screenNotificationColor(enumType),
+                modifier = Modifier.size(20.dp)
             )
         }
 
@@ -202,37 +189,42 @@ fun NotificationCard(item: Notification, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text       = item.type.displayName(),
-                    fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Normal,
-                    fontSize   = 14.sp,
-                    color      = TextPrimary,
-                    modifier   = Modifier.weight(1f)
+                    text = enumType.name.replace("_", " "),
+                    fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text     = item.createdAt?.toDate()?.toString() ?: "-",
+                    text = item.createdAt?.toString()?.take(10) ?: "-",
                     fontSize = 11.sp,
-                    color    = TextSecondary
+                    color = TextSecondary
                 )
             }
             Spacer(Modifier.height(2.dp))
-            Text(text = item.body, fontSize = 13.sp, color = TextSecondary, maxLines = 2)
+            Text(
+                text = item.body,
+                fontSize = 13.sp,
+                color = if (!item.isRead) TextPrimary else TextSecondary,
+                maxLines = 2
+            )
         }
 
         if (!item.isRead) {
-            Spacer(Modifier.width(8.dp))
             Box(
                 modifier = Modifier
+                    .padding(start = 8.dp, top = 4.dp)
                     .size(8.dp)
                     .clip(CircleShape)
                     .background(PrimaryBlue)
-                    .align(Alignment.CenterVertically)
             )
         }
     }
-    HorizontalDivider(color = BorderGray.copy(alpha = 0.4f))
+    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = BorderGray.copy(alpha = 0.5f))
 }
 
-fun notificationIcon(type: NotificationType): ImageVector = when (type) {
+// ✅ Renamed these functions to prevent conflicts with DetailScreen
+fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED,
     NotificationType.BOOKING_CONFIRMED,
     NotificationType.BOOKING_CANCELLED,
@@ -242,22 +234,13 @@ fun notificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.PAYMENT_FAILED,
     NotificationType.REFUND_ISSUED     -> Icons.Default.Payment
     NotificationType.NEW_MESSAGE       -> Icons.AutoMirrored.Filled.Message
-    NotificationType.NEW_REVIEW,
-    NotificationType.REVIEW_REPLY      -> Icons.Default.Star
-    NotificationType.PROPERTY_APPROVED,
-    NotificationType.PROPERTY_REJECTED -> Icons.Default.Home
-    else                               -> Icons.Default.Info
+    else                               -> Icons.Default.Notifications
 }
 
-fun notificationColor(type: NotificationType): Color = when (type) {
+fun screenNotificationColor(type: NotificationType): Color = when (type) {
     NotificationType.BOOKING_REQUESTED,
-    NotificationType.BOOKING_CONFIRMED,
-    NotificationType.BOOKING_CANCELLED,
-    NotificationType.BOOKING_COMPLETED,
-    NotificationType.BOOKING_REMINDER  -> PrimaryBlue
-    NotificationType.PAYMENT_RECEIVED,
-    NotificationType.REFUND_ISSUED     -> SuccessGreen
-    NotificationType.PAYMENT_FAILED    -> ErrorRed
-    NotificationType.NEW_MESSAGE       -> Color(0xFF6A1B9A)
-    else                               -> WarningOrange
+    NotificationType.BOOKING_CONFIRMED -> PrimaryBlue
+    NotificationType.BOOKING_CANCELLED -> Color.Red
+    NotificationType.PAYMENT_RECEIVED  -> Color(0xFF4CAF50)
+    else                               -> Color.Gray
 }

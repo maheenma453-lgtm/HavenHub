@@ -4,6 +4,7 @@ import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.remote.FirebaseRealtimeListener
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.BookingStatus
+import com.example.havenhub.data.NotificationType
 import com.example.havenhub.utils.Resource
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -11,31 +12,67 @@ import javax.inject.Singleton
 
 @Singleton
 class BookingRepository @Inject constructor(
-    private val dataManager: FirebaseDataManager,
-    private val realtimeListener: FirebaseRealtimeListener
+    private val dataManager      : FirebaseDataManager,
+    private val realtimeListener : FirebaseRealtimeListener
 ) {
     suspend fun createBooking(booking: Booking): Resource<String> {
-        // ✅ FIX — BookingStatus.PENDING.name (String hai Booking.status)
+        // ✅ Seedha booking banao — property check BookingScreen pe ho chuka hai
         val pendingBooking = booking.copy(status = BookingStatus.PENDING.name)
-        return dataManager.createBooking(pendingBooking)
+        val result = dataManager.createBooking(pendingBooking)
+
+        if (result is Resource.Success) {
+            sendNotificationToAdmin(
+                pendingBooking.copy(bookingId = result.data ?: "")
+            )
+        }
+        return result
     }
 
-    suspend fun getTenantBookings(userId: String): List<Booking> {
-        val resource = dataManager.getBookingsByUser(userId)
-        // ✅ FIX — type argument remove, simple is check kaafi hai
-        return if (resource is Resource.Success) resource.data ?: emptyList() else emptyList()
+    suspend fun getBookingById(bookingId: String): Resource<Booking> {
+        return dataManager.getBookingById(bookingId)
     }
 
-    suspend fun getLandlordBookings(userId: String): List<Booking> {
-        val resource = dataManager.getBookingsByLandlord(userId)
-        // ✅ FIX — same fix
-        return if (resource is Resource.Success) resource.data ?: emptyList() else emptyList()
+    suspend fun getAllBookingsForAdmin(): List<Booking> {
+        return try {
+            val resource = dataManager.getAllBookings()
+            if (resource is Resource.Success) resource.data ?: emptyList()
+            else emptyList()
+        } catch (e: Exception) { emptyList() }
     }
 
-    suspend fun updateBookingStatus(bookingId: String, status: BookingStatus): Resource<Unit> {
-        return dataManager.updateBookingStatus(bookingId, status.name)
+    suspend fun getTenantBookings(tenantId: String): List<Booking> {
+        return try {
+            dataManager.getBookingsByTenantId(tenantId)
+        } catch (e: Exception) { emptyList() }
     }
 
-    fun observeUserBookings(userId: String): Flow<List<Booking>> =
-        realtimeListener.listenToUserBookings(userId)
+    suspend fun getLandlordBookings(landlordId: String): List<Booking> {
+        return try {
+            dataManager.getBookingsByLandlordId(landlordId)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun updateBookingStatus(
+        bookingId : String,
+        newStatus : BookingStatus
+    ): Resource<Unit> {
+        return dataManager.updateBookingStatus(bookingId, newStatus.name)
+    }
+
+    fun getBookingsFlow(userId: String): Flow<List<Booking>> {
+        return realtimeListener.getBookingsFlow(userId)
+    }
+
+    private suspend fun sendNotificationToAdmin(booking: Booking) {
+        val notificationData = mapOf(
+            "title"       to "New Booking Request",
+            "body"        to "New request for ${booking.propertyTitle} by ${booking.tenantName}",
+            "type"        to NotificationType.BOOKING_REQUESTED.name,
+            "referenceId" to booking.bookingId,
+            "targetRole"  to "admin",
+            "isRead"      to false,
+            "isActive"    to true
+        )
+        dataManager.sendNotification(notificationData)
+    }
 }

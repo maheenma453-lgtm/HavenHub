@@ -25,13 +25,12 @@ import com.example.havenhub.viewmodel.PaymentViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentSuccessScreen(
-    navController: NavController,
-    bookingId: String,
-    viewModel: PaymentViewModel = hiltViewModel()
+    navController : NavController,
+    bookingId     : String,
+    viewModel     : PaymentViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Payment details fetch karo
     LaunchedEffect(bookingId) {
         viewModel.verifyPaymentStatus(bookingId)
     }
@@ -46,7 +45,7 @@ fun PaymentSuccessScreen(
             verticalArrangement = Arrangement.Center
         ) {
 
-            // Success Icon
+            // ── Success Icon ──
             Box(
                 modifier = Modifier
                     .size(120.dp)
@@ -64,10 +63,14 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(28.dp))
 
-            Text("Payment Successful!", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(
+                "Payment Successful!",
+                fontSize   = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color      = TextPrimary
+            )
             Spacer(Modifier.height(8.dp))
 
-            // Real amount from viewModel
             Text(
                 text       = uiState.payment?.formattedAmount ?: "-",
                 fontSize   = 32.sp,
@@ -78,7 +81,7 @@ fun PaymentSuccessScreen(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text       = "Your payment has been processed successfully. Your booking is now confirmed!",
+                text       = "Payment process ho gayi! Booking confirm ho gayi hai.",
                 fontSize   = 14.sp,
                 color      = TextSecondary,
                 textAlign  = TextAlign.Center,
@@ -87,14 +90,14 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // Transaction Details Card
+            // ── Transaction Details ──
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(16.dp),
                 colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier            = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     PayRow(
@@ -102,25 +105,40 @@ fun PaymentSuccessScreen(
                         value = uiState.payment?.gatewayTransactionId?.ifEmpty { "-" } ?: "-"
                     )
                     PayRow(
-                        label = "Date & Time",
-                        value = uiState.payment?.createdAt?.toDate()?.toString() ?: "-"
+                        label = "Booking ID",
+                        value = "#${bookingId.take(8).uppercase()}"
+                    )
+                    PayRow(
+                        label = "Date",
+                        value = uiState.payment?.createdAt?.toDate()?.toString()
+                            ?.take(24) ?: "-"
                     )
                     PayRow(
                         label = "Method",
-                        value = uiState.payment?.paymentMethod?.displayName() ?: "-"
+                        // ✅ Fix: paymentMethodEnum use karo
+                        value = uiState.payment?.paymentMethodEnum?.displayName() ?: "-"
                     )
                     PayRow(
                         label = "Status",
-                        value = uiState.payment?.status?.displayName() ?: "-"
+                        // ✅ Fix: paymentStatusEnum use karo
+                        value = uiState.payment?.paymentStatusEnum?.displayName() ?: "-"
+                    )
+                    PayRow(
+                        label     = "Amount",
+                        value     = uiState.payment?.formattedAmount ?: "-",
+                        bold      = true,
+                        highlight = true
                     )
                 }
             }
 
             Spacer(Modifier.height(32.dp))
 
-            // View Booking Button
+            // ── View Booking ──
             Button(
-                onClick  = { navController.navigate(Screen.BookingDetails.createRoute(bookingId)) },
+                onClick  = {
+                    navController.navigate(Screen.BookingDetails.createRoute(bookingId))
+                },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape    = RoundedCornerShape(12.dp),
                 colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
@@ -130,7 +148,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // Back to Home Button
+            // ── Back to Home ──
             OutlinedButton(
                 onClick  = {
                     navController.navigate(Screen.Home.route) {
@@ -143,7 +161,6 @@ fun PaymentSuccessScreen(
                 Text("Back to Home", fontSize = 15.sp, color = PrimaryBlue)
             }
 
-            // Error Message
             uiState.errorMessage?.let { error ->
                 Spacer(Modifier.height(12.dp))
                 Text(text = error, color = ErrorRed, fontSize = 14.sp)

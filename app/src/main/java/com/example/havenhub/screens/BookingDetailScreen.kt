@@ -25,13 +25,18 @@ import com.example.havenhub.viewmodel.BookingViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BookingDetailsScreen(
-    navController: NavController,
-    bookingId: String,
-    viewModel: BookingViewModel = hiltViewModel()
+fun BookingDetailScreen(
+    navController : NavController,
+    bookingId     : String,
+    viewModel     : BookingViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val booking = uiState.bookings.firstOrNull { it.bookingId == bookingId }
+
+    LaunchedEffect(bookingId) {
+        viewModel.loadBookingById(bookingId)
+    }
+
+    val booking = uiState.currentBooking
 
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
@@ -57,104 +62,111 @@ fun BookingDetailsScreen(
             )
         }
     ) { padding ->
-
-        if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = PrimaryBlue)
-            }
-            return@Scaffold
-        }
-
-        if (booking == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Booking not found.", color = TextSecondary)
-            }
-            return@Scaffold
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-
-            // ✅ FIX — bookingStatus computed property use karo, String pe displayName() nahi hoti
-            StatusBadge(status = booking.bookingStatus.displayName())
-
-            SectionCard(title = "Property") {
-                InfoRow(label = "Title",   value = booking.propertyTitle)
-                InfoRow(label = "Address", value = booking.propertyAddress)
-            }
-
-            SectionCard(title = "Stay Details") {
-                InfoRow(label = "Check-In",  value = booking.checkInDate?.toDate()?.toString() ?: "-")
-                InfoRow(label = "Check-Out", value = booking.checkOutDate?.toDate()?.toString() ?: "-")
-                InfoRow(label = "Guests",    value = "${booking.guestCount} Guest(s)")
-                InfoRow(label = "Nights",    value = "${booking.totalNights} Night(s)")
-            }
-
-            SectionCard(title = "Payment Summary") {
-                InfoRow(label = "Price/Night",      value = "PKR ${booking.pricePerNight.toInt()}")
-                InfoRow(label = "Subtotal",         value = "PKR ${booking.subtotal.toInt()}")
-                InfoRow(label = "Service Fee",      value = "PKR ${booking.serviceFee.toInt()}")
-                InfoRow(label = "Security Deposit", value = "PKR ${booking.securityDeposit.toInt()}")
-                // ✅ FIX — paymentStatus already String hai, .name mat lagao
-                InfoRow(label = "Payment Status",   value = booking.paymentStatus)
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = BorderGray)
-                InfoRow(
-                    label      = "Total Amount",
-                    value      = booking.formattedTotal,
-                    valueColor = PrimaryBlue,
-                    bold       = true
-                )
-            }
-
-            SectionCard(title = "Host Information") {
-                InfoRow(label = "Host", value = booking.landlordName)
-            }
-
-            SectionCard(title = "Booking Info") {
-                InfoRow(label = "Booking ID", value = "#${booking.bookingId.take(8).uppercase()}")
-                InfoRow(label = "Tenant",     value = booking.tenantName)
-                InfoRow(label = "Booked On",  value = booking.createdAt?.toDate()?.toString() ?: "-")
-            }
-
-            if (booking.isCancellable) {
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+        when {
+            uiState.isLoading -> {
+                Box(
+                    modifier         = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    OutlinedButton(
-                        onClick  = { /* Contact host logic */ },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Contact Host")
-                    }
-                    Button(
-                        onClick  = { /* viewModel.cancelBooking(bookingId) */ },
-                        modifier = Modifier.weight(1f),
-                        colors   = ButtonDefaults.buttonColors(containerColor = ErrorRed)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Cancel")
-                    }
+                    CircularProgressIndicator(color = PrimaryBlue)
                 }
             }
-
-            uiState.errorMessage?.let { error ->
-                Text(text = error, color = ErrorRed, fontSize = 14.sp)
+            booking == null -> {
+                Box(
+                    modifier         = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Booking not found.", color = TextSecondary)
+                }
             }
+            else -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    StatusBadge(status = booking.bookingStatus.displayName())
 
-            Spacer(Modifier.height(16.dp))
+                    SectionCard(title = "Property") {
+                        InfoRow(label = "Title",   value = booking.propertyTitle)
+                        InfoRow(label = "Address", value = booking.propertyAddress)
+                    }
+
+                    SectionCard(title = "Stay Details") {
+                        InfoRow(label = "Check-In",  value = booking.checkInDate?.toDate()?.toString()  ?: "-")
+                        InfoRow(label = "Check-Out", value = booking.checkOutDate?.toDate()?.toString() ?: "-")
+                        InfoRow(label = "Guests",    value = "${booking.guestCount} Guest(s)")
+                        InfoRow(label = "Nights",    value = "${booking.totalNights} Night(s)")
+                    }
+
+                    SectionCard(title = "Payment Summary") {
+                        InfoRow(label = "Price/Night",      value = "PKR ${booking.pricePerNight.toInt()}")
+                        InfoRow(label = "Subtotal",         value = "PKR ${booking.subtotal.toInt()}")
+                        InfoRow(label = "Service Fee",      value = "PKR ${booking.serviceFee.toInt()}")
+                        InfoRow(label = "Security Deposit", value = "PKR ${booking.securityDeposit.toInt()}")
+                        InfoRow(label = "Payment Status",   value = booking.paymentStatusEnum.displayName())
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color    = BorderGray
+                        )
+                        InfoRow(
+                            label      = "Total Amount",
+                            value      = booking.formattedTotal,
+                            valueColor = PrimaryBlue,
+                            bold       = true
+                        )
+                    }
+
+                    SectionCard(title = "Host Information") {
+                        InfoRow(label = "Host", value = booking.landlordName)
+                    }
+
+                    SectionCard(title = "Booking Info") {
+                        InfoRow(label = "Booking ID", value = "#${booking.bookingId.take(8).uppercase()}")
+                        InfoRow(label = "Tenant",     value = booking.tenantName)
+                        InfoRow(label = "Booked On",  value = booking.createdAt?.toDate()?.toString() ?: "-")
+                    }
+
+                    if (booking.isCancellable) {
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick  = { },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Phone, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Contact Host")
+                            }
+                            Button(
+                                onClick  = { },
+                                modifier = Modifier.weight(1f),
+                                colors   = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                            ) {
+                                Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Cancel")
+                            }
+                        }
+                    }
+
+                    uiState.errorMessage?.let { error ->
+                        Text(text = error, color = ErrorRed, fontSize = 14.sp)
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
         }
     }
 }
+
+// ── Helper Composables ────────────────────────────────────────────
 
 @Composable
 fun StatusBadge(status: String) {
@@ -199,7 +211,12 @@ fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
         colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = PrimaryBlue)
+            Text(
+                text       = title,
+                fontWeight = FontWeight.Bold,
+                fontSize   = 15.sp,
+                color      = PrimaryBlue
+            )
             Spacer(Modifier.height(10.dp))
             content()
         }
@@ -210,7 +227,7 @@ fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
 fun InfoRow(
     label      : String,
     value      : String,
-    valueColor : Color = TextPrimary,
+    valueColor : Color  = TextPrimary,
     bold       : Boolean = false
 ) {
     Row(

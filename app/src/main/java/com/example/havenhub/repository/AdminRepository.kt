@@ -21,86 +21,163 @@ class AdminRepository @Inject constructor(
     private val bookingsCollection   = firestore.collection("bookings")
     private val paymentsCollection   = firestore.collection("payments")
 
-    // --- User Management ---
+    // ─────────────────────────────────────────────────────────────────────────
+    // User Management
+    // ─────────────────────────────────────────────────────────────────────────
+
     suspend fun getAllUsers(): Resource<List<User>> {
         return try {
-            val snapshot = usersCollection.orderBy("createdAt", Query.Direction.DESCENDING).get().await()
+            val snapshot = usersCollection
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .get()
+                .await()
             Resource.Success(snapshot.toObjects(User::class.java))
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch users") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch users")
+        }
     }
 
     suspend fun banUser(userId: String): Resource<Unit> {
         return try {
-            usersCollection.document(userId).update("isBanned", true).await()
+            usersCollection.document(userId)
+                .update("isBanned", true)
+                .await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to ban user") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to ban user")
+        }
     }
 
     suspend fun unbanUser(userId: String): Resource<Unit> {
         return try {
-            usersCollection.document(userId).update("isBanned", false).await()
+            usersCollection.document(userId)
+                .update("isBanned", false)
+                .await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to unban user") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to unban user")
+        }
     }
 
-    // --- Property Management ---
+    // ─────────────────────────────────────────────────────────────────────────
+    // Property Management
+    // ─────────────────────────────────────────────────────────────────────────
+
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
-            val snapshot = propertiesCollection.orderBy("createdAt", Query.Direction.DESCENDING).get().await()
+            val snapshot = propertiesCollection
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .get()
+                .await()
             Resource.Success(snapshot.toObjects(Property::class.java))
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch properties") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch properties")
+        }
+    }
+
+    // ✅ approveProperty function add kiya
+    suspend fun approveProperty(propertyId: String, adminNote: String = ""): Resource<Unit> {
+        return try {
+            propertiesCollection.document(propertyId)
+                .update(
+                    mapOf(
+                        "status"    to "APPROVED",
+                        "adminNote" to adminNote,
+                        "updatedAt" to com.google.firebase.Timestamp.now()
+                    )
+                )
+                .await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to approve property")
+        }
     }
 
     suspend fun rejectProperty(propertyId: String, reason: String): Resource<Unit> {
         return try {
-            propertiesCollection.document(propertyId).update(
-                mapOf("status" to "REJECTED", "adminNote" to reason)
-            ).await()
+            propertiesCollection.document(propertyId)
+                .update(
+                    mapOf(
+                        "status"    to "REJECTED",
+                        "adminNote" to reason,
+                        "updatedAt" to com.google.firebase.Timestamp.now()
+                    )
+                )
+                .await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to reject property") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to reject property")
+        }
     }
 
-    // --- Booking Management ---
+    suspend fun deleteProperty(propertyId: String): Resource<Unit> {
+        return try {
+            propertiesCollection.document(propertyId)
+                .delete()
+                .await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to delete property")
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Booking Management
+    // ─────────────────────────────────────────────────────────────────────────
+
     suspend fun getAllBookings(): Resource<List<Booking>> {
         return try {
             val snapshot = bookingsCollection
                 .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
-            // ✅ FIX — sirf toObjects use karo, status String hai Booking mein
-            // bookingStatus computed property khud handle kar leti hai
             Resource.Success(snapshot.toObjects(Booking::class.java))
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch bookings") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch bookings")
+        }
     }
 
-    // --- Confirm Booking ---
     suspend fun confirmBooking(bookingId: String): Resource<Unit> {
         return try {
-            bookingsCollection.document(bookingId).update(
-                mapOf("status" to "CONFIRMED")
-            ).await()
+            bookingsCollection.document(bookingId)
+                .update(mapOf("status" to "CONFIRMED"))
+                .await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to confirm booking") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to confirm booking")
+        }
     }
 
     suspend fun cancelBooking(bookingId: String): Resource<Unit> {
         return try {
-            bookingsCollection.document(bookingId).update(
-                mapOf(
-                    "status"      to "CANCELLED",
-                    "cancelledAt" to com.google.firebase.Timestamp.now(),
-                    "cancelledBy" to "ADMIN"
+            bookingsCollection.document(bookingId)
+                .update(
+                    mapOf(
+                        "status"      to "CANCELLED",
+                        "cancelledAt" to com.google.firebase.Timestamp.now(),
+                        "cancelledBy" to "ADMIN"
+                    )
                 )
-            ).await()
+                .await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to cancel booking") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to cancel booking")
+        }
     }
 
-    // --- Payment Management ---
+    // ─────────────────────────────────────────────────────────────────────────
+    // Payment Management
+    // ─────────────────────────────────────────────────────────────────────────
+
     suspend fun getAllPayments(): Resource<List<Payment>> {
         return try {
-            val snapshot = paymentsCollection.orderBy("createdAt", Query.Direction.DESCENDING).get().await()
+            val snapshot = paymentsCollection
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .get()
+                .await()
             Resource.Success(snapshot.toObjects(Payment::class.java))
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch payments") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch payments")
+        }
     }
 }

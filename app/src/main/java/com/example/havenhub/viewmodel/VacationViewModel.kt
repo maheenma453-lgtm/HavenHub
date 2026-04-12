@@ -2,11 +2,13 @@ package com.example.havenhub.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.havenhub.data.Booking
 import com.example.havenhub.data.Property
 import com.example.havenhub.data.PropertyType
 import com.example.havenhub.repository.BookingRepository
 import com.example.havenhub.repository.PropertyRepository
 import com.example.havenhub.utils.Resource
+import com.google.firebase.auth.FirebaseAuth // ✅ Added for userId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,7 +47,6 @@ class VacationViewModel @Inject constructor(
             when (result) {
                 is Resource.Success -> {
                     val list = result.data?.filter {
-                        // ✅ FIXED: String vs Enum comparison fix using .name
                         it.propertyType == PropertyType.VILLA.name ||
                                 it.propertyType == PropertyType.FARMHOUSE.name ||
                                 it.propertyType == PropertyType.APARTMENT.name
@@ -56,20 +57,24 @@ class VacationViewModel @Inject constructor(
                 is Resource.Error -> {
                     _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
                 }
-                is Resource.Loading -> {
-                    _uiState.update { it.copy(isLoading = true) }
-                }
+                else -> { /* No changes for loading */ }
             }
         }
     }
 
     fun loadUnavailableDates(propertyId: String) {
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: "" // ✅ Get UID
+
         viewModelScope.launch {
-            bookingRepository.observeUserBookings(propertyId).collect { bookings ->
+            // ✅ FIXED: Passing currentUserId to getBookingsFlow (resolves image_373be0.png)
+            bookingRepository.getBookingsFlow(currentUserId).collect { bookings ->
                 val allDates = mutableListOf<Date>()
-                bookings.forEach { booking ->
-                    val startDate = booking.checkInDate?.toDate()
-                    val endDate = booking.checkOutDate?.toDate()
+
+                // Only filter for this specific property
+                bookings.filter { it.propertyId == propertyId }.forEach { booking ->
+                    // ✅ FIXED: Manual null checks for safety (resolves image_373879.png)
+                    val startDate = try { booking.checkInDate?.toDate() } catch (e: Exception) { null }
+                    val endDate = try { booking.checkOutDate?.toDate() } catch (e: Exception) { null }
 
                     if (startDate != null && endDate != null) {
                         val calendar = Calendar.getInstance()
