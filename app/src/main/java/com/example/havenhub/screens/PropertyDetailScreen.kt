@@ -45,18 +45,16 @@ fun PropertyDetailScreen(
         viewModel.loadPropertyDetail(propertyId)
     }
 
-    var isSaved by remember { mutableStateOf(false) }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundWhite)
+            .background(Color(0xFFF5F7FA))
     ) {
         when {
             isLoading -> {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center),
-                    color = PrimaryBlue
+                    color = Color(0xFF0D1B3E)
                 )
             }
             property != null -> {
@@ -64,7 +62,7 @@ fun PropertyDetailScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 90.dp)
                 ) {
-                    // ── Photo Gallery ──
+                    // ── Photo ──
                     item {
                         Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                             Image(
@@ -73,155 +71,293 @@ fun PropertyDetailScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
-
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(80.dp)
                                     .background(
                                         Brush.verticalGradient(
-                                            listOf(PrimaryBlueDark.copy(alpha = 0.4f), Color.Transparent)
+                                            listOf(Color(0xFF0D1B3E).copy(alpha = 0.5f), Color.Transparent)
                                         )
                                     )
                             )
-
                             IconButton(
                                 onClick = { navController.popBackStack() },
                                 modifier = Modifier
                                     .padding(16.dp)
                                     .align(Alignment.TopStart)
                                     .clip(CircleShape)
-                                    .background(BackgroundWhite.copy(alpha = 0.7f))
+                                    .background(Color.White.copy(alpha = 0.8f))
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TextPrimary)
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color(0xFF0D1B3E))
                             }
 
+                            // Status badge
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(12.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(getStatusColor(property.status).copy(alpha = 0.9f))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(getStatusLabel(property.status), fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Type badge
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
                                     .padding(12.dp)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(PrimaryBlueDark.copy(alpha = 0.7f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .background(Color(0xFF0D1B3E).copy(alpha = 0.85f))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
                             ) {
-                                Text(
-                                    text = "📷 1 Photo",
-                                    fontSize = 12.sp,
-                                    color = BackgroundWhite
-                                )
+                                Text(property.propertyTypeEnum.displayName(), fontSize = 11.sp, color = Color(0xFFD4AF37), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
 
-                    // ── Title & Price Info ──
+                    // ── Title & Price ──
                     item {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (property.isAvailable) {
-                                    BadgeBox("✓ Available", SuccessGreen)
-                                }
-                                BadgeBox(property.propertyType.toString(), PrimaryBlue)
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
+                        Column(
+                            modifier = Modifier
+                                .background(Color.White)
+                                .padding(20.dp)
+                        ) {
                             Text(
                                 text = property.title,
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                                color = Color(0xFF0D1B3E)
                             )
-
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                                Icon(Icons.Default.LocationOn, null, tint = PrimaryBlue, modifier = Modifier.size(16.dp))
-                                Text("${property.address}, ${property.city}", fontSize = 14.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.LocationOn, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(16.dp))
+                                Text(" ${property.address}, ${property.city}", fontSize = 13.sp, color = Color(0xFF8899AA))
                             }
-
-                            Spacer(modifier = Modifier.height(20.dp))
-
+                            Spacer(modifier = Modifier.height(16.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Column {
-                                    Text("Price per night", fontSize = 12.sp, color = TextSecondary)
-                                    Text(property.formattedPrice, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                                    Text("Price per night", fontSize = 12.sp, color = Color(0xFF8899AA))
+                                    Text(property.formattedPrice, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text("⭐ ${property.averageRating}", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                    Text("${property.reviewCount} reviews", fontSize = 12.sp, color = TextSecondary)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Star, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(18.dp))
+                                        Text(" ${property.averageRating}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                                    }
+                                    Text("${property.reviewCount} reviews", fontSize = 12.sp, color = Color(0xFF8899AA))
                                 }
                             }
                         }
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = BorderGray)
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
                     // ── Quick Stats ──
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(20.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(2.dp)
                         ) {
-                            StatItem("🛏", "Bedrooms", "${property.bedrooms}")
-                            StatItem("🚿", "Bathrooms", "${property.bathrooms}")
-                            StatItem("📐", "Area", "${property.areaSqFt ?: "-"} sqft")
-                            StatItem("👤", "Guests", "${property.maxGuests}")
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                StatItem("🛏", "Bedrooms", "${property.bedrooms}")
+                                VerticalDivider(modifier = Modifier.height(40.dp), color = Color(0xFFEEEEEE))
+                                StatItem("🚿", "Bathrooms", "${property.bathrooms}")
+                                VerticalDivider(modifier = Modifier.height(40.dp), color = Color(0xFFEEEEEE))
+                                StatItem("📐", "Area", "${property.areaSqFt ?: "-"} sqft")
+                                VerticalDivider(modifier = Modifier.height(40.dp), color = Color(0xFFEEEEEE))
+                                StatItem("👤", "Guests", "${property.maxGuests}")
+                            }
                         }
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = BorderGray)
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
                     // ── Description ──
                     item {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Text("Description", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = property.description,
-                                fontSize = 14.sp,
-                                color = TextSecondary,
-                                lineHeight = 21.sp
-                            )
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("About this place", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = property.description,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF8899AA),
+                                    lineHeight = 22.sp
+                                )
+                            }
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
                     // ── Amenities ──
+                    if (property.amenities.isNotEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(2.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text("Amenities", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        items(property.amenities) { amenity ->
+                                            AmenityChip(amenity)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+
+                    // ── House Rules ──
                     item {
-                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) {
-                            Text("Amenities", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                items(property.amenities) { amenity ->
-                                    AmenityChip(amenity)
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("House Rules", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                RuleItem("Check-in time", property.checkInTime)
+                                RuleItem("Check-out time", property.checkOutTime)
+                                RuleItem("Minimum nights", "${property.minNights} night(s)")
+                                RuleItem("Pets allowed", if (property.petsAllowed) "Yes" else "No")
+                                RuleItem("Smoking allowed", if (property.smokingAllowed) "Yes" else "No")
+                                RuleItem("Parties allowed", if (property.partiesAllowed) "Yes" else "No")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // ── Location ──
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Location", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.LocationOn, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "${property.address}, ${property.city}",
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF8899AA)
+                                    )
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // ── Reviews Section ──
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Reviews", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                                    TextButton(onClick = {
+                                        navController.navigate(Screen.ViewReviews.createRoute(propertyId))
+                                    }) {
+                                        Text("See All", color = Color(0xFFD4AF37), fontSize = 13.sp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Star, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(32.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            "${property.averageRating}",
+                                            fontSize = 28.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0D1B3E)
+                                        )
+                                        Text("${property.reviewCount} reviews", fontSize = 12.sp, color = Color(0xFF8899AA))
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
 
                 // ── Sticky Bottom Bar ──
                 Surface(
                     modifier = Modifier.align(Alignment.BottomCenter),
-                    shadowElevation = 8.dp
+                    shadowElevation = 8.dp,
+                    color = Color.White
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(BackgroundWhite)
-                            .padding(16.dp)
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Price per night", fontSize = 11.sp, color = Color(0xFF8899AA))
+                            Text(property.formattedPrice, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                        }
                         Button(
                             onClick = { navController.navigate(Screen.Booking.createRoute(propertyId)) },
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            modifier = Modifier.weight(1f).height(50.dp),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1B3E))
                         ) {
-                            Text("Book Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Book Now", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
                         }
                     }
                 }
             }
             else -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Property not found")
+                    Text("Property not found", color = Color(0xFF8899AA))
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RuleItem(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, fontSize = 14.sp, color = Color(0xFF8899AA))
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0D1B3E))
     }
 }
 
@@ -241,8 +377,8 @@ fun BadgeBox(label: String, color: Color) {
 private fun StatItem(icon: String, label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(icon, fontSize = 22.sp)
-        Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Text(label, fontSize = 11.sp, color = TextSecondary)
+        Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+        Text(label, fontSize = 11.sp, color = Color(0xFF8899AA))
     }
 }
 
@@ -251,12 +387,12 @@ private fun AmenityChip(label: String) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(SurfaceVariantLight)
+            .background(Color(0xFFF5F7FA))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.Check, null, tint = SuccessGreen, modifier = Modifier.size(14.dp))
+        Icon(Icons.Default.Check, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(4.dp))
-        Text(label, fontSize = 13.sp)
+        Text(label, fontSize = 13.sp, color = Color(0xFF0D1B3E))
     }
 }

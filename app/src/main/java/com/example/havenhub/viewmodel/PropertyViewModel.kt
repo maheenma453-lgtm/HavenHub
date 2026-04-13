@@ -16,11 +16,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// ── Property UI State ──
 data class PropertyUiState(
     val isLoading: Boolean = false,
     val propertyDetail: Property? = null,
     val myProperties: List<Property> = emptyList(),
+    val allProperties: List<Property> = emptyList(), // ✅ added
     val errorMessage: String? = null,
     val actionSuccess: Boolean = false,
     val successMessage: String? = null
@@ -35,7 +35,6 @@ class PropertyViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PropertyUiState())
     val uiState: StateFlow<PropertyUiState> = _uiState.asStateFlow()
 
-    // ── Fetch Logics ──
     fun loadPropertyDetail(propertyId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -55,7 +54,6 @@ class PropertyViewModel @Inject constructor(
         viewModelScope.launch {
             val userId = authRepository.currentUser?.uid ?: return@launch
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
             when (val result = propertyRepository.getMyProperties(userId)) {
                 is Resource.Success -> _uiState.update {
                     it.copy(isLoading = false, myProperties = result.data)
@@ -68,7 +66,22 @@ class PropertyViewModel @Inject constructor(
         }
     }
 
-    // ── CRUD Operations ──
+    // ✅ Saari properties load karo
+    fun loadAllProperties() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            when (val result = propertyRepository.getAllProperties()) {
+                is Resource.Success -> _uiState.update {
+                    it.copy(isLoading = false, allProperties = result.data)
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                is Resource.Loading -> _uiState.update { it.copy(isLoading = true) }
+            }
+        }
+    }
+
     fun addProperty(
         title: String,
         description: String,
@@ -85,7 +98,6 @@ class PropertyViewModel @Inject constructor(
         viewModelScope.launch {
             val userId = authRepository.currentUser?.uid ?: return@launch
             _uiState.update { it.copy(isLoading = true, errorMessage = null, actionSuccess = false) }
-
             val property = Property(
                 ownerId       = userId,
                 title         = title,
@@ -93,13 +105,12 @@ class PropertyViewModel @Inject constructor(
                 pricePerNight = pricePerNight,
                 address       = address,
                 city          = city,
-                propertyType  = propertyType.toString(), // ✅ Property model uses Enum
+                propertyType  = propertyType.toString(),
                 bedrooms      = bedrooms,
                 bathrooms     = bathrooms,
                 areaSqFt      = areaSqFt,
                 amenities     = amenities
             )
-
             val result = propertyRepository.addProperty(property, images)
             handleActionResult(result, "Property added successfully!")
         }
@@ -108,27 +119,22 @@ class PropertyViewModel @Inject constructor(
     fun updateProperty(property: Property, newImages: List<Uri> = emptyList()) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null, actionSuccess = false) }
-
-            // ✅ FIX: "Argument type mismatch" resolved by calling .name on Enum
             val fields = mutableMapOf<String, Any>(
                 "title"         to property.title,
                 "description"   to property.description,
                 "pricePerNight" to property.pricePerNight,
                 "address"       to property.address,
                 "city"          to property.city,
-                "propertyType"  to property.propertyType, // ✅ String passed to Firestore
+                "propertyType"  to property.propertyType,
                 "bedrooms"      to property.bedrooms,
                 "bathrooms"     to property.bathrooms,
                 "amenities"     to property.amenities
             )
             property.areaSqFt?.let { fields["areaSqFt"] = it }
-
             val result = propertyRepository.updateProperty(property.propertyId, fields)
-
             if (result is Resource.Success && newImages.isNotEmpty()) {
                 propertyRepository.addPropertyImages(property.propertyId, newImages)
             }
-
             handleActionResult(result, "Property updated successfully!")
         }
     }

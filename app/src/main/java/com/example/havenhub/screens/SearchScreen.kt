@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,7 +19,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -26,13 +30,14 @@ import androidx.navigation.NavController
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
+import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.SearchViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    navController : NavController,
-    viewModel     : SearchViewModel = hiltViewModel()
+    navController: NavController,
+    viewModel: SearchViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val focusRequester = remember { FocusRequester() }
@@ -44,11 +49,11 @@ fun SearchScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundWhite)
+            .background(Color(0xFFF5F7FA))
     ) {
         // ── Search Header ──
         Surface(
-            color = PrimaryBlue,
+            color = Color(0xFF0D1B3E),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -58,16 +63,15 @@ fun SearchScreen(
                 IconButton(onClick = { navController.popBackStack() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                 }
-
                 OutlinedTextField(
                     value = uiState.searchQuery,
                     onValueChange = { viewModel.onQueryChange(it) },
-                    placeholder = { Text("Search properties...", color = TextSecondary.copy(0.6f)) },
-                    leadingIcon = { Icon(Icons.Default.Search, null, tint = TextSecondary) },
+                    placeholder = { Text("Search city, property type...", color = Color.White.copy(0.6f)) },
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.White.copy(0.7f)) },
                     trailingIcon = if (uiState.searchQuery.isNotEmpty()) {
                         {
                             IconButton(onClick = { viewModel.onQueryChange("") }) {
-                                Icon(Icons.Default.Clear, null, tint = TextSecondary)
+                                Icon(Icons.Default.Clear, null, tint = Color.White.copy(0.7f))
                             }
                         }
                     } else null,
@@ -78,41 +82,45 @@ fun SearchScreen(
                         .heightIn(min = 52.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent
+                        focusedContainerColor = Color.White.copy(0.15f),
+                        unfocusedContainerColor = Color.White.copy(0.15f),
+                        focusedBorderColor = Color(0xFFD4AF37),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
                     )
                 )
-
                 Spacer(modifier = Modifier.width(8.dp))
-
                 IconButton(
                     onClick = { navController.navigate(Screen.Filter.route) },
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.White.copy(0.2f))
                 ) {
-                    Icon(Icons.Default.FilterList, "Filters", tint = Color.White)
+                    Icon(Icons.Default.FilterList, "Filters", tint = Color(0xFFD4AF37))
                 }
             }
         }
 
         if (uiState.isLoading) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = PrimaryBlue)
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFFD4AF37),
+                trackColor = Color(0xFF0D1B3E)
+            )
         }
 
         when {
             uiState.searchQuery.isEmpty() -> {
                 PopularSearchesSection { term -> viewModel.onQueryChange(term) }
             }
-
             uiState.searchResults.isNotEmpty() -> {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item {
                         Text(
                             text = "${uiState.searchResults.size} properties found",
-                            fontSize = 13.sp, color = TextSecondary,
+                            fontSize = 13.sp,
+                            color = Color(0xFF8899AA),
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         )
                     }
@@ -123,7 +131,6 @@ fun SearchScreen(
                     }
                 }
             }
-
             !uiState.isLoading -> {
                 EmptySearchResult(uiState.searchQuery)
             }
@@ -134,72 +141,152 @@ fun SearchScreen(
 @Composable
 private fun PopularSearchesSection(onSearch: (String) -> Unit) {
     Column(modifier = Modifier.padding(20.dp)) {
-        Text("Popular in Pakistan", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "Popular in Pakistan",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF0D1B3E)
+        )
         Spacer(modifier = Modifier.height(12.dp))
-        val popular = listOf("Lahore", "Karachi", "Islamabad", "Studio", "Villa")
+        val popular = listOf("Lahore", "Karachi", "Islamabad", "Murree", "Hunza", "Swat", "Studio", "Villa")
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(popular) { term ->
-                SuggestionChip(
-                    onClick = { onSearch(term) },
-                    label = { Text(term) },
-                    shape = RoundedCornerShape(20.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White)
+                        .clickable { onSearch(term) }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(term, fontSize = 13.sp, color = Color(0xFF0D1B3E), fontWeight = FontWeight.Medium)
+                }
             }
         }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            "Recent Searches",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF0D1B3E)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Your recent searches will appear here",
+            fontSize = 13.sp,
+            color = Color(0xFF8899AA)
+        )
     }
 }
 
 @Composable
 private fun SearchResultItem(property: Property, onClick: () -> Unit) {
-    Column(modifier = Modifier
-        .fillMaxWidth()
-        .clickable { onClick() }) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(3.dp)
+    ) {
         Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                modifier = Modifier.size(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = SurfaceVariantLight
+            // Property Image
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(RoundedCornerShape(12.dp))
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("🏠", fontSize = 24.sp)
-                }
+                Image(
+                    painter = painterResource(id = getPropertyImage(property.propertyId)),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(property.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-
-                // ✅ FIX: displayName() ki jagah direct logic use kiya
-                val typeDisplay = property.propertyType.lowercase().replaceFirstChar { it.uppercase() }
-                Text("${property.city} • $typeDisplay", fontSize = 13.sp, color = TextSecondary)
-
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                    Text("${property.formattedPrice}/night", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Icon(Icons.Default.Star, null, tint = AccentGold, modifier = Modifier.size(14.dp))
-                    Text(" ${property.averageRating}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    property.title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    color = Color(0xFF0D1B3E)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.LocationOn,
+                        null,
+                        tint = Color(0xFFD4AF37),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        " ${property.city} • ${property.propertyType.lowercase().replaceFirstChar { it.uppercase() }}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF8899AA)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${property.formattedPrice}/night",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0D1B3E)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFFFF8E1))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Icon(Icons.Default.Star, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(12.dp))
+                        Text(" ${property.averageRating}", fontSize = 12.sp, color = Color(0xFF0D1B3E), fontWeight = FontWeight.Bold)
+                    }
                 }
             }
-            Icon(Icons.Default.ChevronRight, null, tint = BorderGray)
         }
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), thickness = 0.5.dp, color = BorderGray.copy(0.5f))
     }
 }
 
 @Composable
 private fun EmptySearchResult(query: String) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(40.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.SearchOff, null, modifier = Modifier.size(64.dp), tint = BorderGray)
+        Icon(
+            Icons.Default.SearchOff,
+            null,
+            modifier = Modifier.size(80.dp),
+            tint = Color(0xFFE0E0E0)
+        )
         Spacer(modifier = Modifier.height(16.dp))
-        Text("No results for \"$query\"", fontWeight = FontWeight.Bold, color = TextPrimary)
-        Text("Try checking your spelling or use different keywords.", textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontSize = 14.sp, color = TextSecondary)
+        Text(
+            "No results for \"$query\"",
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = Color(0xFF0D1B3E)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Try checking your spelling or use different keywords",
+            textAlign = TextAlign.Center,
+            fontSize = 14.sp,
+            color = Color(0xFF8899AA)
+        )
     }
 }

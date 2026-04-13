@@ -1,5 +1,4 @@
 package com.example.havenhub.screens
-
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -51,10 +50,14 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
 
     val filteredFeatured = if (selectedCategory == "All") uiState.featuredProperties
-    else uiState.featuredProperties.filter { it.propertyType.toString() == selectedCategory }
+    else uiState.featuredProperties.filter {
+        it.propertyType.equals(selectedCategory.uppercase(), ignoreCase = true)
+    }
 
     val filteredNearby = if (selectedCategory == "All") uiState.nearbyProperties
-    else uiState.nearbyProperties.filter { it.propertyType.toString() == selectedCategory }
+    else uiState.nearbyProperties.filter {
+        it.propertyType.equals(selectedCategory.uppercase(), ignoreCase = true)
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -160,7 +163,9 @@ fun HomeScreen(
                     }
                 }
             }
+
             Spacer(modifier = Modifier.height(14.dp))
+
             when {
                 uiState.isLoading -> LoadingShimmer()
                 uiState.errorMessage != null -> {
@@ -185,9 +190,92 @@ fun HomeScreen(
                             .padding(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        filteredFeatured.forEach { property ->
+                        filteredFeatured.take(7).forEach { property ->
                             FeaturedPropertyCard(property) {
                                 navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
+                            }
+                        }
+                        Card(
+                            modifier = Modifier
+                                .width(160.dp)
+                                .height(250.dp)
+                                .clickable {
+                                    navController.navigate(Screen.PropertyList.route)
+                                },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(12.dp)
+                                ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                        ) {
+                                            Image(
+                                                painter = painterResource(id = getPropertyImage("prop_008")),
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                        ) {
+                                            Image(
+                                                painter = painterResource(id = getPropertyImage("prop_009")),
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                        ) {
+                                            Image(
+                                                painter = painterResource(id = getPropertyImage("prop_010")),
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                        ) {
+                                            Image(
+                                                painter = painterResource(id = getPropertyImage("prop_011")),
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        "See all",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0D1B3E)
+                                    )
+                                }
                             }
                         }
                     }
@@ -203,7 +291,15 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Nearby Properties", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF0D1B3E))
-                Text("See All", fontSize = 13.sp, color = Color(0xFFD4AF37), fontWeight = FontWeight.SemiBold)
+                Text(
+                    "See All",
+                    fontSize = 13.sp,
+                    color = Color(0xFFD4AF37),
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable {
+                        navController.navigate(Screen.PropertyList.route)
+                    }
+                )
             }
             Spacer(modifier = Modifier.height(14.dp))
         }
@@ -211,7 +307,7 @@ fun HomeScreen(
         if (uiState.isLoading && uiState.nearbyProperties.isEmpty()) {
             item { LoadingShimmer() }
         } else {
-            items(filteredNearby.take(10)) { property ->
+            items(filteredNearby) { property ->
                 NearbyPropertyCard(property) {
                     navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
                 }
@@ -339,7 +435,7 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
                         .background(Color(0xFF0D1B3E).copy(alpha = 0.8f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text(text = property.propertyType.toString(), color = Color(0xFFD4AF37), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(text = property.propertyTypeEnum.displayName(), color = Color(0xFFD4AF37), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Column(Modifier.padding(12.dp)) {
@@ -380,10 +476,14 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(12.dp))
-                    Text(" ${property.city} • ${property.propertyType.toString()}", color = Color(0xFF8899AA), fontSize = 12.sp)
+                    Text(" ${property.city} • ${property.propertyTypeEnum.displayName()}", color = Color(0xFF8899AA), fontSize = 12.sp)
                 }
                 Spacer(Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text("${property.formattedPrice}/night", fontWeight = FontWeight.ExtraBold, color = Color(0xFF0D1B3E), fontSize = 14.sp)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
