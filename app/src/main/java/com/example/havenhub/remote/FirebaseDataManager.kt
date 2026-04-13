@@ -7,6 +7,7 @@ import com.example.havenhub.data.User
 import com.example.havenhub.utils.Resource
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,10 +17,11 @@ class FirebaseDataManager @Inject constructor(
     private val firestore: FirebaseFirestore
 ) {
 
-    private val usersCollection      = firestore.collection("users")
-    private val propertiesCollection = firestore.collection("properties")
-    private val bookingsCollection   = firestore.collection("bookings")
-    private val reviewsCollection    = firestore.collection("reviews")
+    private val usersCollection         = firestore.collection("users")
+    private val propertiesCollection    = firestore.collection("properties")
+    private val bookingsCollection      = firestore.collection("bookings")
+    private val reviewsCollection       = firestore.collection("reviews")
+    private val notificationsCollection = firestore.collection("notifications")
 
     // ── User ─────────────────────────────────────────────────────────────────
 
@@ -56,7 +58,7 @@ class FirebaseDataManager @Inject constructor(
 
     suspend fun addProperty(property: Property): Resource<String> {
         return try {
-            val docRef = propertiesCollection.document()
+            val docRef      = propertiesCollection.document()
             val newProperty = property.copy(propertyId = docRef.id)
             docRef.set(newProperty).await()
             Resource.Success(docRef.id)
@@ -65,14 +67,15 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
+    // ✅ FIX: createdAt field exist na kare to bhi crash na ho
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
             val snapshot = propertiesCollection
-                .whereEqualTo("status", "APPROVED")
-                .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
-            Resource.Success(snapshot.toObjects(Property::class.java))
+            val properties = snapshot.toObjects(Property::class.java)
+                .sortedByDescending { it.createdAt } // client-side sort — index issue avoid
+            Resource.Success(properties)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch properties")
         }
@@ -82,10 +85,11 @@ class FirebaseDataManager @Inject constructor(
         return try {
             val snapshot = propertiesCollection
                 .whereEqualTo("ownerId", ownerId)
-                .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
-            Resource.Success(snapshot.toObjects(Property::class.java))
+            val properties = snapshot.toObjects(Property::class.java)
+                .sortedByDescending { it.createdAt }
+            Resource.Success(properties)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch owner properties")
         }
@@ -133,35 +137,6 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ✅ Tenant bookings
-    suspend fun getBookingsByUser(userId: String): Resource<List<Booking>> {
-        return try {
-            val snapshot = bookingsCollection
-                .whereEqualTo("tenantId", userId)
-                .orderBy("createdAt", Query.Direction.DESCENDING)
-                .get()
-                .await()
-            Resource.Success(snapshot.toObjects(Booking::class.java))
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to fetch bookings")
-        }
-    }
-
-    // ✅ Landlord bookings — ADDED
-    suspend fun getBookingsByLandlord(landlordId: String): Resource<List<Booking>> {
-        return try {
-            val snapshot = bookingsCollection
-                .whereEqualTo("landlordId", landlordId)
-                .orderBy("createdAt", Query.Direction.DESCENDING)
-                .get()
-                .await()
-            Resource.Success(snapshot.toObjects(Booking::class.java))
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to fetch landlord bookings")
-        }
-    }
-
-    // ✅ Single booking by ID — ADDED
     suspend fun getBookingById(bookingId: String): Resource<Booking> {
         return try {
             val snapshot = bookingsCollection.document(bookingId).get().await()
@@ -173,7 +148,45 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ✅ Status update
+    suspend fun getAllBookings(): Resource<List<Booking>> {
+        return try {
+            val snapshot = bookingsCollection
+                .get()
+                .await()
+            val bookings = snapshot.toObjects(Booking::class.java)
+                .sortedByDescending { it.createdAt }
+            Resource.Success(bookings)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch all bookings")
+        }
+    }
+
+    suspend fun getBookingsByTenantId(tenantId: String): List<Booking> {
+        return try {
+            val snapshot = bookingsCollection
+                .whereEqualTo("tenantId", tenantId)
+                .get()
+                .await()
+            snapshot.toObjects(Booking::class.java)
+                .sortedByDescending { it.createdAt }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun getBookingsByLandlordId(landlordId: String): List<Booking> {
+        return try {
+            val snapshot = bookingsCollection
+                .whereEqualTo("landlordId", landlordId)
+                .get()
+                .await()
+            snapshot.toObjects(Booking::class.java)
+                .sortedByDescending { it.createdAt }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     suspend fun updateBookingStatus(bookingId: String, status: String): Resource<Unit> {
         return try {
             bookingsCollection.document(bookingId)
@@ -185,7 +198,20 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── Review ───────────────────────────────────────────────────────────────
+    // ── Notifications ─────────────────────────────────────────────────────────
+
+    suspend fun sendNotification(notificationData: Map<String, Any>): Resource<Unit> {
+        return try {
+            val dataWithTime = notificationData.toMutableMap()
+            dataWithTime["createdAt"] = FieldValue.serverTimestamp()
+            notificationsCollection.add(dataWithTime).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to send notification")
+        }
+    }
+
+    // ── Review ────────────────────────────────────────────────────────────────
 
     suspend fun addReview(review: Review): Resource<String> {
         return try {
@@ -202,10 +228,11 @@ class FirebaseDataManager @Inject constructor(
         return try {
             val snapshot = reviewsCollection
                 .whereEqualTo("propertyId", propertyId)
-                .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
-            Resource.Success(snapshot.toObjects(Review::class.java))
+            val reviews = snapshot.toObjects(Review::class.java)
+                .sortedByDescending { it.createdAt }
+            Resource.Success(reviews)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch reviews")
         }

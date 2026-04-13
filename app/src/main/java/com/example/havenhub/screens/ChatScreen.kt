@@ -22,7 +22,6 @@ import androidx.navigation.NavController
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.MessagingViewModel
 
-// ✅ Missing colors defined locally for safety
 private val SurfaceGray = Color(0xFFF2F2F2)
 private val TextHint = Color(0xFF9E9E9E)
 
@@ -30,20 +29,29 @@ private val TextHint = Color(0xFF9E9E9E)
 @Composable
 fun ChatScreen(
     navController: NavController,
-    userId: String = "",          // ✅ Default value added to fix NavGraph error
-    currentUserId: String = "",   // ✅ Default value added
-    chatId: String = "",          // ✅ Default value added
+    userId: String = "",
+    currentUserId: String = "",
+    chatId: String = "",
     viewModel: MessagingViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var messageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    // Initialize chat logic
+    // ✅ FIX: ViewModel ke naye signature ke mutabiq call karein
     LaunchedEffect(chatId, currentUserId) {
-        if (chatId.isNotEmpty() && currentUserId.isNotEmpty()) {
+        if (currentUserId.isNotEmpty()) {
             viewModel.initUserId(currentUserId)
-            viewModel.listenToMessages(chatId, currentUserId)
+            // Agar chatId direct aa rahi hai to loadChat ki jagah seedha listen use karein
+            // Note: Naye ViewModel mein listenToMessages ab private hai ya sirf chatId leta hai
+            viewModel.loadChat(userId)
+        }
+    }
+
+    // Auto-scroll to bottom when new messages arrive
+    LaunchedEffect(uiState.messages.size) {
+        if (uiState.messages.isNotEmpty()) {
+            listState.animateScrollToItem(uiState.messages.size - 1)
         }
     }
 
@@ -65,10 +73,11 @@ fun ChatScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(8.dp)
+                        .navigationBarsPadding()
                         .imePadding(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { /* Handle attachment */ }) {
+                    IconButton(onClick = { /* Attachment logic */ }) {
                         Icon(Icons.Default.AttachFile, null, tint = Color.Gray)
                     }
 
@@ -102,7 +111,9 @@ fun ChatScreen(
                 .padding(padding)
                 .background(SurfaceGray)
         ) {
-            if (uiState.messages.isEmpty()) {
+            if (uiState.isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = PrimaryBlue)
+            } else if (uiState.messages.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No messages yet", color = TextHint)
                 }
@@ -114,19 +125,31 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(uiState.messages) { message ->
-                        // Basic message bubble (Aap ise mazeed customize kar sakte hain)
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (message.senderId == currentUserId) PrimaryBlue else Color.White
-                            ),
-                            modifier = Modifier.padding(horizontal = 8.dp).align(Alignment.Center)
+                        val isMe = message.senderId == currentUserId
+
+                        // ✅ FIX: Message alignment issue resolved using Column and Arrangement
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
                         ) {
-                            Text(
-                                text = message.content,
-                                modifier = Modifier.padding(12.dp),
-                                color = if (message.senderId == currentUserId) Color.White else Color.Black
-                            )
+                            Card(
+                                shape = RoundedCornerShape(
+                                    topStart = 12.dp,
+                                    topEnd = 12.dp,
+                                    bottomStart = if (isMe) 12.dp else 0.dp,
+                                    bottomEnd = if (isMe) 0.dp else 12.dp
+                                ),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isMe) PrimaryBlue else Color.White
+                                )
+                            ) {
+                                Text(
+                                    text = message.content,
+                                    modifier = Modifier.padding(12.dp),
+                                    color = if (isMe) Color.White else Color.Black,
+                                    fontSize = 15.sp
+                                )
+                            }
                         }
                     }
                 }

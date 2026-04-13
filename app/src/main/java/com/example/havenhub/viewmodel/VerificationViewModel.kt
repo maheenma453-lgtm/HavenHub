@@ -14,11 +14,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class VerificationUiState(
-    val isLoading: Boolean = false,
-    val pendingUsers: List<User> = emptyList(),
-    val pendingProperties: List<Property> = emptyList(),
-    val actionSuccess: Boolean = false,
-    val errorMessage: String? = null
+    val isLoading         : Boolean          = false,
+    val pendingUsers       : List<User>       = emptyList(),
+    val pendingProperties  : List<Property>   = emptyList(),
+    val actionSuccess      : Boolean          = false,
+    val errorMessage       : String?          = null
 )
 
 @HiltViewModel
@@ -43,7 +43,6 @@ class VerificationViewModel @Inject constructor(
                     isLoading = false,
                     pendingUsers = when (usersResult) {
                         is Resource.Success -> usersResult.data.filter {
-                            // ✅ FIXED: String vs Enum comparison fix using .name
                             it.verificationStatus == VerificationStatus.PENDING.name ||
                                     it.verificationStatus == VerificationStatus.UNDER_REVIEW.name
                         }
@@ -51,7 +50,6 @@ class VerificationViewModel @Inject constructor(
                     },
                     pendingProperties = when (propertiesResult) {
                         is Resource.Success -> propertiesResult.data.filter {
-                            // ✅ FIXED: String vs Enum comparison fix using .name
                             it.status == PropertyStatus.PENDING.name ||
                                     it.status == PropertyStatus.UNDER_REVIEW.name
                         }
@@ -59,6 +57,21 @@ class VerificationViewModel @Inject constructor(
                     }
                 )
             }
+        }
+    }
+
+    // ✅ approveProperty function add kiya
+    fun approveProperty(propertyId: String, adminNote: String = "") {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            handleResult(adminRepository.approveProperty(propertyId, adminNote))
+        }
+    }
+
+    fun rejectProperty(propertyId: String, reason: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            handleResult(adminRepository.rejectProperty(propertyId, reason))
         }
     }
 
@@ -73,13 +86,6 @@ class VerificationViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             handleResult(adminRepository.banUser(userId))
-        }
-    }
-
-    fun rejectProperty(propertyId: String, reason: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            handleResult(adminRepository.rejectProperty(propertyId, reason))
         }
     }
 

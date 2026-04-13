@@ -67,7 +67,7 @@ class ReportsViewModel @Inject constructor(
             val allPayments = (paymentsResult as? Resource.Success)?.data ?: emptyList()
 
             val totalRevenue = allPayments
-                .filter { it.status == PaymentStatus.COMPLETED }
+                .filter { it.status == PaymentStatus.COMPLETED.name }
                 .sumOf { it.amount }
 
             // ✅ Fixed: use .name on enum directly (lines 80-81 fix)

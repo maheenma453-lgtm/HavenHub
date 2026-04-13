@@ -15,10 +15,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class BookingUiState(
-    val isLoading: Boolean = false,
-    val bookings: List<Booking> = emptyList(),
-    val errorMessage: String? = null,
-    val actionSuccess: Boolean = false,
+    val isLoading        : Boolean       = false,
+    val bookings         : List<Booking> = emptyList(),
+    val currentBooking   : Booking?      = null,      // ✅ New
+    val errorMessage     : String?       = null,
+    val actionSuccess    : Boolean       = false,
     val createdBookingId : String?       = null
 )
 
@@ -30,16 +31,14 @@ class BookingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BookingUiState())
     val uiState: StateFlow<BookingUiState> = _uiState.asStateFlow()
 
-    // Load bookings according to the role
-    fun loadBookings(userId: String, isLandlord: Boolean) {
+    fun loadBookings(userId: String, role: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                // Repository ke naye functions use ho rahe hain
-                val result = if (isLandlord) {
-                    repository.getLandlordBookings(userId)
-                } else {
-                    repository.getTenantBookings(userId)
+                val result = when (role.lowercase()) {
+                    "admin"    -> repository.getAllBookingsForAdmin()
+                    "landlord" -> repository.getLandlordBookings(userId)
+                    else       -> repository.getTenantBookings(userId)
                 }
                 _uiState.update { it.copy(isLoading = false, bookings = result) }
             } catch (e: Exception) {
@@ -48,11 +47,49 @@ class BookingViewModel @Inject constructor(
         }
     }
 
+    // ✅ New: bookingId se single booking load karo
+    fun loadBookingById(bookingId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            when (val result = repository.getBookingById(bookingId)) {
+                is Resource.Success -> _uiState.update {
+                    it.copy(isLoading = false, currentBooking = result.data)
+                }
+                is Resource.Error   -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                else -> {}
+            }
+        }
+    }
+
     fun createBooking(booking: Booking) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            // Repository returns Resource<String>
+            _uiState.update { it.copy(isLoading = true, actionSuccess = false, errorMessage = null) }
             when (val result = repository.createBooking(booking)) {
+                is Resource.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading        = false,
+                            actionSuccess    = true,
+                            createdBookingId = result.data
+                        )
+                    }
+                }
+                is Resource.Error -> {
+                    _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
+                    }
+                }
+                else -> {}
+            }
+        }
+    }
+
+    fun updateStatusByAdmin(bookingId: String, newStatus: BookingStatus) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            when (val result = repository.updateBookingStatus(bookingId, newStatus)) {
                 is Resource.Success -> {
                     _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
                 }
@@ -65,6 +102,12 @@ class BookingViewModel @Inject constructor(
     }
 
     fun clearMessages() {
-        _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
+        _uiState.update {
+            it.copy(
+                errorMessage     = null,
+                actionSuccess    = false,
+                createdBookingId = null
+            )
+        }
     }
 }

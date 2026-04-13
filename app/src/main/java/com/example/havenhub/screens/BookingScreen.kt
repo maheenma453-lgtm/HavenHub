@@ -21,30 +21,40 @@ import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.PaymentStatus
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.BookingViewModel
-import com.google.firebase.auth.FirebaseAuth
+import com.example.havenhub.viewmodel.PropertyViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingScreen(
-    navController: NavController,
-    propertyId   : String,
-    viewModel    : BookingViewModel = hiltViewModel()
+    navController     : NavController,
+    propertyId        : String,
+    viewModel         : BookingViewModel  = hiltViewModel(),
+    propertyViewModel : PropertyViewModel = hiltViewModel(),
+    authViewModel     : AuthViewModel     = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState     by viewModel.uiState.collectAsState()
+    val authUiState by authViewModel.uiState.collectAsState()
+    val propUiState by propertyViewModel.uiState.collectAsState()
 
-    // ✅ Fix 1 — currentUser Firebase se
-    val currentUser = FirebaseAuth.getInstance().currentUser
+    val currentUid  = authUiState.currentUser?.uid         ?: ""
+    val currentName = authUiState.currentUser?.displayName ?: ""
 
-    LaunchedEffect(uiState.actionSuccess) {
-        if (uiState.actionSuccess) {
-            val bookingId = uiState.createdBookingId
-            if (!bookingId.isNullOrEmpty()) {
-                navController.navigate(
-                    Screen.BookingConfirmation.createRoute(bookingId)
-                ) {
-                    popUpTo(Screen.Booking.route) { inclusive = true }
-                }
+    // ✅ Property load karo
+    LaunchedEffect(propertyId) {
+        propertyViewModel.loadPropertyDetail(propertyId)
+    }
+
+    val property = propUiState.propertyDetail
+
+    // ✅ Booking success hone par confirmation screen pe jao
+    LaunchedEffect(uiState.actionSuccess, uiState.createdBookingId) {
+        if (uiState.actionSuccess && !uiState.createdBookingId.isNullOrEmpty()) {
+            navController.navigate(
+                Screen.BookingConfirmation.createRoute(uiState.createdBookingId!!)
+            ) {
+                popUpTo(Screen.Booking.route) { inclusive = true }
             }
             viewModel.clearMessages()
         }
@@ -53,15 +63,10 @@ fun BookingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text("Complete Booking", fontWeight = FontWeight.Bold)
-                },
+                title = { Text("Complete Booking", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -80,71 +85,189 @@ fun BookingScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(12.dp),
-                colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text       = "Order Summary",
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 18.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Property ID: $propertyId", color = TextSecondary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text       = "Total Amount: Rs. 12,000",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Status: Pending", color = TextSecondary)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = {
-                    val booking = Booking(
-                        propertyId    = propertyId,
-                        tenantId      = currentUser?.uid ?: "",
-                        tenantName    = currentUser?.displayName ?: "",
-                        totalAmount   = 12000.0,
-                        // ✅ Fix 2 & 3 — .name use karo kyunki fields String hain
-                        status        = BookingStatus.PENDING.name,
-                        paymentStatus = PaymentStatus.PENDING.name
-                    )
-                    viewModel.createBooking(booking)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                enabled = !uiState.isLoading,
-                shape   = RoundedCornerShape(12.dp),
-                colors  = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-            ) {
-                if (uiState.isLoading) {
+            when {
+                // ✅ Loading
+                propUiState.isLoading -> {
                     CircularProgressIndicator(
-                        modifier    = Modifier.size(20.dp),
-                        color       = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        "Confirm & Pay",
-                        fontSize   = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        modifier = Modifier.padding(32.dp),
+                        color    = PrimaryBlue
                     )
                 }
-            }
 
-            uiState.errorMessage?.let { error ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = error, color = Color.Red, fontSize = 14.sp)
+                // ✅ Property nahi mili
+                property == null -> {
+                    Card(
+                        colors   = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFEBEE)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text     = "Property load nahi ho rahi. Wapas jao aur dobara try karo.",
+                            color    = Color(0xFFB71C1C),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+
+                // ✅ Property approved nahi
+                property.status != "APPROVED" -> {
+                    Card(
+                        colors   = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFEBEE)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text     = "Yeh property abhi admin se approve nahi hui — booking nahi ho sakti.",
+                            color    = Color(0xFFB71C1C),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+
+                // ✅ Sab theek — booking form dikhao
+                else -> {
+
+                    // ── Order Summary ──
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text       = "Order Summary",
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 18.sp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            SummaryRow("Property", property.title)
+                            SummaryRow("Location", "${property.address}, ${property.city}")
+                            SummaryRow("Type",     property.propertyType)
+                            SummaryRow("Bedrooms", "${property.bedrooms}")
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                            SummaryRow(
+                                label = "Price per night",
+                                value = property.formattedPrice,
+                                bold  = true
+                            )
+                            SummaryRow(
+                                label = "Status",
+                                value = "Pending confirmation"
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // ── Tenant Info ──
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text       = "Tenant Info",
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            SummaryRow("Name",    currentName.ifEmpty { "N/A" })
+                            SummaryRow("User ID", currentUid.take(12) + "...")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // ── Confirm Button ──
+                    Button(
+                        onClick = {
+                            val booking = Booking(
+                                propertyId       = propertyId,
+                                propertyTitle    = property.title,
+                                landlordId       = property.ownerId,
+                                landlordName     = property.ownerName,
+                                tenantId         = currentUid,
+                                tenantName       = currentName,
+                                pricePerNight    = property.pricePerNight,
+                                totalAmount      = property.pricePerNight,
+                                status           = BookingStatus.PENDING.name,
+                                paymentStatus    = PaymentStatus.PENDING.name,
+                                propertyAddress  = "${property.address}, ${property.city}",
+                                propertyCoverUrl = property.coverImageUrl
+                            )
+                            viewModel.createBooking(booking)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp),
+                        enabled = !uiState.isLoading,
+                        shape   = RoundedCornerShape(12.dp),
+                        colors  = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    ) {
+                        if (uiState.isLoading) {
+                            CircularProgressIndicator(
+                                modifier    = Modifier.size(20.dp),
+                                color       = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                "Confirm Booking",
+                                fontSize   = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // ── Error Message ──
+                    uiState.errorMessage?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            colors   = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFFEBEE)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text     = error,
+                                color    = Color(0xFFB71C1C),
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String, bold: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text     = label,
+            fontSize = 14.sp,
+            color    = TextSecondary
+        )
+        Text(
+            text       = value,
+            fontSize   = 14.sp,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+            color      = if (bold) PrimaryBlue else TextPrimary
+        )
     }
 }

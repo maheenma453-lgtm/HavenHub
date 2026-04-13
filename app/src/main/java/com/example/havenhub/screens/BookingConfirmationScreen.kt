@@ -31,10 +31,14 @@ fun BookingConfirmationScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // ── Get first booking for payment details ──────────────────────
-    val booking = uiState.bookings.firstOrNull()
+    // ✅ BookingViewModel se booking load karo
+    LaunchedEffect(bookingId) {
+        viewModel.loadBookingById(bookingId)
+    }
 
-    // ── Animated checkmark (pop-in effect) ────────────────────────
+    // ✅ currentBooking use karo
+    val booking = uiState.currentBooking
+
     val scale by animateFloatAsState(
         targetValue   = 1f,
         animationSpec = spring(
@@ -51,10 +55,9 @@ fun BookingConfirmationScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
         Spacer(modifier = Modifier.height(60.dp))
 
-        // ── Animated Success Circle ────────────────────────────────
+        // ── Animated Success Circle ──
         Box(
             modifier = Modifier
                 .scale(scale)
@@ -73,9 +76,8 @@ fun BookingConfirmationScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── Success Text ───────────────────────────────────────────
         Text(
-            text       = "Booking Confirmed!",
+            text       = "Booking Submitted!",
             fontSize   = 26.sp,
             fontWeight = FontWeight.Bold,
             color      = TextPrimary
@@ -84,7 +86,7 @@ fun BookingConfirmationScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text       = "Your property has been booked successfully.\nThe owner has been notified.",
+            text       = "Booking request bhej di gayi hai.\nAdmin approve karne ke baad confirm hogi.",
             fontSize   = 14.sp,
             color      = TextSecondary,
             textAlign  = TextAlign.Center,
@@ -93,85 +95,116 @@ fun BookingConfirmationScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ── Booking Summary Card ───────────────────────────────────
-        Card(
-            modifier  = Modifier.fillMaxWidth(),
-            shape     = RoundedCornerShape(16.dp),
-            colors    = CardDefaults.cardColors(containerColor = SurfaceVariantLight),
-            elevation = CardDefaults.cardElevation(0.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-
-                Text("Booking Details", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(14.dp))
-
-                BookingDetailRow(label = "Booking ID", value = "#${bookingId.take(8).uppercase()}")
-                BookingDetailRow(label = "Property ID", value = booking?.propertyId ?: "-")
-                BookingDetailRow(label = "Status",      value = "Pending")
-                BookingDetailRow(label = "Payment",     value = "Pending")
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 12.dp),
-                    color    = BorderGray
-                )
-
-                // Total amount
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Total Amount", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        // ── Booking Summary Card ──
+        if (uiState.isLoading) {
+            CircularProgressIndicator(color = PrimaryBlue)
+        } else {
+            Card(
+                modifier  = Modifier.fillMaxWidth(),
+                shape     = RoundedCornerShape(16.dp),
+                colors    = CardDefaults.cardColors(containerColor = SurfaceVariantLight),
+                elevation = CardDefaults.cardElevation(0.dp)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text       = "PKR ${booking?.totalAmount?.toInt() ?: 12000}",
-                        fontSize   = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color      = PrimaryBlue
+                        "Booking Details",
+                        fontSize   = 15.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                }
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Payment status badge
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(WarningOrange.copy(alpha = 0.12f))
-                        .padding(10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text       = "⏳ Payment Pending",
-                        fontSize   = 13.sp,
-                        color      = WarningOrange,
-                        fontWeight = FontWeight.SemiBold
+                    BookingDetailRow(
+                        label = "Booking ID",
+                        value = "#${bookingId.take(8).uppercase()}"
                     )
+                    BookingDetailRow(
+                        label = "Property",
+                        value = booking?.propertyTitle ?: "-"
+                    )
+                    BookingDetailRow(
+                        label = "Location",
+                        value = booking?.propertyAddress ?: "-"
+                    )
+                    BookingDetailRow(
+                        label = "Tenant",
+                        value = booking?.tenantName ?: "-"
+                    )
+                    BookingDetailRow(
+                        label = "Status",
+                        value = booking?.bookingStatus?.displayName() ?: "Pending"
+                    )
+                    BookingDetailRow(
+                        label = "Payment",
+                        value = booking?.paymentStatusEnum?.displayName() ?: "Pending"
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color    = BorderGray
+                    )
+
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Total Amount",
+                            fontSize   = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text       = booking?.formattedTotal ?: "PKR 0",
+                            fontSize   = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = PrimaryBlue
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(WarningOrange.copy(alpha = 0.12f))
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text       = "Payment Pending",
+                            fontSize   = 13.sp,
+                            color      = WarningOrange,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // ── Action Buttons ─────────────────────────────────────────
+        // ── Action Buttons ──
         Button(
             onClick = {
-                // ✅ FIX: Screen.Payment.createRoute() needs 6 arguments
-                navController.navigate(
-                    Screen.Payment.createRoute(
-                        bookingId = bookingId,
-                        payerId   = booking?.tenantId     ?: "",
-                        payeeId   = booking?.landlordId   ?: "",
-                        payerName = booking?.tenantName   ?: "User",
-                        payeeName = booking?.landlordName ?: "Owner",
-                        amount    = booking?.totalAmount  ?: 12000.0
+                if (booking != null) {
+                    navController.navigate(
+                        Screen.Payment.createRoute(
+                            bookingId = bookingId,
+                            payerId   = booking.tenantId,
+                            payeeId   = booking.landlordId,
+                            payerName = booking.tenantName,
+                            payeeName = booking.landlordName,
+                            amount    = booking.totalAmount
+                        )
                     )
-                )
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
-            shape  = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+            shape    = RoundedCornerShape(12.dp),
+            colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+            enabled  = booking != null && !uiState.isLoading
         ) {
             Text("Pay Now", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
@@ -189,19 +222,17 @@ fun BookingConfirmationScreen(
                 .height(52.dp),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Pay Later – View Bookings", fontSize = 14.sp, color = PrimaryBlue)
+            Text("Pay Later — View Bookings", fontSize = 14.sp, color = PrimaryBlue)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── Error Message ──────────────────────────────────────────
         uiState.errorMessage?.let { error ->
             Text(text = error, color = ErrorRed, fontSize = 14.sp)
         }
     }
 }
 
-// ── Single booking detail row ──────────────────────────────────────
 @Composable
 private fun BookingDetailRow(label: String, value: String) {
     Row(
@@ -211,6 +242,11 @@ private fun BookingDetailRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label, fontSize = 13.sp, color = TextSecondary)
-        Text(text = value,  fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
+        Text(
+            text       = value,
+            fontSize   = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color      = TextPrimary
+        )
     }
 }

@@ -33,13 +33,21 @@ import com.example.havenhub.viewmodel.PropertyViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PropertyDetailScreen(
-    navController: NavController,
-    propertyId: String,
-    viewModel: PropertyViewModel = hiltViewModel()
+    navController : NavController,
+    propertyId    : String,
+    viewModel     : PropertyViewModel = hiltViewModel(),
+    authViewModel : AuthViewModel     = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val property = uiState.propertyDetail
+    val uiState     by viewModel.uiState.collectAsState()
+    val authUiState by authViewModel.uiState.collectAsState()
+    val property  = uiState.propertyDetail
     val isLoading = uiState.isLoading
+
+    val currentUid = authUiState.currentUser?.uid ?: ""
+    val userRole   = authUiState.userRole
+    val isTenant   = userRole == "tenant"
+    val isLandlord = userRole == "landlord"
+    val isOwner    = isLandlord && property?.ownerId == currentUid
 
     LaunchedEffect(propertyId) {
         viewModel.loadPropertyDetail(propertyId)
@@ -374,7 +382,7 @@ fun BadgeBox(label: String, color: Color) {
 }
 
 @Composable
-private fun StatItem(icon: String, label: String, value: String) {
+private fun StatItem(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(icon, fontSize = 22.sp)
         Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))

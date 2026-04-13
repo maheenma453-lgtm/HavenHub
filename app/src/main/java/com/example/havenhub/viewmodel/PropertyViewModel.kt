@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Property
+import com.example.havenhub.data.PropertyStatus
 import com.example.havenhub.data.PropertyType
 import com.example.havenhub.repository.AuthRepository
 import com.example.havenhub.repository.PropertyRepository
@@ -28,8 +29,8 @@ data class PropertyUiState(
 
 @HiltViewModel
 class PropertyViewModel @Inject constructor(
-    private val propertyRepository: PropertyRepository,
-    private val authRepository: AuthRepository
+    private val propertyRepository : PropertyRepository,
+    private val authRepository     : AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PropertyUiState())
@@ -42,7 +43,7 @@ class PropertyViewModel @Inject constructor(
                 is Resource.Success -> _uiState.update {
                     it.copy(isLoading = false, propertyDetail = result.data)
                 }
-                is Resource.Error -> _uiState.update {
+                is Resource.Error   -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
                 }
                 is Resource.Loading -> _uiState.update { it.copy(isLoading = true) }
@@ -56,9 +57,10 @@ class PropertyViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             when (val result = propertyRepository.getMyProperties(userId)) {
                 is Resource.Success -> _uiState.update {
-                    it.copy(isLoading = false, myProperties = result.data)
+                    // ✅ Fix: data nullable safely handle karo
+                    it.copy(isLoading = false, myProperties = result.data ?: emptyList())
                 }
-                is Resource.Error -> _uiState.update {
+                is Resource.Error   -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
                 }
                 is Resource.Loading -> _uiState.update { it.copy(isLoading = true) }
@@ -83,23 +85,25 @@ class PropertyViewModel @Inject constructor(
     }
 
     fun addProperty(
-        title: String,
-        description: String,
-        pricePerNight: Double,
-        address: String,
-        city: String,
-        propertyType: PropertyType,
-        bedrooms: Int,
-        bathrooms: Int,
-        areaSqFt: Double? = null,
-        amenities: List<String>,
-        images: List<Uri>
+        title         : String,
+        description   : String,
+        pricePerNight : Double,
+        address       : String,
+        city          : String,
+        propertyType  : PropertyType,
+        bedrooms      : Int,
+        bathrooms     : Int,
+        areaSqFt      : Double?      = null,
+        amenities     : List<String>,
+        images        : List<Uri>,
+        status        : String       = PropertyStatus.PENDING.name  // ✅ default PENDING
     ) {
         viewModelScope.launch {
-            val userId = authRepository.currentUser?.uid ?: return@launch
+            val currentUser = authRepository.currentUser ?: return@launch
             _uiState.update { it.copy(isLoading = true, errorMessage = null, actionSuccess = false) }
             val property = Property(
-                ownerId       = userId,
+                ownerId       = currentUser.uid,
+                ownerName     = currentUser.displayName ?: "",
                 title         = title,
                 description   = description,
                 pricePerNight = pricePerNight,
@@ -112,9 +116,13 @@ class PropertyViewModel @Inject constructor(
                 amenities     = amenities
             )
             val result = propertyRepository.addProperty(property, images)
-            handleActionResult(result, "Property added successfully!")
+            handleActionResult(result, "Property submit ho gayi! Admin approve karega.")
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Update
+    // ─────────────────────────────────────────────────────────────────────────
 
     fun updateProperty(property: Property, newImages: List<Uri> = emptyList()) {
         viewModelScope.launch {
@@ -128,7 +136,8 @@ class PropertyViewModel @Inject constructor(
                 "propertyType"  to property.propertyType,
                 "bedrooms"      to property.bedrooms,
                 "bathrooms"     to property.bathrooms,
-                "amenities"     to property.amenities
+                "amenities"     to property.amenities,
+                "updatedAt"     to System.currentTimeMillis()
             )
             property.areaSqFt?.let { fields["areaSqFt"] = it }
             val result = propertyRepository.updateProperty(property.propertyId, fields)
@@ -139,20 +148,48 @@ class PropertyViewModel @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Delete
+    // ─────────────────────────────────────────────────────────────────────────
+
     fun deleteProperty(propertyId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null, actionSuccess = false) }
             val result = propertyRepository.deleteProperty(propertyId)
-            handleActionResult(result, "Property deleted successfully!")
+            handleActionResult(result, "Property delete ho gayi!")
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Admin Actions
+    // ─────────────────────────────────────────────────────────────────────────
+
+    fun approveProperty(propertyId: String, adminNote: String = "") {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null, actionSuccess = false) }
+            val result = propertyRepository.approveProperty(propertyId, adminNote)
+            handleActionResult(result, "Property approve ho gayi!")
+        }
+    }
+
+    fun rejectProperty(propertyId: String, adminNote: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null, actionSuccess = false) }
+            val result = propertyRepository.rejectProperty(propertyId, adminNote)
+            handleActionResult(result, "Property reject ho gayi!")
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────────
 
     private fun handleActionResult(result: Resource<*>, successMsg: String) {
         when (result) {
             is Resource.Success -> _uiState.update {
                 it.copy(isLoading = false, actionSuccess = true, successMessage = successMsg)
             }
-            is Resource.Error -> _uiState.update {
+            is Resource.Error   -> _uiState.update {
                 it.copy(isLoading = false, errorMessage = result.message)
             }
             is Resource.Loading -> _uiState.update { it.copy(isLoading = true) }
@@ -160,6 +197,8 @@ class PropertyViewModel @Inject constructor(
     }
 
     fun clearMessages() {
-        _uiState.update { it.copy(errorMessage = null, successMessage = null, actionSuccess = false) }
+        _uiState.update {
+            it.copy(errorMessage = null, successMessage = null, actionSuccess = false)
+        }
     }
 }

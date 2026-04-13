@@ -1,15 +1,20 @@
 package com.example.havenhub.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.havenhub.screens.*
+import com.example.havenhub.viewmodel.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
 private val authRoutes = listOf(
@@ -36,9 +41,12 @@ private val adminRoutes = listOf(
 
 @Composable
 fun HavenHubNavGraph(
-    navController     : NavHostController,
-    unreadMessageCount: Int = 0
+    navController      : NavHostController,
+    unreadMessageCount : Int = 0
 ) {
+    val authViewModel : AuthViewModel = hiltViewModel()
+    val uiState       by authViewModel.uiState.collectAsState()
+
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -95,7 +103,24 @@ fun HavenHubNavGraph(
 
             // ── Property ──────────────────────────────────────────
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
-            composable(Screen.AddProperty.route)  { AddPropertyScreen(navController) }
+
+            // ✅ AddProperty — sirf landlord
+            composable(Screen.AddProperty.route) {
+                val role = uiState.userRole
+                when {
+                    uiState.isLoading   -> {
+                        Box(Modifier.fillMaxSize(), Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    // ✅ Fix: lowercase
+                    role == "landlord"  -> AddPropertyScreen(navController)
+                    role.isNotEmpty()   -> {
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
+                }
+            }
+
             composable(Screen.MyProperties.route) { MyPropertiesScreen(navController) }
 
             composable(
@@ -126,20 +151,33 @@ fun HavenHubNavGraph(
             composable(Screen.MyBookings.route) {
                 MyBookingsScreen(
                     navController = navController,
-                    userId        = FirebaseAuth.getInstance().currentUser?.uid ?: ""  // ✅
+                    userId        = FirebaseAuth.getInstance().currentUser?.uid ?: ""
                 )
             }
 
+            // ✅ Booking — sirf tenant
             composable(
                 route     = Screen.Booking.route,
                 arguments = listOf(navArgument(Screen.Booking.ARG_PROPERTY_ID) {
                     type = NavType.StringType
                 })
             ) { back ->
-                BookingScreen(
-                    navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.Booking.ARG_PROPERTY_ID) ?: ""
-                )
+                val role = uiState.userRole
+                when {
+                    uiState.isLoading  -> {
+                        Box(Modifier.fillMaxSize(), Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    // ✅ Fix: lowercase
+                    role == "tenant"   -> BookingScreen(
+                        navController = navController,
+                        propertyId    = back.arguments?.getString(Screen.Booking.ARG_PROPERTY_ID) ?: ""
+                    )
+                    role.isNotEmpty()  -> {
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
+                }
             }
 
             composable(
@@ -160,7 +198,7 @@ fun HavenHubNavGraph(
                     type = NavType.StringType
                 })
             ) { back ->
-                BookingDetailsScreen(
+                BookingDetailScreen(
                     navController = navController,
                     bookingId     = back.arguments?.getString(Screen.BookingDetails.ARG_BOOKING_ID) ?: ""
                 )

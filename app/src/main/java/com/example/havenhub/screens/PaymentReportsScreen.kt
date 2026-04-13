@@ -125,7 +125,7 @@ fun PaymentReportsScreen(
                             transactionId = payment.paymentId,
                             amount = "PKR ${String.format("%,.0f", payment.amount)}",
                             date = dateString,
-                            status = payment.status.name
+                            status = payment.status
                         )
                     }
                 }

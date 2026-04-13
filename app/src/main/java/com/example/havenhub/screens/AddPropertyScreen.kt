@@ -4,8 +4,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -14,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +30,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.havenhub.data.PropertyType
 import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.PropertyViewModel
 
 private val PROPERTY_TYPES = PropertyType.entries.map { it.displayName() }
@@ -47,8 +47,16 @@ fun AddPropertyScreen(
     navController: NavController,
     viewModel: PropertyViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState  by viewModel.uiState.collectAsState()
+    val authState by authViewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // ✅ Role check — sirf LANDLORD aa sakta hai
+    LaunchedEffect(authState.userRole) {
+        if (authState.userRole.isNotEmpty() && authState.userRole != "LANDLORD") {
+            navController.popBackStack()
+        }
+    }
 
     var currentStep by remember { mutableIntStateOf(1) }
 
@@ -85,6 +93,7 @@ fun AddPropertyScreen(
     LaunchedEffect(uiState.actionSuccess, uiState.errorMessage) {
         if (uiState.actionSuccess) {
             viewModel.clearMessages()
+            snackbarHostState.showSnackbar("Property submit ho gayi! Admin approve karega.")
             navController.popBackStack()
         }
         uiState.errorMessage?.let {
@@ -113,7 +122,7 @@ fun AddPropertyScreen(
                     IconButton(onClick = {
                         if (currentStep > 1) currentStep-- else navController.popBackStack()
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -151,17 +160,17 @@ fun AddPropertyScreen(
                                     it.displayName() == selectedType
                                 } ?: PropertyType.APARTMENT
                                 viewModel.addProperty(
-                                    title = title,
-                                    description = description,
+                                    title         = title,
+                                    description   = description,
                                     pricePerNight = pricePerNight.toDoubleOrNull() ?: 0.0,
-                                    address = address,
-                                    city = city,
-                                    propertyType = typeEnum,
-                                    bedrooms = bedrooms.toIntOrNull() ?: 1,
-                                    bathrooms = bathrooms.toIntOrNull() ?: 1,
-                                    areaSqFt = area.toDoubleOrNull(),
-                                    amenities = selectedAmenities.toList(),
-                                    images = selectedImages
+                                    address       = address,
+                                    city          = city,
+                                    propertyType  = typeEnum,
+                                    bedrooms      = bedrooms.toIntOrNull()  ?: 1,
+                                    bathrooms     = bathrooms.toIntOrNull() ?: 1,
+                                    areaSqFt      = area.toDoubleOrNull(),
+                                    amenities     = selectedAmenities.toList(),
+                                    images        = selectedImages
                                 )
                             }
                         }
@@ -193,6 +202,32 @@ fun AddPropertyScreen(
                     fontSize = 13.sp,
                     color = Color(0xFF8899AA)
                 )
+            }
+
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Text(
+                            text = "Property submit karne ke baad admin approve karega, tab tenants ko dikhe gi.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
             }
 
             when (currentStep) {
