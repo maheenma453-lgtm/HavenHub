@@ -31,12 +31,10 @@ fun BookingConfirmationScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // ✅ BookingViewModel se booking load karo
     LaunchedEffect(bookingId) {
         viewModel.loadBookingById(bookingId)
     }
 
-    // ✅ currentBooking use karo
     val booking = uiState.currentBooking
 
     val scale by animateFloatAsState(
@@ -57,7 +55,6 @@ fun BookingConfirmationScreen(
     ) {
         Spacer(modifier = Modifier.height(60.dp))
 
-        // ── Animated Success Circle ──
         Box(
             modifier = Modifier
                 .scale(scale)
@@ -95,7 +92,6 @@ fun BookingConfirmationScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ── Booking Summary Card ──
         if (uiState.isLoading) {
             CircularProgressIndicator(color = PrimaryBlue)
         } else {
@@ -106,52 +102,20 @@ fun BookingConfirmationScreen(
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        "Booking Details",
-                        fontSize   = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Booking Details", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    BookingDetailRow(
-                        label = "Booking ID",
-                        value = "#${bookingId.take(8).uppercase()}"
-                    )
-                    BookingDetailRow(
-                        label = "Property",
-                        value = booking?.propertyTitle ?: "-"
-                    )
-                    BookingDetailRow(
-                        label = "Location",
-                        value = booking?.propertyAddress ?: "-"
-                    )
-                    BookingDetailRow(
-                        label = "Tenant",
-                        value = booking?.tenantName ?: "-"
-                    )
-                    BookingDetailRow(
-                        label = "Status",
-                        value = booking?.bookingStatus?.displayName() ?: "Pending"
-                    )
-                    BookingDetailRow(
-                        label = "Payment",
-                        value = booking?.paymentStatusEnum?.displayName() ?: "Pending"
-                    )
+                    BookingDetailRow(label = "Booking ID", value = "#${bookingId.take(8).uppercase()}")
+                    BookingDetailRow(label = "Property",   value = booking?.propertyTitle ?: "-")
+                    BookingDetailRow(label = "Location",   value = booking?.propertyAddress ?: "-")
+                    BookingDetailRow(label = "Tenant",     value = booking?.tenantName ?: "-")
+                    BookingDetailRow(label = "Status",     value = booking?.bookingStatus?.displayName() ?: "Pending")
+                    BookingDetailRow(label = "Payment",    value = booking?.paymentStatusEnum?.displayName() ?: "Pending")
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        color    = BorderGray
-                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = BorderGray)
 
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "Total Amount",
-                            fontSize   = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Total Amount", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         Text(
                             text       = booking?.formattedTotal ?: "PKR 0",
                             fontSize   = 17.sp,
@@ -170,12 +134,7 @@ fun BookingConfirmationScreen(
                             .padding(10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text       = "Payment Pending",
-                            fontSize   = 13.sp,
-                            color      = WarningOrange,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text(text = "Payment Pending", fontSize = 13.sp, color = WarningOrange, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -183,28 +142,24 @@ fun BookingConfirmationScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // ── Action Buttons ──
+        // ✅ Pay Now — booking null check hata diya — enabled sirf isLoading pe
         Button(
             onClick = {
-                if (booking != null) {
-                    navController.navigate(
-                        Screen.Payment.createRoute(
-                            bookingId = bookingId,
-                            payerId   = booking.tenantId,
-                            payeeId   = booking.landlordId,
-                            payerName = booking.tenantName,
-                            payeeName = booking.landlordName,
-                            amount    = booking.totalAmount
-                        )
+                navController.navigate(
+                    Screen.Payment.createRoute(
+                        bookingId = bookingId,
+                        payerId   = booking?.tenantId ?: "",
+                        payeeId   = booking?.landlordId ?: "",
+                        payerName = booking?.tenantName ?: "",
+                        payeeName = booking?.landlordName ?: "",
+                        amount    = booking?.totalAmount ?: 0.0
                     )
-                }
+                )
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
             shape    = RoundedCornerShape(12.dp),
             colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-            enabled  = booking != null && !uiState.isLoading
+            enabled  = !uiState.isLoading
         ) {
             Text("Pay Now", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
@@ -217,10 +172,8 @@ fun BookingConfirmationScreen(
                     popUpTo(Screen.Home.route)
                 }
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(12.dp)
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(12.dp)
         ) {
             Text("Pay Later — View Bookings", fontSize = 14.sp, color = PrimaryBlue)
         }
@@ -236,17 +189,10 @@ fun BookingConfirmationScreen(
 @Composable
 private fun BookingDetailRow(label: String, value: String) {
     Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp),
+        modifier              = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label, fontSize = 13.sp, color = TextSecondary)
-        Text(
-            text       = value,
-            fontSize   = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color      = TextPrimary
-        )
+        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
     }
 }

@@ -46,93 +46,98 @@ fun SearchScreen(
         focusRequester.requestFocus()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F7FA))
-    ) {
-        // ── Search Header ──
-        Surface(
-            color = Color(0xFF0D1B3E),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+    Scaffold(
+        topBar = {
+            Surface(
+                color = Color(0xFF0D1B3E),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                Row(
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    }
+                    OutlinedTextField(
+                        value = uiState.searchQuery,
+                        onValueChange = { viewModel.onQueryChange(it) },
+                        placeholder = { Text("Search city, property type...", color = Color.White.copy(0.6f), fontSize = 14.sp) },
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.White.copy(0.7f)) },
+                        trailingIcon = if (uiState.searchQuery.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { viewModel.onQueryChange("") }) {
+                                    Icon(Icons.Default.Clear, null, tint = Color.White.copy(0.7f))
+                                }
+                            }
+                        } else null,
+                        singleLine = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.White.copy(0.15f),
+                            unfocusedContainerColor = Color.White.copy(0.15f),
+                            focusedBorderColor = Color(0xFFD4AF37),
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { navController.navigate(Screen.Filter.route) },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(0.2f))
+                    ) {
+                        Icon(Icons.Default.FilterList, "Filters", tint = Color(0xFFD4AF37))
+                    }
                 }
-                OutlinedTextField(
-                    value = uiState.searchQuery,
-                    onValueChange = { viewModel.onQueryChange(it) },
-                    placeholder = { Text("Search city, property type...", color = Color.White.copy(0.6f)) },
-                    leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.White.copy(0.7f)) },
-                    trailingIcon = if (uiState.searchQuery.isNotEmpty()) {
-                        {
-                            IconButton(onClick = { viewModel.onQueryChange("") }) {
-                                Icon(Icons.Default.Clear, null, tint = Color.White.copy(0.7f))
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color(0xFFF5F7FA))
+        ) {
+            if (uiState.isLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFFD4AF37),
+                    trackColor = Color(0xFF0D1B3E)
+                )
+            }
+
+            when {
+                uiState.searchQuery.isEmpty() -> {
+                    PopularSearchesSection { term -> viewModel.onQueryChange(term) }
+                }
+                uiState.searchResults.isNotEmpty() -> {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            Text(
+                                text = "${uiState.searchResults.size} properties found",
+                                fontSize = 13.sp,
+                                color = Color(0xFF8899AA),
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                            )
+                        }
+                        items(uiState.searchResults, key = { it.propertyId }) { property ->
+                            SearchResultItem(property) {
+                                navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
                             }
                         }
-                    } else null,
-                    singleLine = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester)
-                        .heightIn(min = 52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White.copy(0.15f),
-                        unfocusedContainerColor = Color.White.copy(0.15f),
-                        focusedBorderColor = Color(0xFFD4AF37),
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = { navController.navigate(Screen.Filter.route) },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White.copy(0.2f))
-                ) {
-                    Icon(Icons.Default.FilterList, "Filters", tint = Color(0xFFD4AF37))
-                }
-            }
-        }
-
-        if (uiState.isLoading) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFFD4AF37),
-                trackColor = Color(0xFF0D1B3E)
-            )
-        }
-
-        when {
-            uiState.searchQuery.isEmpty() -> {
-                PopularSearchesSection { term -> viewModel.onQueryChange(term) }
-            }
-            uiState.searchResults.isNotEmpty() -> {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    item {
-                        Text(
-                            text = "${uiState.searchResults.size} properties found",
-                            fontSize = 13.sp,
-                            color = Color(0xFF8899AA),
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-                        )
-                    }
-                    items(uiState.searchResults, key = { it.propertyId }) { property ->
-                        SearchResultItem(property) {
-                            navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
-                        }
                     }
                 }
-            }
-            !uiState.isLoading -> {
-                EmptySearchResult(uiState.searchQuery)
+                !uiState.isLoading -> {
+                    EmptySearchResult(uiState.searchQuery)
+                }
             }
         }
     }
@@ -193,7 +198,6 @@ private fun SearchResultItem(property: Property, onClick: () -> Unit) {
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Property Image
             Box(
                 modifier = Modifier
                     .size(90.dp)
@@ -226,7 +230,7 @@ private fun SearchResultItem(property: Property, onClick: () -> Unit) {
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
-                        " ${property.city} • ${property.propertyType.lowercase().replaceFirstChar { it.uppercase() }}",
+                        " ${property.city} • ${property.propertyType.toString()}",
                         fontSize = 12.sp,
                         color = Color(0xFF8899AA)
                     )
