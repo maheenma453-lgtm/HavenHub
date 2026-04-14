@@ -1,4 +1,7 @@
 package com.example.havenhub.data
+
+import com.google.firebase.Timestamp
+
 // UserPreferences.kt
 // Model: Per-user notification, privacy, and display preferences.
 // Synced across devices via Firestore.
@@ -32,7 +35,7 @@ package com.example.havenhub.data
  * val prefs = UserPreferences(userId = "uid_abc123")
  *
  * // Disable promotional notifications
- * val updated = prefs.copy(notifyPromotions = false, updatedAt = System.currentTimeMillis())
+ * val updated = prefs.copy(notifyPromotions = false, updatedAt = Timestamp.now())
  *
  * // Check if user wants booking alerts
  * if (prefs.notifyBookingUpdates) { /* send FCM */ }
@@ -49,7 +52,7 @@ package com.example.havenhub.data
  * @property showEmail            Whether the email is displayed on public profile.
  * @property preferredLanguage    Preferred display language as an ISO 639-1 code.
  * @property isDarkMode           Whether the app should use dark theme for this user.
- * @property updatedAt            Epoch millis of last update, used for sync conflict resolution.
+ * @property updatedAt            Firebase Timestamp of last update, used for sync conflict resolution.
  */
 data class UserPreferences(
 
@@ -64,7 +67,6 @@ data class UserPreferences(
     /**
      * If true, send push notifications when a booking's status changes.
      * Covers: pending → confirmed, confirmed → cancelled, etc.
-     * Recommended: keep enabled for a good user experience.
      */
     val notifyBookingUpdates: Boolean = true,
 
@@ -82,7 +84,6 @@ data class UserPreferences(
 
     /**
      * If true, allow HavenHub to send promotional push notifications.
-     * Examples: featured listings, seasonal discounts, referral offers.
      * Defaults to false to respect user privacy and reduce notification fatigue.
      */
     val notifyPromotions: Boolean = false,
@@ -97,13 +98,11 @@ data class UserPreferences(
 
     /**
      * If true, the user's profile (name, photo, bio) is visible to other users.
-     * If false, the profile is only visible to the user themselves and admins.
      */
     val isProfilePublic: Boolean = true,
 
     /**
      * If true, the user's phone number is visible on their profile and listings.
-     * Landlords may want this enabled so tenants can contact them directly.
      */
     val showPhoneNumber: Boolean = false,
 
@@ -118,29 +117,29 @@ data class UserPreferences(
     /**
      * User's preferred display language as an ISO 639-1 two-letter code.
      * Examples: "en" (English), "af" (Afrikaans), "zu" (Zulu), "xh" (Xhosa).
-     * Defaults to English.
      */
     val preferredLanguage: String = "en",
 
     /**
      * If true, the app uses dark theme for this user.
-     * This preference is stored remotely so dark mode follows the user
-     * across devices. It is also cached locally for immediate startup.
+     * Cached locally for immediate startup.
      */
     val isDarkMode: Boolean = false,
 
     /**
-     * Epoch millis of the last time these preferences were updated.
-     * Used to resolve sync conflicts when the same user updates preferences
-     * on two devices simultaneously — the most recent write wins.
+     * Firebase Timestamp of the last time these preferences were updated.
+     * Null when the document is first created (Firestore sets it on write).
+     * Use updatedAt?.toDate()?.time to get epoch millis if needed.
+     *
+     * ✅ FIX: Changed from Long to Timestamp? to prevent Firebase
+     * deserialization crash: "Failed to convert Timestamp to long"
      */
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Timestamp? = null
 
 ) {
 
     // ─────────────────────────────────────────────────────────────────────────
     // Computed Helpers
-    // Convenience properties used by the UI and notification service.
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
@@ -153,12 +152,6 @@ data class UserPreferences(
 
     /**
      * Returns a map of notification channel IDs to their enabled state.
-     * Useful for iterating over notification settings in the Settings screen.
-     *
-     * Example:
-     * ```
-     * { "booking_updates" → true, "messages" → true, "promotions" → false }
-     * ```
      */
     val notificationChannelStates: Map<String, Boolean>
         get() = mapOf(
@@ -171,7 +164,6 @@ data class UserPreferences(
 
     /**
      * Returns a copy of these preferences with all notifications disabled.
-     * Called when the user taps "Disable All Notifications" in settings.
      */
     fun withAllNotificationsDisabled(): UserPreferences = copy(
         notifyBookingUpdates = false,
@@ -179,20 +171,18 @@ data class UserPreferences(
         notifyPayments       = false,
         notifyPromotions     = false,
         notifyAdminAlerts    = false,
-        updatedAt            = System.currentTimeMillis()
+        updatedAt            = Timestamp.now()
     )
 
     /**
      * Returns a copy of these preferences with all recommended notifications enabled.
-     * Called when the user taps "Reset to Defaults" in notification settings.
      */
     fun withDefaultNotifications(): UserPreferences = copy(
         notifyBookingUpdates = true,
         notifyMessages       = true,
         notifyPayments       = true,
-        notifyPromotions     = false,   // Promotional stays off by default
+        notifyPromotions     = false,
         notifyAdminAlerts    = true,
-        updatedAt            = System.currentTimeMillis()
+        updatedAt            = Timestamp.now()
     )
 }
-

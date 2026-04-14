@@ -3,7 +3,7 @@ package com.example.havenhub.remote
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
-import com.example.havenhub.utils.Resource  // ✅ com.havenhub → com.example.havenhub
+import com.example.havenhub.utils.Resource
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -56,6 +56,18 @@ class FirebaseAuthManager @Inject constructor(
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to send reset email")
+        }
+    }
+
+    // ✅ NEW: Firebase Auth account permanently delete karo
+    suspend fun deleteAccount(): Resource<Unit> {
+        return try {
+            val user = firebaseAuth.currentUser
+                ?: return Resource.Error("No user logged in")
+            user.delete().await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to delete account")
         }
     }
 

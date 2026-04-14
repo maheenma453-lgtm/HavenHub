@@ -54,6 +54,15 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
+    suspend fun deleteUser(uid: String): Resource<Unit> {
+        return try {
+            usersCollection.document(uid).delete().await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to delete user")
+        }
+    }
+
     // ── Property ─────────────────────────────────────────────────────────────
 
     suspend fun addProperty(property: Property): Resource<String> {

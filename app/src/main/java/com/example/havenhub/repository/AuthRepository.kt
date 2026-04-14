@@ -23,14 +23,9 @@ class AuthRepository @Inject constructor(
     suspend fun getUserRole(uid: String): String {
         return try {
             val result = dataManager.getUser(uid)
-            if (result is Resource.Success) {
-                result.data.role.lowercase()
-            } else {
-                "tenant"
-            }
-        } catch (e: Exception) {
-            "tenant"
-        }
+            if (result is Resource.Success) result.data.role.lowercase()
+            else "tenant"
+        } catch (e: Exception) { "tenant" }
     }
 
     suspend fun registerUser(
@@ -48,7 +43,7 @@ class AuthRepository @Inject constructor(
             userId     = firebaseUser.uid,
             email      = email,
             fullName   = fullName,
-            role       = role.uppercase(), // ✅ FIX: directly String store karo
+            role       = role.uppercase(),
             isVerified = false
         )
 
@@ -86,7 +81,7 @@ class AuthRepository @Inject constructor(
                 userId          = firebaseUser.uid,
                 email           = firebaseUser.email ?: "",
                 fullName        = firebaseUser.displayName ?: "",
-                role            = "TENANT", // ✅ FIX: String directly
+                role            = "TENANT",
                 profileImageUrl = firebaseUser.photoUrl?.toString() ?: ""
             )
             dataManager.saveUser(user)
@@ -109,4 +104,24 @@ class AuthRepository @Inject constructor(
 
     suspend fun sendPasswordResetEmail(email: String): Resource<Unit> =
         authManager.sendPasswordResetEmail(email)
+
+    // ✅ NEW: Delete account — Firestore data + FCM token + Firebase Auth
+    suspend fun deleteAccount(): Resource<Unit> {
+        return try {
+            val uid = authManager.currentUserId
+                ?: return Resource.Error("No user logged in")
+
+            // 1. FCM token clear karo
+            messagingManager.clearDeviceToken(uid)
+
+            // 2. Firestore user document delete karo
+            dataManager.deleteUser(uid)
+
+            // 3. Firebase Auth account delete karo
+            authManager.deleteAccount()
+
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to delete account")
+        }
+    }
 }

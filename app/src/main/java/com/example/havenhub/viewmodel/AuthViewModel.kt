@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.havenhub.repository.AuthRepository
 import com.example.havenhub.utils.Resource
 import com.example.havenhub.utils.ValidationUtils
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseUser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class AuthUiState(
@@ -197,6 +199,46 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    // ── Change Password ───────────────────────────────────────────
+    fun changePassword(currentPassword: String, newPassword: String) {
+        if (newPassword.length < 6) {
+            _uiState.update { it.copy(errorMessage = "New password must be at least 6 characters") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                val user = authRepository.currentUser
+                    ?: throw Exception("No user logged in")
+
+                val email = user.email
+                    ?: throw Exception("User email not found")
+
+                // Re-authenticate karo pehle (Firebase security requirement)
+                val credential = EmailAuthProvider.getCredential(email, currentPassword)
+                user.reauthenticate(credential).await()
+
+                // Ab password update karo
+                user.updatePassword(newPassword).await()
+
+                _uiState.update {
+                    it.copy(
+                        isLoading      = false,
+                        successMessage = "Password updated successfully!"
+                    )
+                }
+            } catch (e: Exception) {
+                val errorMsg = when {
+                    e.message?.contains("wrong-password") == true ||
+                            e.message?.contains("invalid-credential") == true ->
+                        "Current password is incorrect"
+                    else -> e.localizedMessage ?: "Failed to update password"
+                }
+                _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
+            }
+        }
+    }
+
     // ── Google Sign In ────────────────────────────────────────────
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
@@ -216,6 +258,20 @@ class AuthViewModel @Inject constructor(
                     }
                 }
                 is Resource.Error -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                is Resource.Loading -> Unit
+            }
+        }
+    }
+
+    // ── Delete Account ────────────────────────────────────────────
+    fun deleteAccount() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            when (val result = authRepository.deleteAccount()) {
+                is Resource.Success -> _uiState.update { AuthUiState() }
+                is Resource.Error   -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
                 }
                 is Resource.Loading -> Unit

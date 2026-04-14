@@ -34,7 +34,10 @@ fun AccountSettingsScreen(
     var confirmPassword  by remember { mutableStateOf("") }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // Success hone par back navigate karo
+    // ✅ FIX: Yeh track karega ke delete/logout hua ya nahi
+    var accountDeleted by remember { mutableStateOf(false) }
+
+    // Success hone par fields clear karo
     LaunchedEffect(uiState.successMessage) {
         if (uiState.successMessage != null) {
             currentPassword = ""
@@ -44,9 +47,10 @@ fun AccountSettingsScreen(
         }
     }
 
-    // Account delete hone par SignIn pe navigate karo
+    // ✅ FIX: Sirf tab navigate karo jab accountDeleted = true ho
+    // Pehle isLoggedIn check se screen start pe hi navigate ho jaati thi
     LaunchedEffect(uiState.isLoggedIn) {
-        if (!uiState.isLoggedIn) {
+        if (!uiState.isLoggedIn && accountDeleted) {
             navController.navigate(Screen.SignIn.route) {
                 popUpTo(0) { inclusive = true }
             }
@@ -79,7 +83,7 @@ fun AccountSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
 
-            // Change Password
+            // ── Change Password ───────────────────────────────────────────────
             Text("Change Password", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = PrimaryBlue)
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -91,31 +95,31 @@ fun AccountSettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedTextField(
-                        value               = currentPassword,
-                        onValueChange       = { currentPassword = it },
-                        label               = { Text("Current Password") },
-                        modifier            = Modifier.fillMaxWidth(),
-                        shape               = RoundedCornerShape(10.dp),
+                        value                = currentPassword,
+                        onValueChange        = { currentPassword = it },
+                        label                = { Text("Current Password") },
+                        modifier             = Modifier.fillMaxWidth(),
+                        shape                = RoundedCornerShape(10.dp),
                         visualTransformation = PasswordVisualTransformation(),
-                        singleLine          = true
+                        singleLine           = true
                     )
                     OutlinedTextField(
-                        value               = newPassword,
-                        onValueChange       = { newPassword = it },
-                        label               = { Text("New Password") },
-                        modifier            = Modifier.fillMaxWidth(),
-                        shape               = RoundedCornerShape(10.dp),
+                        value                = newPassword,
+                        onValueChange        = { newPassword = it },
+                        label                = { Text("New Password") },
+                        modifier             = Modifier.fillMaxWidth(),
+                        shape                = RoundedCornerShape(10.dp),
                         visualTransformation = PasswordVisualTransformation(),
-                        singleLine          = true
+                        singleLine           = true
                     )
                     OutlinedTextField(
-                        value               = confirmPassword,
-                        onValueChange       = { confirmPassword = it },
-                        label               = { Text("Confirm New Password") },
-                        modifier            = Modifier.fillMaxWidth(),
-                        shape               = RoundedCornerShape(10.dp),
+                        value                = confirmPassword,
+                        onValueChange        = { confirmPassword = it },
+                        label                = { Text("Confirm New Password") },
+                        modifier             = Modifier.fillMaxWidth(),
+                        shape                = RoundedCornerShape(10.dp),
                         visualTransformation = PasswordVisualTransformation(),
-                        singleLine          = true
+                        singleLine           = true
                     )
 
                     // Password mismatch warning
@@ -129,12 +133,13 @@ fun AccountSettingsScreen(
                     }
 
                     Button(
-                        onClick = {
-                            viewModel.sendPasswordResetEmail()
+                        onClick  = {
+                            viewModel.changePassword(currentPassword, newPassword)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape    = RoundedCornerShape(10.dp),
-                        enabled  = newPassword.isNotBlank()
+                        enabled  = currentPassword.isNotBlank()
+                                && newPassword.isNotBlank()
                                 && newPassword == confirmPassword
                                 && !uiState.isLoading,
                         colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
@@ -152,7 +157,7 @@ fun AccountSettingsScreen(
                 }
             }
 
-            // Linked Accounts
+            // ── Linked Accounts ───────────────────────────────────────────────
             Text("Linked Accounts", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = PrimaryBlue)
             SettingsGroup(title = "") {
                 SettingsItem(
@@ -169,10 +174,10 @@ fun AccountSettingsScreen(
                 )
             }
 
-            // Danger Zone
+            // ── Danger Zone ───────────────────────────────────────────────────
             Text("Danger Zone", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ErrorRed)
             OutlinedButton(
-                onClick = { showDeleteDialog = true },
+                onClick  = { showDeleteDialog = true },
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(10.dp),
                 colors   = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
@@ -188,7 +193,7 @@ fun AccountSettingsScreen(
             }
         }
 
-        // Delete Confirmation Dialog
+        // ── Delete Confirmation Dialog ─────────────────────────────────────
         if (showDeleteDialog) {
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
@@ -198,7 +203,8 @@ fun AccountSettingsScreen(
                     TextButton(
                         onClick = {
                             showDeleteDialog = false
-                            viewModel.signOut()
+                            accountDeleted = true  // ✅ FIX: Pehle flag set karo
+                            viewModel.deleteAccount()
                         }
                     ) {
                         Text("Delete", color = ErrorRed, fontWeight = FontWeight.Bold)

@@ -4,10 +4,13 @@ import com.example.havenhub.data.AppSettings
 import com.example.havenhub.data.UserPreferences
 import com.example.havenhub.utils.PreferenceManager
 import com.example.havenhub.utils.Resource
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.Date
 
 @Singleton
 class SettingsRepository @Inject constructor(
@@ -58,9 +61,15 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    // ✅ FIXED: update() ki jagah set() with merge use kiya
+    // Pehle agar document exist nahi hota tha to crash ho jata tha
+    // Ab document na ho to khud bana leta hai, ho to sirf update karta hai
     suspend fun updateUserPreferences(userId: String, fields: Map<String, Any>): Resource<Unit> {
         return try {
-            userPreferencesCollection.document(userId).update(fields).await()
+            userPreferencesCollection
+                .document(userId)
+                .set(fields, SetOptions.merge()) // ✅ Yeh fix hai
+                .await()
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to update user preferences")
@@ -74,8 +83,40 @@ class SettingsRepository @Inject constructor(
     suspend fun getAppSettings(): Resource<AppSettings> {
         return try {
             val snapshot = appSettingsCollection.document("global").get().await()
-            val settings = snapshot.toObject(AppSettings::class.java) ?: AppSettings()
+
+            if (!snapshot.exists()) {
+                return Resource.Success(AppSettings())
+            }
+
+            val data = snapshot.data ?: return Resource.Success(AppSettings())
+
+            val updatedAt = when (val raw = data["updatedAt"]) {
+                is Timestamp -> raw
+                is Date -> Timestamp(raw)
+                is Long -> Timestamp(Date(raw))
+                else -> Timestamp.now()
+            }
+
+            val settings = AppSettings(
+                isMaintenanceMode = data["isMaintenanceMode"] as? Boolean ?: false,
+                maintenanceMessage = data["maintenanceMessage"] as? String,
+                minimumAppVersion = data["minimumAppVersion"] as? String ?: "1.0.0",
+                latestAppVersion = data["latestAppVersion"] as? String ?: "1.0.0",
+                forceUpdate = data["forceUpdate"] as? Boolean ?: false,
+                platformFeePercent = (data["platformFeePercent"] as? Number)?.toDouble() ?: 5.0,
+                maxPropertyImages = (data["maxPropertyImages"] as? Number)?.toInt() ?: 10,
+                maxBookingDaysAdvance = (data["maxBookingDaysAdvance"] as? Number)?.toInt() ?: 90,
+                featuredPropertyIds = (data["featuredPropertyIds"] as? List<*>)
+                    ?.filterIsInstance<String>() ?: emptyList(),
+                announcementBanner = data["announcementBanner"] as? String,
+                supportEmail = data["supportEmail"] as? String ?: "support@havenhub.co.za",
+                termsOfServiceUrl = data["termsOfServiceUrl"] as? String ?: "https://havenhub.co.za/terms",
+                privacyPolicyUrl = data["privacyPolicyUrl"] as? String ?: "https://havenhub.co.za/privacy",
+                updatedAt = updatedAt
+            )
+
             Resource.Success(settings)
+
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch app settings")
         }
