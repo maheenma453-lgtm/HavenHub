@@ -29,7 +29,6 @@ fun ManageUsersScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf("All") }
 
-    // ✅ FIX: user.role (String) ki jagah user.userRole (Enum) use kiya hai filtering ke liye
     val filteredUsers = remember(uiState.users, searchQuery, selectedRole) {
         uiState.users.filter { user ->
             val matchesSearch = user.fullName.contains(searchQuery, ignoreCase = true) ||
@@ -59,7 +58,6 @@ fun ManageUsersScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -71,7 +69,6 @@ fun ManageUsersScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            // Role Filter Chips
             val roles = listOf("All", "Tenant", "Landlord", "Admin")
             Row(
                 modifier = Modifier
@@ -90,33 +87,53 @@ fun ManageUsersScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            if (uiState.isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    item {
-                        Text(
-                            text = "${filteredUsers.size} users found",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            when {
+                uiState.isLoading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
                     }
+                }
 
-                    items(filteredUsers, key = { it.userId }) { user ->
-                        UserManagementCard(
-                            fullName = user.fullName,
-                            email = user.email,
-                            // ✅ FIX: user.role.displayName() ko badal kar user.userRole.displayName() kiya
-                            role = user.userRole.displayName(),
-                            isVerified = user.isVerified,
-                            onBan = { viewModel.banUser(user.userId) },
-                            onUnban = { viewModel.unbanUser(user.userId) }
-                        )
+                // Error message ab screen pe dikhega
+                uiState.errorMessage != null -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Error: ${uiState.errorMessage}",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = { viewModel.loadAllUsers() }) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        item {
+                            Text(
+                                text = "${filteredUsers.size} users found",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        items(filteredUsers, key = { it.userId }) { user ->
+                            UserManagementCard(
+                                fullName = user.fullName,
+                                email = user.email,
+                                role = user.userRole.displayName(),
+                                isVerified = user.isVerified,
+                                onBan = { viewModel.banUser(user.userId) },
+                                onUnban = { viewModel.unbanUser(user.userId) }
+                            )
+                        }
                     }
                 }
             }
@@ -164,7 +181,6 @@ private fun UserManagementCard(
                     modifier = Modifier.padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Role Badge
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = MaterialTheme.shapes.extraSmall
