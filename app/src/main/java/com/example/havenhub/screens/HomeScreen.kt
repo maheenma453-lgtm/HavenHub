@@ -49,8 +49,7 @@ fun HomeScreen(
     val uiState   by viewModel.uiState.collectAsState()
     val authState by authViewModel.uiState.collectAsState()
     val userRole  = authState.userRole   // "landlord" / "tenant" / ""
-    //val userId    = authState.userId     // ✅ Firebase UID
-    val userId = authState.currentUser?.uid ?: ""
+    val userId    = authState.currentUser?.uid ?: ""
 
     // ✅ Landlord stats load karo jab userId available ho
     LaunchedEffect(userId, userRole) {
@@ -67,6 +66,8 @@ fun HomeScreen(
 
 // ═══════════════════════════════════════════════════════════════════
 // ✅ LANDLORD HOME SCREEN
+// Bottom Nav: Home | My Properties | Bookings | Messages | Profile
+// Quick Actions: All Properties | Revenue | Active Bookings
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun LandlordHomeScreen(
@@ -104,6 +105,7 @@ private fun LandlordHomeScreen(
                         )
                     )
             ) {
+                // Gold bottom border
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -145,6 +147,7 @@ private fun LandlordHomeScreen(
                                 fontSize = 11.sp
                             )
                         }
+                        // Notification Bell
                         Box(
                             modifier = Modifier
                                 .size(42.dp)
@@ -183,7 +186,9 @@ private fun LandlordHomeScreen(
                         LandlordStatChip(
                             icon     = "⭐",
                             label    = "Rating",
-                            value    = "—",
+                            value    = if (uiState.averageRating > 0f)
+                                "%.1f".format(uiState.averageRating)
+                            else "—",
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -191,7 +196,7 @@ private fun LandlordHomeScreen(
             }
         }
 
-        // ── Quick Actions (sirf 3) ───────────────────────────────
+        // ── Quick Actions (3 cards) ──────────────────────────────
         item {
             Spacer(Modifier.height(20.dp))
             Text(
@@ -209,7 +214,7 @@ private fun LandlordHomeScreen(
                     .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // ✅ Card 1 — All Properties
+                // Card 1 — All Properties
                 Card(
                     modifier  = Modifier
                         .weight(1f)
@@ -232,17 +237,17 @@ private fun LandlordHomeScreen(
                             "${uiState.totalProperties}",
                             color      = Color(0xFFD4AF37),
                             fontWeight = FontWeight.Bold,
-                            fontSize   = 16.sp
+                            fontSize   = 18.sp
                         )
                         Text(
-                            "All Properties",
+                            "All",
                             color    = Color.White,
                             fontSize = 11.sp
                         )
                     }
                 }
 
-                // ✅ Card 2 — Revenue
+                // Card 2 — Revenue
                 Card(
                     modifier  = Modifier
                         .weight(1f)
@@ -265,7 +270,9 @@ private fun LandlordHomeScreen(
                             formattedRevenue,
                             color      = Color(0xFF0D1B3E),
                             fontWeight = FontWeight.Bold,
-                            fontSize   = 13.sp
+                            fontSize   = 12.sp,
+                            maxLines   = 1,
+                            overflow   = TextOverflow.Ellipsis
                         )
                         Text(
                             "Revenue",
@@ -275,7 +282,7 @@ private fun LandlordHomeScreen(
                     }
                 }
 
-                // ✅ Card 3 — Active Bookings
+                // Card 3 — Active Bookings
                 Card(
                     modifier  = Modifier
                         .weight(1f)
@@ -298,14 +305,51 @@ private fun LandlordHomeScreen(
                             "${uiState.activeBookingsCount}",
                             color      = Color(0xFF0D1B3E),
                             fontWeight = FontWeight.Bold,
-                            fontSize   = 16.sp
+                            fontSize   = 18.sp
                         )
                         Text(
-                            "Active Bookings",
+                            "Active",
                             color    = Color(0xFF8899AA),
                             fontSize = 11.sp
                         )
                     }
+                }
+            }
+        }
+
+        // ── Add Property Button ──────────────────────────────────
+        item {
+            Spacer(Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFF1A3A6B), Color(0xFF0D1B3E))
+                        )
+                    )
+                    .clickable { navController.navigate(Screen.AddProperty.route) }
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+            ) {
+                Row(
+                    modifier          = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Default.Add, null,
+                        tint     = Color(0xFFD4AF37),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Add New Property",
+                        color      = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 14.sp
+                    )
                 }
             }
         }
@@ -346,7 +390,7 @@ private fun LandlordHomeScreen(
             Spacer(Modifier.height(12.dp))
         }
 
-        // Properties list or empty state
+        // ✅ Properties list ya empty state
         if (uiState.isLoading) {
             item { LoadingShimmer() }
         } else if (uiState.featuredProperties.isEmpty()) {
@@ -389,6 +433,71 @@ private fun LandlordHomeScreen(
             }
         }
 
+        // ── Recent Bookings Section ──────────────────────────────
+        item {
+            Spacer(Modifier.height(24.dp))
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Booking Requests",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp,
+                        color      = Color(0xFF0D1B3E)
+                    )
+                    Text(
+                        "Pending approvals",
+                        fontSize = 12.sp,
+                        color    = Color(0xFF8899AA)
+                    )
+                }
+                Text(
+                    "See All",
+                    fontSize   = 13.sp,
+                    color      = Color(0xFFD4AF37),
+                    fontWeight = FontWeight.SemiBold,
+                    modifier   = Modifier.clickable {
+                        navController.navigate(Screen.MyBookings.route)
+                    }
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+
+            // Empty booking requests state
+            if (uiState.activeBookingsCount == 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White)
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("📋", fontSize = 32.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "No pending requests",
+                            color      = Color(0xFF0D1B3E),
+                            fontWeight = FontWeight.Medium,
+                            fontSize   = 14.sp
+                        )
+                        Text(
+                            "New booking requests will appear here",
+                            color    = Color(0xFF8899AA),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+
         item { Spacer(Modifier.height(16.dp)) }
     }
 }
@@ -417,7 +526,9 @@ private fun LandlordStatChip(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ✅ TENANT HOME SCREEN  (koi change nahi)
+// ✅ TENANT HOME SCREEN
+// Bottom Nav: Home | Search | My Bookings | Messages | Profile
+// NO Quick Actions — sirf properties browse karna hai
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun TenantHomeScreen(
@@ -449,7 +560,7 @@ private fun TenantHomeScreen(
             .background(Color(0xFFF5F7FA)),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
-        // ── Header ──
+        // ── Tenant Header with Search ────────────────────────────
         item {
             HomeHeaderSection(
                 onSearchClick       = { navController.navigate(Screen.Search.route) },
@@ -457,22 +568,9 @@ private fun TenantHomeScreen(
             )
         }
 
-        // ── Quick Stats ──
+        // ── Browse by Type ───────────────────────────────────────
         item {
-            Row(
-                modifier              = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                QuickStatCard("🏠", "Properties", "${allProperties.size}", Modifier.weight(1f))
-                QuickStatCard("📍", "Cities",     "12+",                   Modifier.weight(1f))
-                QuickStatCard("⭐", "Verified",   "100%",                  Modifier.weight(1f))
-            }
-        }
-
-        // ── Browse by Type ──
-        item {
+            Spacer(Modifier.height(20.dp))
             Row(
                 modifier              = Modifier
                     .fillMaxWidth()
@@ -481,15 +579,26 @@ private fun TenantHomeScreen(
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Browse by Type",        fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF0D1B3E))
-                    Text("Find your perfect stay", fontSize = 12.sp,                              color = Color(0xFF8899AA))
+                    Text(
+                        "Browse by Type",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp,
+                        color      = Color(0xFF0D1B3E)
+                    )
+                    Text(
+                        "Find your perfect stay",
+                        fontSize = 12.sp,
+                        color    = Color(0xFF8899AA)
+                    )
                 }
                 Text(
                     "See All",
                     fontSize   = 13.sp,
                     color      = Color(0xFFD4AF37),
                     fontWeight = FontWeight.SemiBold,
-                    modifier   = Modifier.clickable { navController.navigate(Screen.PropertyList.route) }
+                    modifier   = Modifier.clickable {
+                        navController.navigate(Screen.PropertyList.route)
+                    }
                 )
             }
             Spacer(Modifier.height(14.dp))
@@ -511,7 +620,9 @@ private fun TenantHomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier            = Modifier
                             .clip(RoundedCornerShape(16.dp))
-                            .background(if (isSelected) Color(0xFF0D1B3E) else Color.White)
+                            .background(
+                                if (isSelected) Color(0xFF0D1B3E) else Color.White
+                            )
                             .clickable { selectedCategory = category }
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
@@ -528,7 +639,7 @@ private fun TenantHomeScreen(
             }
         }
 
-        // ── Featured Properties ──
+        // ── Featured Properties ──────────────────────────────────
         item {
             Spacer(Modifier.height(28.dp))
             Row(
@@ -539,9 +650,19 @@ private fun TenantHomeScreen(
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Featured Properties", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF0D1B3E))
-                    Text("Handpicked for you",  fontSize = 12.sp,                                color = Color(0xFF8899AA))
+                    Text(
+                        "Featured Properties",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp,
+                        color      = Color(0xFF0D1B3E)
+                    )
+                    Text(
+                        "Handpicked for you",
+                        fontSize = 12.sp,
+                        color    = Color(0xFF8899AA)
+                    )
                 }
+                // Scroll arrows
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment     = Alignment.CenterVertically
@@ -550,7 +671,10 @@ private fun TenantHomeScreen(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(if (featuredScrollState.value > 0) Color(0xFF0D1B3E) else Color(0xFFE0E0E0))
+                            .background(
+                                if (featuredScrollState.value > 0)
+                                    Color(0xFF0D1B3E) else Color(0xFFE0E0E0)
+                            )
                             .clickable {
                                 scope.launch {
                                     featuredScrollState.animateScrollTo(
@@ -611,8 +735,17 @@ private fun TenantHomeScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("🏠", fontSize = 32.sp)
                             Spacer(Modifier.height(8.dp))
-                            Text("No featured $selectedCategory properties", color = Color(0xFF8899AA), fontSize = 13.sp)
-                            Text("Check All Properties below",               color = Color(0xFFD4AF37), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                "No featured $selectedCategory properties",
+                                color    = Color(0xFF8899AA),
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                "Check All Properties below",
+                                color      = Color(0xFFD4AF37),
+                                fontSize   = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }
@@ -651,7 +784,10 @@ private fun TenantHomeScreen(
                             colors    = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(6.dp)
                         ) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier         = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center,
@@ -659,24 +795,53 @@ private fun TenantHomeScreen(
                                 ) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Box(modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp))) {
-                                            Image(painter = painterResource(id = getPropertyImage("prop_008")), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                            Image(
+                                                painter            = painterResource(id = getPropertyImage("prop_008")),
+                                                contentDescription = null,
+                                                modifier           = Modifier.fillMaxSize(),
+                                                contentScale       = ContentScale.Crop
+                                            )
                                         }
                                         Box(modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp))) {
-                                            Image(painter = painterResource(id = getPropertyImage("prop_009")), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                            Image(
+                                                painter            = painterResource(id = getPropertyImage("prop_009")),
+                                                contentDescription = null,
+                                                modifier           = Modifier.fillMaxSize(),
+                                                contentScale       = ContentScale.Crop
+                                            )
                                         }
                                     }
                                     Spacer(Modifier.height(4.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Box(modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp))) {
-                                            Image(painter = painterResource(id = getPropertyImage("prop_010")), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                            Image(
+                                                painter            = painterResource(id = getPropertyImage("prop_010")),
+                                                contentDescription = null,
+                                                modifier           = Modifier.fillMaxSize(),
+                                                contentScale       = ContentScale.Crop
+                                            )
                                         }
                                         Box(modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp))) {
-                                            Image(painter = painterResource(id = getPropertyImage("prop_011")), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                            Image(
+                                                painter            = painterResource(id = getPropertyImage("prop_011")),
+                                                contentDescription = null,
+                                                modifier           = Modifier.fillMaxSize(),
+                                                contentScale       = ContentScale.Crop
+                                            )
                                         }
                                     }
                                     Spacer(Modifier.height(12.dp))
-                                    Text("See all",                        fontSize = 14.sp, fontWeight = FontWeight.Bold,   color = Color(0xFF0D1B3E))
-                                    Text("${allProperties.size} properties", fontSize = 11.sp,                               color = Color(0xFF8899AA))
+                                    Text(
+                                        "See all",
+                                        fontSize   = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color      = Color(0xFF0D1B3E)
+                                    )
+                                    Text(
+                                        "${allProperties.size} properties",
+                                        fontSize = 11.sp,
+                                        color    = Color(0xFF8899AA)
+                                    )
                                 }
                             }
                         }
@@ -685,7 +850,7 @@ private fun TenantHomeScreen(
             }
         }
 
-        // ── All Properties ──
+        // ── All Properties ───────────────────────────────────────
         item {
             Spacer(Modifier.height(28.dp))
             Row(
@@ -696,7 +861,12 @@ private fun TenantHomeScreen(
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("All Properties", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF0D1B3E))
+                    Text(
+                        "All Properties",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp,
+                        color      = Color(0xFF0D1B3E)
+                    )
                     Text(
                         if (selectedCategory == "All") "${filteredAll.size} properties available"
                         else "${filteredAll.size} $selectedCategory properties",
@@ -709,7 +879,9 @@ private fun TenantHomeScreen(
                     fontSize   = 13.sp,
                     color      = Color(0xFFD4AF37),
                     fontWeight = FontWeight.SemiBold,
-                    modifier   = Modifier.clickable { navController.navigate(Screen.PropertyList.route) }
+                    modifier   = Modifier.clickable {
+                        navController.navigate(Screen.PropertyList.route)
+                    }
                 )
             }
             Spacer(Modifier.height(14.dp))
@@ -728,19 +900,25 @@ private fun TenantHomeScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🔍", fontSize = 40.sp)
                         Spacer(Modifier.height(8.dp))
-                        Text("No $selectedCategory properties found", color = Color(0xFF8899AA), fontSize = 14.sp)
+                        Text(
+                            "No $selectedCategory properties found",
+                            color    = Color(0xFF8899AA),
+                            fontSize = 14.sp
+                        )
                     }
                 }
             }
         } else {
             items(filteredAll) { property ->
                 NearbyPropertyCard(property) {
-                    navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
+                    navController.navigate(
+                        Screen.PropertyDetail.createRoute(property.propertyId)
+                    )
                 }
             }
         }
 
-        // ── Vacation Banner ──
+        // ── Vacation Banner ──────────────────────────────────────
         item {
             Spacer(Modifier.height(20.dp))
             Box(
@@ -749,7 +927,9 @@ private fun TenantHomeScreen(
                     .padding(horizontal = 20.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(
-                        Brush.horizontalGradient(listOf(Color(0xFF1A3A6B), Color(0xFF0D1B3E)))
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFF1A3A6B), Color(0xFF0D1B3E))
+                        )
                     )
                     .clickable { navController.navigate(Screen.VacationRentals.route) }
                     .padding(20.dp)
@@ -760,9 +940,18 @@ private fun TenantHomeScreen(
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("🏔️ Vacation Stays",                fontSize = 16.sp, fontWeight = FontWeight.Bold,   color = Color(0xFFD4AF37))
+                        Text(
+                            "🏔️ Vacation Stays",
+                            fontSize   = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = Color(0xFFD4AF37)
+                        )
                         Spacer(Modifier.height(4.dp))
-                        Text("Hunza • Swat • Murree • Naran",    fontSize = 12.sp,                                  color = Color.White.copy(0.8f))
+                        Text(
+                            "Hunza • Swat • Murree • Naran",
+                            fontSize = 12.sp,
+                            color    = Color.White.copy(0.8f)
+                        )
                         Spacer(Modifier.height(8.dp))
                         Box(
                             modifier = Modifier
@@ -770,7 +959,12 @@ private fun TenantHomeScreen(
                                 .background(Color(0xFFD4AF37))
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Text("Pre-Book Now", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Text(
+                                "Pre-Book Now",
+                                fontSize   = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = Color(0xFF0D1B3E)
+                            )
                         }
                     }
                     Text("🏕️", fontSize = 48.sp)
@@ -786,26 +980,6 @@ private fun TenantHomeScreen(
 // ═══════════════════════════════════════════════════════════════════
 
 @Composable
-private fun QuickStatCard(icon: String, label: String, value: String, modifier: Modifier) {
-    Card(
-        modifier  = modifier,
-        shape     = RoundedCornerShape(12.dp),
-        colors    = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Column(
-            modifier            = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(icon,  fontSize = 22.sp)
-            Spacer(Modifier.height(4.dp))
-            Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
-            Text(label, fontSize = 11.sp, color = Color(0xFF8899AA))
-        }
-    }
-}
-
-@Composable
 fun HomeHeaderSection(
     onSearchClick      : () -> Unit,
     onNotificationClick: () -> Unit = {}
@@ -814,8 +988,13 @@ fun HomeHeaderSection(
         modifier = Modifier
             .fillMaxWidth()
             .height(220.dp)
-            .background(Brush.verticalGradient(listOf(Color(0xFF0D1B3E), Color(0xFF1A3A6B))))
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF0D1B3E), Color(0xFF1A3A6B))
+                )
+            )
     ) {
+        // Gold bottom border
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -838,10 +1017,24 @@ fun HomeHeaderSection(
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Welcome Back 👋",                    color = Color(0xFFD4AF37),        fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        "Welcome Back 👋",
+                        color      = Color(0xFFD4AF37),
+                        fontSize   = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                     Spacer(Modifier.height(4.dp))
-                    Text("Find Your Haven",                    color = Color.White,              fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                    Text("Pakistan's trusted rental platform", color = Color.White.copy(0.6f),  fontSize = 11.sp)
+                    Text(
+                        "Find Your Haven",
+                        color      = Color.White,
+                        fontSize   = 26.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Pakistan's trusted rental platform",
+                        color    = Color.White.copy(0.6f),
+                        fontSize = 11.sp
+                    )
                 }
                 Box(
                     modifier = Modifier
@@ -851,10 +1044,15 @@ fun HomeHeaderSection(
                         .clickable { onNotificationClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Notifications, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(22.dp))
+                    Icon(
+                        Icons.Default.Notifications, null,
+                        tint     = Color(0xFFD4AF37),
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
             Spacer(Modifier.height(20.dp))
+            // Search Bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -871,9 +1069,17 @@ fun HomeHeaderSection(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Search, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(20.dp))
+                        Icon(
+                            Icons.Default.Search, null,
+                            tint     = Color(0xFFD4AF37),
+                            modifier = Modifier.size(20.dp)
+                        )
                         Spacer(Modifier.width(10.dp))
-                        Text("Search city, property type...", color = Color(0xFF8899AA), fontSize = 14.sp)
+                        Text(
+                            "Search city, property type...",
+                            color    = Color(0xFF8899AA),
+                            fontSize = 14.sp
+                        )
                     }
                     Box(
                         modifier = Modifier
@@ -881,25 +1087,16 @@ fun HomeHeaderSection(
                             .background(Color(0xFF0D1B3E))
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Text("Search", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Search",
+                            fontSize   = 11.sp,
+                            color      = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun SectionHeader(title: String, onSeeAll: () -> Unit) {
-    Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically
-    ) {
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF0D1B3E))
-        TextButton(onClick = onSeeAll) { Text("See All", color = Color(0xFFD4AF37)) }
     }
 }
 
@@ -915,24 +1112,48 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(6.dp)
     ) {
         Column {
-            Box(modifier = Modifier.fillMaxWidth().height(165.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(165.dp)
+            ) {
                 Image(
                     painter            = painterResource(id = getPropertyImage(property.propertyId)),
                     contentDescription = null,
                     modifier           = Modifier.fillMaxSize(),
                     contentScale       = ContentScale.Crop
                 )
-                Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)))))
+                // Dark gradient overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f))
+                            )
+                        )
+                )
+                // Price tag
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(10.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Brush.horizontalGradient(listOf(Color(0xFFD4AF37), Color(0xFFF5D060))))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFFD4AF37), Color(0xFFF5D060))
+                            )
+                        )
                         .padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
-                    Text(property.formattedPrice, color = Color(0xFF0D1B3E), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        property.formattedPrice,
+                        color      = Color(0xFF0D1B3E),
+                        fontSize   = 11.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
                 }
+                // Property type badge
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -941,8 +1162,14 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
                         .background(Color(0xFF0D1B3E).copy(alpha = 0.85f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text(property.propertyTypeEnum.displayName(), color = Color(0xFFD4AF37), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        property.propertyTypeEnum.displayName(),
+                        color      = Color(0xFFD4AF37),
+                        fontSize   = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
+                // Available badge
                 if (property.isAvailable) {
                     Box(
                         modifier = Modifier
@@ -952,28 +1179,56 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
                             .background(Color(0xFF4CAF50).copy(alpha = 0.9f))
                             .padding(horizontal = 6.dp, vertical = 3.dp)
                     ) {
-                        Text("Available", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Available",
+                            color      = Color.White,
+                            fontSize   = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
             Column(Modifier.padding(12.dp)) {
-                Text(property.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color(0xFF0D1B3E))
+                Text(
+                    property.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 14.sp,
+                    maxLines   = 1,
+                    overflow   = TextOverflow.Ellipsis,
+                    color      = Color(0xFF0D1B3E)
+                )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(12.dp))
-                    Text(" ${property.city}", color = Color(0xFF8899AA), fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        " ${property.city}",
+                        color    = Color(0xFF8899AA),
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 Spacer(Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Star, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(12.dp))
-                        Text(" ${property.averageRating}", fontSize = 12.sp, color = Color(0xFF0D1B3E), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            " ${property.averageRating}",
+                            fontSize   = 12.sp,
+                            color      = Color(0xFF0D1B3E),
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Text(" (${property.reviewCount})", fontSize = 11.sp, color = Color(0xFF8899AA))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.KingBed, null, tint = Color(0xFF8899AA), modifier = Modifier.size(12.dp))
                         Text(" ${property.bedrooms}", fontSize = 11.sp, color = Color(0xFF8899AA))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(Modifier.width(6.dp))
                         Icon(Icons.Default.People, null, tint = Color(0xFF8899AA), modifier = Modifier.size(12.dp))
                         Text(" ${property.maxGuests}", fontSize = 11.sp, color = Color(0xFF8899AA))
                     }
@@ -994,8 +1249,15 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
         colors    = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(3.dp)
     ) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(100.dp).clip(RoundedCornerShape(12.dp))) {
+        Row(
+            modifier          = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(12.dp))
+            ) {
                 Image(
                     painter            = painterResource(id = getPropertyImage(property.propertyId)),
                     contentDescription = null,
@@ -1003,15 +1265,44 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
                     contentScale       = ContentScale.Crop
                 )
                 if (property.isAvailable) {
-                    Box(modifier = Modifier.align(Alignment.TopStart).padding(6.dp).size(8.dp).clip(CircleShape).background(Color(0xFF4CAF50)))
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF4CAF50))
+                    )
                 }
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                    Text(property.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color(0xFF0D1B3E), modifier = Modifier.weight(1f))
-                    Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF0D1B3E).copy(0.08f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(property.propertyTypeEnum.displayName(), fontSize = 10.sp, color = Color(0xFF0D1B3E), fontWeight = FontWeight.Medium)
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.Top
+                ) {
+                    Text(
+                        property.title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 15.sp,
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis,
+                        color      = Color(0xFF0D1B3E),
+                        modifier   = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFF0D1B3E).copy(0.08f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            property.propertyTypeEnum.displayName(),
+                            fontSize   = 10.sp,
+                            color      = Color(0xFF0D1B3E),
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -1023,13 +1314,22 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.KingBed, null, tint = Color(0xFF8899AA), modifier = Modifier.size(12.dp))
                     Text(" ${property.bedrooms} beds", fontSize = 11.sp, color = Color(0xFF8899AA))
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.dp))
                     Icon(Icons.Default.People, null, tint = Color(0xFF8899AA), modifier = Modifier.size(12.dp))
                     Text(" ${property.maxGuests} guests", fontSize = 11.sp, color = Color(0xFF8899AA))
                 }
                 Spacer(Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("${property.formattedPrice}/night", fontWeight = FontWeight.ExtraBold, color = Color(0xFF0D1B3E), fontSize = 14.sp)
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${property.formattedPrice}/night",
+                        fontWeight = FontWeight.ExtraBold,
+                        color      = Color(0xFF0D1B3E),
+                        fontSize   = 14.sp
+                    )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier          = Modifier
@@ -1038,7 +1338,12 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Icon(Icons.Default.Star, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(12.dp))
-                        Text(" ${property.averageRating}", fontSize = 12.sp, color = Color(0xFF0D1B3E), fontWeight = FontWeight.Bold)
+                        Text(
+                            " ${property.averageRating}",
+                            fontSize   = 12.sp,
+                            color      = Color(0xFF0D1B3E),
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -1057,3 +1362,8 @@ fun LoadingShimmer() {
         CircularProgressIndicator(color = Color(0xFFD4AF37))
     }
 }
+
+
+
+
+

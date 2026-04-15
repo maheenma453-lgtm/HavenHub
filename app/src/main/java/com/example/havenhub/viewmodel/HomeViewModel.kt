@@ -22,10 +22,11 @@ data class HomeUiState(
     val isLoading          : Boolean         = false,
     val errorMessage       : String?         = null,
 
-    // ✅ Landlord Quick Actions ke liye
+    // Landlord Quick Actions ke liye
     val totalProperties    : Int             = 0,
     val activeBookingsCount: Int             = 0,
-    val totalRevenue       : Double          = 0.0
+    val totalRevenue       : Double          = 0.0,
+    val averageRating      : Float           = 0f   // ✅ FIX: averageRating field added
 )
 
 @HiltViewModel
@@ -75,8 +76,14 @@ class HomeViewModel @Inject constructor(
             try {
                 // 1. Total Properties
                 val propertiesResult = propertyRepository.getMyProperties(landlordId)
-                val totalProps = if (propertiesResult is Resource.Success)
-                    propertiesResult.data?.size ?: 0 else 0
+                val properties = if (propertiesResult is Resource.Success)
+                    propertiesResult.data ?: emptyList() else emptyList<Property>()
+                val totalProps = properties.size
+
+                // ✅ FIX: Average Rating calculate karo properties se
+                val avgRating = if (properties.isNotEmpty())
+                    properties.map { it.averageRating.toFloat() }.average().toFloat()
+                else 0f
 
                 // 2. Active Bookings (CONFIRMED status wali)
                 val bookings = bookingRepository.getLandlordBookings(landlordId)
@@ -93,7 +100,8 @@ class HomeViewModel @Inject constructor(
                     state.copy(
                         totalProperties     = totalProps,
                         activeBookingsCount = activeCount,
-                        totalRevenue        = revenue
+                        totalRevenue        = revenue,
+                        averageRating       = avgRating   // ✅ FIX: set karo
                     )
                 }
             } catch (e: Exception) {
@@ -102,3 +110,8 @@ class HomeViewModel @Inject constructor(
         }
     }
 }
+
+
+
+
+
