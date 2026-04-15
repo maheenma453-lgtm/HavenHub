@@ -19,24 +19,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.example.havenhub.data.BookingStatus
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.BookingViewModel
+
+// ─────────────────────────────────────────────────────────────
+//  Main Screen (Updated: Message Button Removed)
+// ─────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingDetailScreen(
     navController: NavController,
     bookingId: String,
+    isCurrentUserLandlord: Boolean = false,
     viewModel: BookingViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val booking = uiState.currentBooking
+
+    // ── cancel confirmation dialog state ─────────────────────
+    var showCancelDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(bookingId) {
         viewModel.loadBookingById(bookingId)
     }
-
-    val booking = uiState.currentBooking
 
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
@@ -68,11 +73,13 @@ fun BookingDetailScreen(
                     CircularProgressIndicator(color = Color(0xFFD4AF37))
                 }
             }
+
             booking == null -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Booking not found.", color = Color(0xFF8899AA))
                 }
             }
+
             else -> {
                 Column(
                     modifier = Modifier
@@ -83,81 +90,157 @@ fun BookingDetailScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+
+                    // ── Status badge ──────────────────────────────────
                     StatusBadge(status = booking.bookingStatus.displayName())
 
+                    // ── Property info ─────────────────────────────────
                     SectionCard(title = "Property") {
-                        InfoRow(label = "Title", value = booking.propertyTitle)
+                        InfoRow(label = "Title",   value = booking.propertyTitle)
                         InfoRow(label = "Address", value = booking.propertyAddress)
                     }
 
+                    // ── Stay details ──────────────────────────────────
                     SectionCard(title = "Stay Details") {
-                        InfoRow(label = "Check-In", value = booking.checkInDate?.toDate()?.toString() ?: "-")
+                        InfoRow(label = "Check-In",  value = booking.checkInDate?.toDate()?.toString()  ?: "-")
                         InfoRow(label = "Check-Out", value = booking.checkOutDate?.toDate()?.toString() ?: "-")
-                        InfoRow(label = "Guests", value = "${booking.guestCount} Guest(s)")
-                        InfoRow(label = "Nights", value = "${booking.totalNights} Night(s)")
+                        InfoRow(label = "Guests",    value = "${booking.guestCount} Guest(s)")
+                        InfoRow(label = "Nights",    value = "${booking.totalNights} Night(s)")
                     }
 
+                    // ── Payment summary ───────────────────────────────
                     SectionCard(title = "Payment Summary") {
-                        InfoRow(label = "Price/Night", value = "PKR ${booking.pricePerNight.toInt()}")
-                        InfoRow(label = "Subtotal", value = "PKR ${booking.subtotal.toInt()}")
-                        InfoRow(label = "Service Fee", value = "PKR ${booking.serviceFee.toInt()}")
-                        InfoRow(label = "Security Deposit", value = "PKR ${booking.securityDeposit.toInt()}")
-                        InfoRow(label = "Payment Status", value = booking.paymentStatusEnum.displayName())
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFFE5E7EB))
+                        InfoRow(label = "Price/Night",       value = "PKR ${booking.pricePerNight.toInt()}")
+                        InfoRow(label = "Subtotal",          value = "PKR ${booking.subtotal.toInt()}")
+                        InfoRow(label = "Service Fee",       value = "PKR ${booking.serviceFee.toInt()}")
+                        InfoRow(label = "Security Deposit",  value = "PKR ${booking.securityDeposit.toInt()}")
+                        InfoRow(label = "Payment Status",    value = booking.paymentStatusEnum.displayName())
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = Color(0xFFE5E7EB)
+                        )
                         InfoRow(
-                            label = "Total Amount",
-                            value = booking.formattedTotal,
+                            label      = "Total Amount",
+                            value      = booking.formattedTotal,
                             valueColor = Color(0xFFD4AF37),
-                            bold = true
+                            bold       = true
                         )
                     }
 
+                    // ── Host information ──────────────────────────────
                     SectionCard(title = "Host Information") {
                         InfoRow(label = "Host", value = booking.landlordName)
                     }
 
+                    // ── Booking info ──────────────────────────────────
                     SectionCard(title = "Booking Info") {
                         InfoRow(label = "Booking ID", value = "#${booking.bookingId.take(8).uppercase()}")
-                        InfoRow(label = "Tenant", value = booking.tenantName)
-                        InfoRow(label = "Booked On", value = booking.createdAt?.toDate()?.toString() ?: "-")
+                        InfoRow(label = "Tenant",     value = booking.tenantName)
+                        InfoRow(label = "Booked On",  value = booking.createdAt?.toDate()?.toString() ?: "-")
                     }
 
-                    if (booking.isCancellable) {
-                        Row(
+                    // ── Action buttons (Cancel Button Only) ───────────
+                    if (!isCurrentUserLandlord && booking.isCancellable) {
+                        Button(
+                            onClick = { showCancelDialog = true },
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            shape  = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
                         ) {
-                            OutlinedButton(
-                                onClick = { },
-                                modifier = Modifier.weight(1f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0D1B3E))
-                            ) {
-                                Icon(Icons.Default.Phone, null, modifier = Modifier.size(18.dp), tint = Color(0xFF0D1B3E))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Contact Host", color = Color(0xFF0D1B3E))
-                            }
-                            Button(
-                                onClick = { },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
-                            ) {
-                                Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Cancel")
-                            }
+                            Icon(
+                                imageVector        = Icons.Default.Close,
+                                contentDescription = null,
+                                modifier           = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Cancel Booking", fontWeight = FontWeight.Medium)
                         }
                     }
 
+                    // ── Error message ─────────────────────────────────
                     uiState.errorMessage?.let { error ->
                         Text(text = error, color = Color(0xFFEF4444), fontSize = 14.sp)
                     }
 
                     Spacer(Modifier.height(16.dp))
                 }
+
+                // ── Cancel confirmation dialog ────────────────────────
+                if (showCancelDialog) {
+                    CancelConfirmDialog(
+                        onConfirm = {
+                            viewModel.cancelBooking(booking.bookingId)
+                            showCancelDialog = false
+                        },
+                        onDismiss = { showCancelDialog = false }
+                    )
+                }
             }
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+//  Cancel Confirmation Dialog
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+fun CancelConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = Color.White,
+        shape            = RoundedCornerShape(16.dp),
+        icon = {
+            Icon(
+                Icons.Default.Warning,
+                contentDescription = null,
+                tint               = Color(0xFFEF4444),
+                modifier           = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                "Cancel Booking?",
+                fontWeight  = FontWeight.Bold,
+                fontSize    = 17.sp,
+                color       = Color(0xFF0D1B3E)
+            )
+        },
+        text = {
+            Text(
+                "Are you sure you want to cancel this booking? This action cannot be undone.",
+                fontSize    = 14.sp,
+                color       = Color(0xFF6B7280),
+                lineHeight  = 20.sp
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                shape  = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+            ) {
+                Text("Yes, Cancel", fontWeight = FontWeight.Medium)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape   = RoundedCornerShape(8.dp),
+                border  = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0D1B3E))
+            ) {
+                Text("Keep Booking", color = Color(0xFF0D1B3E), fontWeight = FontWeight.Medium)
+            }
+        }
+    )
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Reusable UI Components
+// ─────────────────────────────────────────────────────────────
 
 @Composable
 fun StatusBadge(status: String) {
@@ -175,22 +258,37 @@ fun StatusBadge(status: String) {
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(imageVector = icon, contentDescription = null, tint = textColor, modifier = Modifier.size(18.dp))
+        Icon(
+            imageVector        = icon,
+            contentDescription = null,
+            tint               = textColor,
+            modifier           = Modifier.size(18.dp)
+        )
         Spacer(Modifier.width(6.dp))
-        Text(text = "Status: $status", color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Text(
+            text       = "Status: $status",
+            color      = textColor,
+            fontWeight = FontWeight.SemiBold,
+            fontSize   = 14.sp
+        )
     }
 }
 
 @Composable
 fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF0D1B3E))
+            Text(
+                text       = title,
+                fontWeight = FontWeight.Bold,
+                fontSize   = 15.sp,
+                color      = Color(0xFF0D1B3E)
+            )
             Spacer(Modifier.height(10.dp))
             content()
         }
@@ -199,21 +297,26 @@ fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 fun InfoRow(
-    label: String,
-    value: String,
-    valueColor: Color = Color(0xFF0D1B3E),
-    bold: Boolean = false
+    label      : String,
+    value      : String,
+    valueColor : Color  = Color(0xFF0D1B3E),
+    bold       : Boolean = false
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier              = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label, color = Color(0xFF8899AA), fontSize = 14.sp)
         Text(
-            text = value,
-            color = valueColor,
+            text       = value,
+            color      = valueColor,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            fontSize = 14.sp
+            fontSize   = 14.sp
         )
     }
 }
+
+// ── Extensions (Helper functions to prevent crashes) ──────────
+fun String?.displayName(): String = this ?: "Unknown"
