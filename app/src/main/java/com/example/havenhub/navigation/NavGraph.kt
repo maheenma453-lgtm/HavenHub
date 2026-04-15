@@ -14,6 +14,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.havenhub.screens.*
+import com.example.havenhub.screens.HomeScreen
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
@@ -45,7 +46,7 @@ fun HavenHubNavGraph(
     unreadMessageCount : Int = 0
 ) {
     val authViewModel : AuthViewModel = hiltViewModel()
-    val uiState       by authViewModel.uiState.collectAsState()
+    val uiState by authViewModel.uiState.collectAsState()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -53,7 +54,7 @@ fun HavenHubNavGraph(
     val isAuthRoute  = currentRoute in authRoutes
     val isAdminRoute = adminRoutes.any { currentRoute == it } ||
             currentRoute?.startsWith("property_verification_detail") == true ||
-            currentRoute?.startsWith("user_verification_detail")     == true
+            currentRoute?.startsWith("user_verification_detail") == true
 
     Scaffold(
         bottomBar = {
@@ -62,7 +63,8 @@ fun HavenHubNavGraph(
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
                 else         -> BottomNavBar(
                     navController      = navController,
-                    unreadMessageCount = unreadMessageCount
+                    unreadMessageCount = unreadMessageCount,
+                    userRole           = uiState.userRole   // ✅ role pass karo
                 )
             }
         }
@@ -75,7 +77,7 @@ fun HavenHubNavGraph(
             )
         ) {
 
-            // ── Auth ──────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────
             composable(Screen.Splash.route)        { SplashScreen(navController) }
             composable(Screen.Onboarding.route)    { OnboardingScreen(navController) }
             composable(Screen.RoleSelection.route) { RoleSelectionScreen(navController) }
@@ -93,29 +95,28 @@ fun HavenHubNavGraph(
                 )
             }
 
-            composable(Screen.SignIn.route)         { SignInScreen(navController) }
-            composable(Screen.ForgotPassword.route) { ForgotPasswordScreen(navController) }
+            composable(Screen.SignIn.route)        { SignInScreen(navController) }
+            composable(Screen.ForgotPassword.route){ ForgotPasswordScreen(navController) }
 
-            // ── Home / Search ─────────────────────────────────────
+// ── Home / Search ─────────────────────────────────────────────────
             composable(Screen.Home.route)   { HomeScreen(navController) }
             composable(Screen.Search.route) { SearchScreen(navController) }
             composable(Screen.Filter.route) { FilterScreen(navController) }
 
-            // ── Property ──────────────────────────────────────────
+// ── Property ──────────────────────────────────────────────────────
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
 
             // ✅ AddProperty — sirf landlord
             composable(Screen.AddProperty.route) {
                 val role = uiState.userRole
                 when {
-                    uiState.isLoading   -> {
+                    uiState.isLoading -> {
                         Box(Modifier.fillMaxSize(), Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
-                    // ✅ Fix: lowercase
-                    role == "landlord"  -> AddPropertyScreen(navController)
-                    role.isNotEmpty()   -> {
+                    role == "landlord" -> AddPropertyScreen(navController)
+                    role.isNotEmpty()  -> {
                         LaunchedEffect(Unit) { navController.popBackStack() }
                     }
                 }
@@ -147,7 +148,7 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Bookings ──────────────────────────────────────────
+// ── Bookings ──────────────────────────────────────────────────────
             composable(Screen.MyBookings.route) {
                 MyBookingsScreen(
                     navController = navController,
@@ -164,17 +165,16 @@ fun HavenHubNavGraph(
             ) { back ->
                 val role = uiState.userRole
                 when {
-                    uiState.isLoading  -> {
+                    uiState.isLoading -> {
                         Box(Modifier.fillMaxSize(), Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
-                    // ✅ Fix: lowercase
-                    role == "tenant"   -> BookingScreen(
+                    role == "tenant"  -> BookingScreen(
                         navController = navController,
                         propertyId    = back.arguments?.getString(Screen.Booking.ARG_PROPERTY_ID) ?: ""
                     )
-                    role.isNotEmpty()  -> {
+                    role.isNotEmpty() -> {
                         LaunchedEffect(Unit) { navController.popBackStack() }
                     }
                 }
@@ -204,9 +204,9 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Payment ───────────────────────────────────────────
+// ── Payment ───────────────────────────────────────────────────────
             composable(
-                route = "payment/{bookingId}/{payerId}/{payeeId}/{payerName}/{payeeName}/{amount}",
+                route     = "payment/{bookingId}/{payerId}/{payeeId}/{payerName}/{payeeName}/{amount}",
                 arguments = listOf(
                     navArgument("bookingId") { type = NavType.StringType },
                     navArgument("payerId")   { type = NavType.StringType },
@@ -218,11 +218,11 @@ fun HavenHubNavGraph(
             ) { back ->
                 PaymentScreen(
                     navController = navController,
-                    bookingId     = back.arguments?.getString("bookingId")                ?: "",
-                    payerId       = back.arguments?.getString("payerId")                  ?: "",
-                    payeeId       = back.arguments?.getString("payeeId")                  ?: "",
-                    payerName     = back.arguments?.getString("payerName")                ?: "",
-                    payeeName     = back.arguments?.getString("payeeName")                ?: "",
+                    bookingId     = back.arguments?.getString("bookingId") ?: "",
+                    payerId       = back.arguments?.getString("payerId")   ?: "",
+                    payeeId       = back.arguments?.getString("payeeId")   ?: "",
+                    payerName     = back.arguments?.getString("payerName") ?: "",
+                    payeeName     = back.arguments?.getString("payeeName") ?: "",
                     amount        = back.arguments?.getString("amount")?.toDoubleOrNull() ?: 0.0
                 )
             }
@@ -241,7 +241,7 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Reviews ───────────────────────────────────────────
+// ── Reviews ───────────────────────────────────────────────────────
             composable(
                 route     = Screen.AddReview.route,
                 arguments = listOf(navArgument(Screen.AddReview.ARG_PROPERTY_ID) {
@@ -268,11 +268,11 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Profile ───────────────────────────────────────────
+// ── Profile ───────────────────────────────────────────────────────
             composable(Screen.Profile.route)     { ProfileScreen(navController) }
             composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
 
-            // ── Settings ──────────────────────────────────────────
+// ── Settings ──────────────────────────────────────────────────────
             composable(Screen.Settings.route)             { SettingsScreen(navController) }
             composable(Screen.AccountSettings.route)      { AccountSettingsScreen(navController) }
             composable(Screen.NotificationSettings.route) { NotificationSettingsScreen(navController) }
@@ -280,7 +280,7 @@ fun HavenHubNavGraph(
             composable(Screen.About.route)                { AboutScreen(navController) }
             composable(Screen.HelpAndSupport.route)       { HelpAndSupportScreen(navController) }
 
-            // ── Notifications ─────────────────────────────────────
+// ── Notifications ─────────────────────────────────────────────────
             composable(Screen.Notifications.route) { NotificationsScreen(navController) }
 
             composable(
@@ -295,7 +295,7 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Messaging ─────────────────────────────────────────
+// ── Messaging ─────────────────────────────────────────────────────
             composable(Screen.MessageList.route) { MessageListScreen(navController) }
 
             composable(
@@ -312,7 +312,7 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Vacation ──────────────────────────────────────────
+// ── Vacation ──────────────────────────────────────────────────────
             composable(Screen.VacationRentals.route) { VacationRentalsScreen(navController) }
             composable(Screen.PreBooking.route)      { PreBookingScreen(navController) }
 
@@ -328,13 +328,13 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Admin ─────────────────────────────────────────────
-            composable(Screen.AdminDashboard.route)   { AdminDashboardScreen(navController) }
-            composable(Screen.ManageUsers.route)      { ManageUsersScreen(navController) }
-            composable(Screen.ManageProperties.route) { ManagePropertiesScreen(navController) }
-            composable(Screen.ManageBookings.route)   { ManageBookingsScreen(navController) }
-            composable(Screen.VerifyProperties.route) { VerifyPropertiesScreen(navController) }
-            composable(Screen.VerifyUsers.route)      { VerifyUsersScreen(navController) }
+// ── Admin ─────────────────────────────────────────────────────────
+            composable(Screen.AdminDashboard.route)    { AdminDashboardScreen(navController) }
+            composable(Screen.ManageUsers.route)       { ManageUsersScreen(navController) }
+            composable(Screen.ManageProperties.route)  { ManagePropertiesScreen(navController) }
+            composable(Screen.ManageBookings.route)    { ManageBookingsScreen(navController) }
+            composable(Screen.VerifyProperties.route)  { VerifyPropertiesScreen(navController) }
+            composable(Screen.VerifyUsers.route)       { VerifyUsersScreen(navController) }
 
             composable(
                 route     = Screen.PropertyVerificationDetail.route,

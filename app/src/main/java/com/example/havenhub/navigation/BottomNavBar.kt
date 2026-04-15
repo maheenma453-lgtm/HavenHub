@@ -93,7 +93,7 @@ fun AdminBottomNavBar(navController: NavController) {
     }
 }
 
-// ── User Bottom Navbar ────────────────────────────────────────────
+// ── Nav Item Data Class ───────────────────────────────────────────
 data class BottomNavItem(
     val route         : String,
     val label         : String,
@@ -101,21 +101,39 @@ data class BottomNavItem(
     val unselectedIcon: ImageVector
 )
 
-val bottomNavItems = listOf(
-    BottomNavItem(Screen.Home.route,        "Home",     Icons.Filled.Home,                 Icons.Outlined.Home),
-    BottomNavItem(Screen.Search.route,      "Search",   Icons.Filled.Search,               Icons.Outlined.Search),
-    BottomNavItem(Screen.MyBookings.route,  "Bookings", Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
-    BottomNavItem(Screen.MessageList.route, "Messages", Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
-    BottomNavItem(Screen.Profile.route,     "Profile",  Icons.Filled.Person,               Icons.Outlined.Person)
+// ── Tenant Nav Items ──────────────────────────────────────────────
+val tenantNavItems = listOf(
+    BottomNavItem(Screen.Home.route,        "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.Search.route,      "Search",     Icons.Filled.Search,               Icons.Outlined.Search),
+    BottomNavItem(Screen.MyBookings.route,  "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
+    BottomNavItem(Screen.MessageList.route, "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
+    BottomNavItem(Screen.Profile.route,     "Profile",    Icons.Filled.Person,               Icons.Outlined.Person)
 )
 
+// ── Landlord Nav Items (Search ki jagah MyProperties) ─────────────
+val landlordNavItems = listOf(
+    BottomNavItem(Screen.Home.route,         "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.MyProperties.route, "Properties", Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.MyBookings.route,   "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
+    BottomNavItem(Screen.MessageList.route,  "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
+    BottomNavItem(Screen.Profile.route,      "Profile",    Icons.Filled.Person,               Icons.Outlined.Person)
+)
+
+// Backward-compat alias — purana code break na ho
+val bottomNavItems = tenantNavItems
+
+// ── User Bottom Navbar ────────────────────────────────────────────
 @Composable
 fun BottomNavBar(
     navController     : NavController,
-    unreadMessageCount: Int = 0
+    unreadMessageCount: Int    = 0,
+    userRole          : String = "tenant"   // ✅ NEW: role-based tabs
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    // ✅ Role ke hisaab se items choose karo
+    val items = if (userRole == "landlord") landlordNavItems else tenantNavItems
 
     NavigationBar(
         containerColor = BackgroundWhite,
@@ -124,12 +142,12 @@ fun BottomNavBar(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .height(64.dp)
     ) {
-        bottomNavItems.forEach { item ->
+        items.forEach { item ->
             val isSelected = currentRoute == item.route
 
             NavigationBarItem(
                 selected = isSelected,
-                onClick = {
+                onClick  = {
                     if (currentRoute != item.route) {
                         navController.navigate(item.route) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -186,27 +204,3 @@ fun BottomNavBar(
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
