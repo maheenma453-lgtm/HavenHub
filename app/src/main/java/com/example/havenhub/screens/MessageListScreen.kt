@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,8 +24,10 @@ import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.MessagingViewModel
+import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,24 +40,53 @@ fun MessageListScreen(
     val authUiState by authViewModel.uiState.collectAsState()
     val currentUid  = authUiState.currentUser?.uid ?: ""
 
+    // ✅ Other users ke naam store karo — uid -> name map
+    val userNames = remember { mutableStateMapOf<String, String>() }
+
     LaunchedEffect(currentUid) {
         if (currentUid.isNotEmpty()) {
             viewModel.loadConversations(currentUid)
         }
     }
 
+    // ✅ Jab bhi conversations update hon — har otherUserId ka naam Firestore se fetch karo
+    LaunchedEffect(uiState.conversations) {
+        uiState.conversations.forEach { convo ->
+            val participants = (convo["participants"] as? List<*>) ?: emptyList<Any>()
+            val otherUserId  = participants
+                .firstOrNull { it != currentUid }
+                ?.toString() ?: ""
+
+            // Sirf fetch karo agar pehle se map mein nahi hai
+            if (otherUserId.isNotEmpty() && !userNames.containsKey(otherUserId)) {
+                try {
+                    val doc = FirebaseFirestore.getInstance()
+                        .collection("users")
+                        .document(otherUserId)
+                        .get()
+                        .await()
+                    // ✅ "name" ya "fullName" — jo bhi aapke User model mein hai
+                    val name = doc.getString("name")
+                        ?: doc.getString("fullName")
+                        ?: doc.getString("displayName")
+                        ?: "User"
+                    userNames[otherUserId] = name
+                } catch (e: Exception) {
+                    userNames[otherUserId] = "User"
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Messages", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text("Messages", fontWeight = FontWeight.Bold)
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.Edit, "New Message")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -81,9 +111,11 @@ fun MessageListScreen(
                         color    = PrimaryBlue
                     )
                 }
+
                 uiState.conversations.isEmpty() -> {
                     EmptyMessagesState()
                 }
+
                 else -> {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(uiState.conversations) { convo ->
@@ -94,24 +126,30 @@ fun MessageListScreen(
                                 ?.toString() ?: ""
                             val lastMessage  = (convo["lastMessage"] as? String) ?: ""
                             val timestamp    = (convo["lastMessageTimestamp"] as? Long) ?: 0L
-                            val timeStr      = if (timestamp > 0) {
+                            val timeStr      = if (timestamp > 0L) {
                                 SimpleDateFormat("hh:mm a", Locale.getDefault())
                                     .format(Date(timestamp))
                             } else ""
 
+                            // ✅ Naam map se lo — load ho raha ho to "Loading..." dikhao
+                            val displayName  = userNames[otherUserId] ?: "Loading..."
+                            val avatarLetter = displayName
+                                .firstOrNull { it.isLetter() }
+                                ?.uppercase() ?: "?"
+
                             ConversationItem(
-                                avatarInitial = otherUserId.take(1).uppercase(),
-                                name          = otherUserId.take(8) + "...",
-                                lastMessage   = lastMessage.ifEmpty { "No messages yet" },
+                                avatarInitial = avatarLetter,
+                                name          = displayName,
+                                lastMessage   = lastMessage.ifEmpty { "Start a conversation" },
                                 timestamp     = timeStr,
                                 unreadCount   = 0,
-                                isOnline      = false,
                                 onClick       = {
                                     navController.navigate(
                                         Screen.Chat.createRoute(otherUserId)
                                     )
                                 }
                             )
+
                             HorizontalDivider(
                                 modifier  = Modifier.padding(start = 80.dp),
                                 color     = BorderGray,
@@ -125,6 +163,12 @@ fun MessageListScreen(
     }
 }
 
+// ── Helper: await() extension for Tasks ──────────────────────────────────────
+//private suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T {
+//    return kotlinx.coroutines.tasks.await(this)
+
+
+// ── Empty State ───────────────────────────────────────────────────────────────
 @Composable
 private fun EmptyMessagesState() {
     Column(
@@ -132,7 +176,7 @@ private fun EmptyMessagesState() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "💬", fontSize = 56.sp)
+        Text("💬", fontSize = 56.sp)
         Spacer(modifier = Modifier.height(14.dp))
         Text(
             text       = "No Messages Yet",
@@ -140,6 +184,7 @@ private fun EmptyMessagesState() {
             fontWeight = FontWeight.Bold,
             color      = TextPrimary
         )
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text     = "Start a conversation with a landlord",
             fontSize = 13.sp,
@@ -148,6 +193,7 @@ private fun EmptyMessagesState() {
     }
 }
 
+// ── Conversation Row ──────────────────────────────────────────────────────────
 @Composable
 private fun ConversationItem(
     avatarInitial : String,
@@ -155,7 +201,6 @@ private fun ConversationItem(
     lastMessage   : String,
     timestamp     : String,
     unreadCount   : Int,
-    isOnline      : Boolean,
     onClick       : () -> Unit
 ) {
     Row(
@@ -165,50 +210,35 @@ private fun ConversationItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(52.dp)) {
-            Box(
-                modifier         = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .background(PrimaryBlue),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    avatarInitial,
-                    fontSize   = 20.sp,
-                    color      = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            if (isOnline) {
-                Surface(
-                    modifier = Modifier
-                        .size(14.dp)
-                        .align(Alignment.BottomEnd),
-                    shape  = CircleShape,
-                    color  = Color.White,
-                    border = null
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .padding(2.dp)
-                            .clip(CircleShape)
-                            .background(Color.Green)
-                    )
-                }
-            }
+        // ── Avatar ──
+        Box(
+            modifier         = Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(PrimaryBlue),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text       = avatarInitial,
+                fontSize   = 20.sp,
+                color      = Color.White,
+                fontWeight = FontWeight.Bold
+            )
         }
 
         Spacer(modifier = Modifier.width(12.dp))
 
+        // ── Name + Last Message ──
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                name,
+                text       = name,
                 fontSize   = 15.sp,
-                fontWeight = if (unreadCount > 0) FontWeight.Bold else FontWeight.Normal
+                fontWeight = if (unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
+                color      = TextPrimary
             )
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
-                lastMessage,
+                text     = lastMessage,
                 fontSize = 13.sp,
                 color    = TextSecondary,
                 maxLines = 1,
@@ -216,13 +246,15 @@ private fun ConversationItem(
             )
         }
 
+        // ── Timestamp + Badge ──
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                timestamp,
+                text     = timestamp,
                 fontSize = 11.sp,
                 color    = if (unreadCount > 0) PrimaryBlue else TextSecondary
             )
             if (unreadCount > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Badge(
                     containerColor = PrimaryBlue,
                     contentColor   = Color.White

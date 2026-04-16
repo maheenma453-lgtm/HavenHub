@@ -17,16 +17,17 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class HomeUiState(
-    val featuredProperties : List<Property> = emptyList(),
-    val nearbyProperties   : List<Property> = emptyList(),
-    val isLoading          : Boolean         = false,
-    val errorMessage       : String?         = null,
+    val featuredProperties  : List<Property> = emptyList(),
+    val nearbyProperties    : List<Property> = emptyList(),
+    val isLoading           : Boolean         = false,
+    val errorMessage        : String?         = null,
 
     // Landlord Quick Actions ke liye
-    val totalProperties    : Int             = 0,
-    val activeBookingsCount: Int             = 0,
-    val totalRevenue       : Double          = 0.0,
-    val averageRating      : Float           = 0f   // ✅ FIX: averageRating field added
+    val totalProperties     : Int             = 0,
+    val activeBookingsCount : Int             = 0,
+    val pendingRequestsCount: Int             = 0,   // ✅ NEW: PENDING status bookings
+    val totalRevenue        : Double          = 0.0,
+    val averageRating       : Float           = 0f
 )
 
 @HiltViewModel
@@ -70,7 +71,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // ✅ Landlord ka data load karo — landlordId Firebase Auth se milega
     fun loadLandlordStats(landlordId: String) {
         viewModelScope.launch {
             try {
@@ -80,38 +80,37 @@ class HomeViewModel @Inject constructor(
                     propertiesResult.data ?: emptyList() else emptyList<Property>()
                 val totalProps = properties.size
 
-                // ✅ FIX: Average Rating calculate karo properties se
+                // Average Rating
                 val avgRating = if (properties.isNotEmpty())
                     properties.map { it.averageRating.toFloat() }.average().toFloat()
                 else 0f
 
-                // 2. Active Bookings (CONFIRMED status wali)
+                // 2. Bookings — Active (CONFIRMED) + Pending (PENDING)
                 val bookings = bookingRepository.getLandlordBookings(landlordId)
-                val activeCount = bookings.count {
+                val activeCount  = bookings.count {
                     it.status == BookingStatus.CONFIRMED.name
                 }
+                val pendingCount = bookings.count {   // ✅ NEW
+                    it.status == BookingStatus.PENDING.name
+                }
 
-                // 3. Total Revenue (saari completed payments)
+                // 3. Total Revenue
                 val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
                 val revenue = if (paymentsResult is Resource.Success)
                     paymentsResult.data?.sumOf { it.amount } ?: 0.0 else 0.0
 
                 _uiState.update { state ->
                     state.copy(
-                        totalProperties     = totalProps,
-                        activeBookingsCount = activeCount,
-                        totalRevenue        = revenue,
-                        averageRating       = avgRating   // ✅ FIX: set karo
+                        totalProperties      = totalProps,
+                        activeBookingsCount  = activeCount,
+                        pendingRequestsCount = pendingCount,   // ✅ NEW
+                        totalRevenue         = revenue,
+                        averageRating        = avgRating
                     )
                 }
             } catch (e: Exception) {
-                // Stats load fail hone par quietly ignore karo
+                // Stats load fail hone par quietly ignore
             }
         }
     }
 }
-
-
-
-
-

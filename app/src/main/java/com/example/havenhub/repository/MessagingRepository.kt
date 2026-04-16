@@ -66,6 +66,7 @@ class MessagingRepository @Inject constructor(
         senderId       : String,
         receiverId     : String,
         content        : String,
+        // ✅ FIX: default value Message.TYPE_TEXT = "text" — Firestore mein "text" store hoga
         messageType    : String  = Message.TYPE_TEXT,
         mediaUrl       : String? = null,
         mediaFileName  : String? = null
@@ -149,7 +150,9 @@ class MessagingRepository @Inject constructor(
     // ✅ Unread count
     suspend fun getUnreadMessagesCount(userId: String): Int = 0
 
-    // ✅ Chat ID generate karo
+    // ✅ FIX: generateChatId — userId1 aur userId2 sorted join karo
+    // Message.buildConversationId se alag hai kyunki woh propertyId bhi leta hai
+    // Yahan simple 1-on-1 chat ke liye use ho raha hai
     fun generateChatId(userId1: String, userId2: String): String {
         return listOf(userId1, userId2).sorted().joinToString("_")
     }
@@ -180,7 +183,7 @@ class MessagingRepository @Inject constructor(
         }
     }
 
-    // Helper: Last message update karo
+    // ✅ Helper: Last message update karo
     private suspend fun updateConversationLastMessage(conversationId: String, message: Message) {
         try {
             firestore
@@ -194,6 +197,7 @@ class MessagingRepository @Inject constructor(
                     )
                 ).await()
         } catch (e: Exception) {
+            // ✅ FIX: Document exist nahi karta to set() se banao
             val conversationData = hashMapOf(
                 "id"                   to conversationId,
                 "participants"         to listOf(message.senderId, message.receiverId),

@@ -62,8 +62,9 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
+    // ✅ FIX: otherUserId se chatId generate karo aur listen start karo
     fun loadChat(otherUserId: String) {
-        if (currentUserId.isEmpty()) return
+        if (currentUserId.isEmpty() || otherUserId.isEmpty()) return
         val chatId = messagingRepository.generateChatId(currentUserId, otherUserId)
         listenToMessages(chatId)
     }
@@ -102,15 +103,22 @@ class MessagingViewModel @Inject constructor(
     fun sendMessage(
         receiverId  : String,
         content     : String,
-        messageType : String  = "TEXT",
+        // ✅ FIX: "TEXT" uppercase tha — Message.TYPE_TEXT = "text" lowercase use karo
+        messageType : String  = Message.TYPE_TEXT,
         mediaUrl    : String? = null
     ) {
         if (content.isBlank() && mediaUrl == null) return
-        if (currentUserId.isEmpty()) return
+        // ✅ FIX: currentUserId empty check — agar empty hai to message send mat karo
+        if (currentUserId.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "User not logged in") }
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(sendSuccess = false) }
             val chatId = messagingRepository.generateChatId(currentUserId, receiverId)
+
+            // ✅ FIX: pehle conversation banao, phir message bhejo
             messagingRepository.createOrGetConversation(currentUserId, receiverId)
 
             val result = messagingRepository.sendMessage(
@@ -122,10 +130,10 @@ class MessagingViewModel @Inject constructor(
                 mediaUrl       = mediaUrl
             )
 
-            if (result is Resource.Success) {
-                _uiState.update { it.copy(sendSuccess = true) }
-            } else if (result is Resource.Error) {
-                _uiState.update { it.copy(errorMessage = result.message) }
+            when (result) {
+                is Resource.Success -> _uiState.update { it.copy(sendSuccess = true) }
+                is Resource.Error   -> _uiState.update { it.copy(errorMessage = result.message) }
+                else -> {}
             }
         }
     }
