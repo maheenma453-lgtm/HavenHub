@@ -14,7 +14,6 @@ data class Property(
     val title: String = "",
     val description: String = "",
 
-    // ✅ FIX: String rakho — Firestore enum deserialize nahi kar sakta
     val propertyType: String = "APARTMENT",
     val status: String = "PENDING",
 
@@ -34,6 +33,7 @@ data class Property(
     val floor: Int? = null,
 
     val imageUrls: List<String> = emptyList(),
+    val pt1DocumentUrl: String = "",        // ✅ NEW: Admin ke liye PT-1 imgbb link
     val amenities: List<String> = emptyList(),
 
     val petsAllowed: Boolean = false,
@@ -62,10 +62,11 @@ data class Property(
 
     val formattedPrice: String get() = "PKR ${"%,.0f".format(pricePerNight)}"
 
-    // ✅ String se compare karo
     val isLive: Boolean get() = status == "APPROVED" && isAvailable
 
-    // ✅ Enum chahiye to yeh use karo
+    // ✅ PT-1 uploaded hai ya nahi
+    val hasPt1Document: Boolean get() = pt1DocumentUrl.isNotBlank()
+
     val propertyStatusEnum: PropertyStatus
         get() = try {
             PropertyStatus.valueOf(status)

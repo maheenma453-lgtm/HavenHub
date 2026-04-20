@@ -5,7 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.havenhub.data.PropertyStatus
 import com.example.havenhub.viewmodel.VerificationViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,7 +52,6 @@ fun PropertyVerificationDetailScreen(
     var rejectReason      by remember { mutableStateOf("") }
     var adminNote         by remember { mutableStateOf("") }
 
-    // ✅ Reject dialog
     if (showRejectDialog) {
         AlertDialog(
             onDismissRequest = { showRejectDialog = false },
@@ -68,15 +66,13 @@ fun PropertyVerificationDetailScreen(
                 )
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.rejectProperty(
-                            propertyId,
-                            rejectReason.ifEmpty { "Does not meet criteria" }
-                        )
-                        showRejectDialog = false
-                    }
-                ) { Text("Confirm Reject") }
+                Button(onClick = {
+                    viewModel.rejectProperty(
+                        propertyId,
+                        rejectReason.ifEmpty { "Does not meet criteria" }
+                    )
+                    showRejectDialog = false
+                }) { Text("Confirm Reject") }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showRejectDialog = false }) { Text("Cancel") }
@@ -84,7 +80,6 @@ fun PropertyVerificationDetailScreen(
         )
     }
 
-    // ✅ Approve dialog
     if (showApproveDialog) {
         AlertDialog(
             onDismissRequest = { showApproveDialog = false },
@@ -102,12 +97,10 @@ fun PropertyVerificationDetailScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.approveProperty(propertyId, adminNote)
-                        showApproveDialog = false
-                    }
-                ) { Text("Approve") }
+                Button(onClick = {
+                    viewModel.approveProperty(propertyId, adminNote)
+                    showApproveDialog = false
+                }) { Text("Approve") }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showApproveDialog = false }) { Text("Cancel") }
@@ -119,8 +112,8 @@ fun PropertyVerificationDetailScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title           = { Text("Property Review") },
-                navigationIcon  = {
+                title          = { Text("Property Review") },
+                navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
@@ -129,7 +122,6 @@ fun PropertyVerificationDetailScreen(
         },
         bottomBar = {
             if (property != null) {
-                // ✅ Approve button ab kaam karta hai
                 Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
                     Row(
                         modifier              = Modifier.fillMaxWidth().padding(16.dp),
@@ -139,9 +131,7 @@ fun PropertyVerificationDetailScreen(
                             onClick  = { showRejectDialog = true },
                             modifier = Modifier.weight(1f),
                             enabled  = !uiState.isLoading
-                        ) {
-                            Text("Reject")
-                        }
+                        ) { Text("Reject") }
                         Button(
                             onClick  = { showApproveDialog = true },
                             modifier = Modifier.weight(1f),
@@ -186,11 +176,7 @@ fun PropertyVerificationDetailScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Home,
-                                    null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                Icon(Icons.Default.Home, null, tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     "Basic Information",
@@ -199,21 +185,15 @@ fun PropertyVerificationDetailScreen(
                                 )
                             }
                             HorizontalDivider()
-
                             DetailItem("Title",      property.title)
-                            DetailItem("Type",       property.propertyType
-                                .lowercase()
-                                .replaceFirstChar { it.uppercase() })
+                            DetailItem("Type",       property.propertyType.lowercase().replaceFirstChar { it.uppercase() })
                             DetailItem("Price",      property.formattedPrice)
                             DetailItem("Address",    property.address.ifEmpty { property.city })
                             DetailItem("City",       property.city)
                             DetailItem("Bedrooms",   property.bedrooms.toString())
                             DetailItem("Bathrooms",  property.bathrooms.toString())
                             DetailItem("Max Guests", property.maxGuests.toString())
-                            DetailItem("Status",     property.status
-                                .lowercase()
-                                .replaceFirstChar { it.uppercase() })
-
+                            DetailItem("Status",     property.status.lowercase().replaceFirstChar { it.uppercase() })
                             if (property.adminNote.isNotEmpty()) {
                                 DetailItem("Admin Note", property.adminNote)
                             }
@@ -251,10 +231,7 @@ fun PropertyVerificationDetailScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(Modifier.height(8.dp))
-                                Text(
-                                    property.description,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                Text(property.description, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
@@ -277,7 +254,7 @@ fun PropertyVerificationDetailScreen(
                     }
                 }
 
-                // ── Photos ──
+                // ── Property Photos ──
                 item {
                     Text(
                         "Property Photos",
@@ -288,11 +265,18 @@ fun PropertyVerificationDetailScreen(
 
                 if (property.imageUrls.isEmpty()) {
                     item {
-                        Text(
-                            "No photos uploaded",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Box(
+                                modifier         = Modifier.fillMaxWidth().padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "No photos uploaded",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 } else {
                     items(property.imageUrls) { imageUrl ->
@@ -300,14 +284,84 @@ fun PropertyVerificationDetailScreen(
                             AsyncImage(
                                 model              = imageUrl,
                                 contentDescription = null,
-                                modifier           = Modifier
-                                    .fillMaxWidth()
-                                    .height(220.dp),
+                                modifier           = Modifier.fillMaxWidth().height(220.dp),
                                 contentScale       = ContentScale.Crop
                             )
                         }
                     }
                 }
+
+                // ── ✅ PT-1 Document Section ──
+                item {
+                    Text(
+                        "PT-1 Verification Document",
+                        fontWeight = FontWeight.Bold,
+                        style      = MaterialTheme.typography.titleMedium
+                    )
+                }
+
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier            = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.VerifiedUser,
+                                    null,
+                                    tint = if (property.hasPt1Document)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.error
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    if (property.hasPt1Document)
+                                        "PT-1 Document Uploaded"
+                                    else
+                                        "PT-1 Document Not Uploaded",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (property.hasPt1Document)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.error
+                                )
+                            }
+
+                            // ✅ PT-1 image show karo agar uploaded hai
+                            if (property.hasPt1Document) {
+                                HorizontalDivider()
+                                Text(
+                                    "Document Preview",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    AsyncImage(
+                                        model              = property.pt1DocumentUrl,
+                                        contentDescription = "PT-1 Document",
+                                        modifier           = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 200.dp, max = 400.dp),
+                                        contentScale       = ContentScale.FillWidth
+                                    )
+                                }
+                                Text(
+                                    "* Agar document PDF hai to image preview nahi aayegi",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item { Spacer(Modifier.height(8.dp)) }
             }
         }
     }

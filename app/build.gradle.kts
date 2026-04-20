@@ -18,6 +18,12 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "IMGBB_API_KEY", "\"a7d0e9e8ea6147cef2d4648ac1c4fab9\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
+        compose = true
     }
 
     buildTypes {
@@ -37,10 +43,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "11"
-    }
-
-    buildFeatures {
-        compose = true
     }
 }
 
@@ -98,6 +100,9 @@ dependencies {
     // ─── DateTime ────────────────────────────────────────
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
 
+    // ─── OkHttp - ImgBB upload k liye ───────────────────
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     // ─── Testing ─────────────────────────────────────────
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -106,5 +111,4 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
 }

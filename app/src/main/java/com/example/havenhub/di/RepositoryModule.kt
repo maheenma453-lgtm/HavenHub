@@ -1,17 +1,18 @@
 package com.example.havenhub.di
 
+import android.content.Context
 import com.example.havenhub.remote.FirebaseAuthManager
 import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.remote.FirebaseMessagingManager
 import com.example.havenhub.remote.FirebaseRealtimeListener
-import com.example.havenhub.remote.FirebaseStorageManager
+import com.example.havenhub.remote.ImgBBUploadManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
-import com.google.firebase.storage.FirebaseStorage
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -19,17 +20,18 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
 
-    // ✅ FirebaseAuth yahan nahi — FirebaseModule se aayegi
-
     @Provides
     @Singleton
     fun provideFirebaseFirestore(): FirebaseFirestore =
         FirebaseFirestore.getInstance()
 
+    // ✅ FirebaseStorage HATA DIYA
+    // ✅ ImgBBUploadManager ADD kiya
     @Provides
     @Singleton
-    fun provideFirebaseStorage(): FirebaseStorage =
-        FirebaseStorage.getInstance()
+    fun provideImgBBUploadManager(
+        @ApplicationContext context: Context
+    ): ImgBBUploadManager = ImgBBUploadManager(context)
 
     @Provides
     @Singleton
@@ -50,12 +52,6 @@ object RepositoryModule {
 
     @Provides
     @Singleton
-    fun provideFirebaseStorageManager(
-        storage: FirebaseStorage
-    ): FirebaseStorageManager = FirebaseStorageManager(storage)
-
-    @Provides
-    @Singleton
     fun provideFirebaseRealtimeListener(
         firestore: FirebaseFirestore
     ): FirebaseRealtimeListener = FirebaseRealtimeListener(firestore)
@@ -64,6 +60,6 @@ object RepositoryModule {
     @Singleton
     fun provideFirebaseMessagingManager(
         firestore: FirebaseFirestore,
-        fcm: FirebaseMessaging
+        fcm      : FirebaseMessaging
     ): FirebaseMessagingManager = FirebaseMessagingManager(firestore, fcm)
 }

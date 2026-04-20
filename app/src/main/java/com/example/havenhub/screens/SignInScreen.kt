@@ -45,23 +45,26 @@ fun SignInScreen(
     val passwordError by viewModel.passwordError.collectAsState()
 
     var passwordVisible by remember { mutableStateOf(false) }
+    var visible         by remember { mutableStateOf(false) }
 
-    var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
+
     val alpha by animateFloatAsState(
         targetValue   = if (visible) 1f else 0f,
-        animationSpec = tween(500, easing = EaseOut), label = "a"
+        animationSpec = tween(500, easing = EaseOut),
+        label = "a"
     )
     val slide by animateFloatAsState(
         targetValue   = if (visible) 0f else 24f,
-        animationSpec = tween(550, easing = EaseOutCubic), label = "s"
+        animationSpec = tween(550, easing = EaseOutCubic),
+        label = "s"
     )
 
     LaunchedEffect(uiState.isLoggedIn) {
         if (uiState.isLoggedIn) {
-            val dest = when (uiState.userRole) {
-                "admin", "ADMIN" -> Screen.AdminDashboard.route
-                else             -> Screen.Home.route
+            val dest = when (uiState.userRole.lowercase()) {
+                "admin" -> Screen.AdminDashboard.route
+                else    -> Screen.Home.route
             }
             navController.navigate(dest) { popUpTo(0) { inclusive = true } }
         }
@@ -79,11 +82,10 @@ fun SignInScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Status bar space only
             Spacer(modifier = Modifier.statusBarsPadding())
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ── Logo + Brand ───────────────────────────────────────
+            // ── Logo + Brand ──────────────────────────────────────────────────
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier            = Modifier.alpha(alpha)
@@ -93,22 +95,26 @@ fun SignInScreen(
                     contentDescription = "HavenHub",
                     contentScale       = ContentScale.Fit,
                     modifier           = Modifier
-                        .fillMaxWidth(0.65f)
+                        .fillMaxWidth(0.55f)
                         .wrapContentHeight()
-                        //.padding(vertical = (-24).dp)
-                //cuts transparent padding from image
-                        .padding(vertical = 0.dp)
                 )
-
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    "HavenHub",
-                    fontSize      = 26.sp,
-                    fontWeight    = FontWeight.ExtraBold,
-                    color         = PrimaryBlue,
-                    letterSpacing = (-0.5).sp
-                )
+                Row {
+                    Text(
+                        "Haven",
+                        fontSize      = 26.sp,
+                        fontWeight    = FontWeight.ExtraBold,
+                        color         = PrimaryBlue,
+                        letterSpacing = (-0.5).sp
+                    )
+                    Text(
+                        "Hub",
+                        fontSize      = 26.sp,
+                        fontWeight    = FontWeight.ExtraBold,
+                        color         = AccentGold,
+                        letterSpacing = (-0.5).sp
+                    )
+                }
                 Text(
                     "Smart Rental & Vacation Stay",
                     fontSize = 12.sp,
@@ -119,7 +125,7 @@ fun SignInScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Form Card ──────────────────────────────────────────
+            // ── Form Card ─────────────────────────────────────────────────────
             Card(
                 modifier  = Modifier
                     .fillMaxWidth()
@@ -148,7 +154,9 @@ fun SignInScreen(
                         modifier = Modifier
                             .width(36.dp).height(3.dp)
                             .clip(CircleShape)
-                            .background(Brush.horizontalGradient(listOf(AccentGold, AccentGoldLight)))
+                            .background(
+                                Brush.horizontalGradient(listOf(AccentGold, AccentGoldLight))
+                            )
                     )
                     Spacer(modifier = Modifier.height(20.dp))
 
@@ -159,6 +167,7 @@ fun SignInScreen(
                         errorBorderColor     = ErrorRed
                     )
 
+                    // Email
                     OutlinedTextField(
                         value          = email,
                         onValueChange  = { viewModel.onEmailChange(it) },
@@ -173,6 +182,7 @@ fun SignInScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Password
                     OutlinedTextField(
                         value                = password,
                         onValueChange        = { viewModel.onPasswordChange(it) },
@@ -209,6 +219,7 @@ fun SignInScreen(
                         )
                     }
 
+                    // Error box
                     uiState.errorMessage?.let {
                         Box(
                             modifier = Modifier
@@ -220,12 +231,13 @@ fun SignInScreen(
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 
+                    // Sign In button
                     Button(
-                        onClick  = { viewModel.signIn() },
-                        enabled  = !uiState.isLoading,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape    = RoundedCornerShape(14.dp),
-                        colors   = ButtonDefaults.buttonColors(
+                        onClick   = { viewModel.signIn() },
+                        enabled   = !uiState.isLoading,
+                        modifier  = Modifier.fillMaxWidth().height(52.dp),
+                        shape     = RoundedCornerShape(14.dp),
+                        colors    = ButtonDefaults.buttonColors(
                             containerColor         = PrimaryBlue,
                             disabledContainerColor = BorderGray
                         ),
@@ -267,7 +279,7 @@ fun SignInScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         OutlinedButton(
-                            onClick  = { /* TODO: Google Sign In */ },
+                            onClick  = { /* TODO: Google */ },
                             modifier = Modifier.weight(1f).height(48.dp),
                             shape    = RoundedCornerShape(12.dp),
                             colors   = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
@@ -281,7 +293,7 @@ fun SignInScreen(
                             }
                         }
                         OutlinedButton(
-                            onClick  = { /* TODO: Facebook Sign In */ },
+                            onClick  = { /* TODO: Facebook */ },
                             modifier = Modifier.weight(1f).height(48.dp),
                             shape    = RoundedCornerShape(12.dp),
                             colors   = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
@@ -308,6 +320,7 @@ fun SignInScreen(
 
             Spacer(modifier = Modifier.height(22.dp))
 
+            // Sign Up link
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier          = Modifier.alpha(alpha)
@@ -328,3 +341,19 @@ fun SignInScreen(
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

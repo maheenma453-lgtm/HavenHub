@@ -161,7 +161,8 @@ fun AddPropertyScreen(
                                     bathrooms = bathrooms.toIntOrNull() ?: 1,
                                     areaSqFt = area.toDoubleOrNull(),
                                     amenities = selectedAmenities.toList(),
-                                    images = selectedImages
+                                    images = selectedImages,
+                                    pt1DocumentUri = pt1DocumentUri  // ✅ FIX: PT-1 pass karo
                                 )
                             }
                         }
@@ -181,12 +182,8 @@ fun AddPropertyScreen(
         ) {
             item { Spacer(modifier = Modifier.height(8.dp)) }
 
-            // Progress
-            item {
-                StepProgressIndicator(currentStep, TOTAL_STEPS)
-            }
+            item { StepProgressIndicator(currentStep, TOTAL_STEPS) }
 
-            // Step label
             item {
                 Text(
                     "Step $currentStep of $TOTAL_STEPS",
@@ -250,17 +247,15 @@ fun AddPropertyScreen(
 
 @Composable
 private fun StepProgressIndicator(current: Int, total: Int) {
-    Column {
-        LinearProgressIndicator(
-            progress = current.toFloat() / total.toFloat(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(4.dp)),
-            color = Color(0xFFD4AF37),
-            trackColor = Color(0xFFE0E0E0)
-        )
-    }
+    LinearProgressIndicator(
+        progress = current.toFloat() / total.toFloat(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(RoundedCornerShape(4.dp)),
+        color = Color(0xFFD4AF37),
+        trackColor = Color(0xFFE0E0E0)
+    )
 }
 
 @Composable
@@ -324,8 +319,12 @@ private fun Step1BasicInfo(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Property Information", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
-
+            Text(
+                "Property Information",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = Color(0xFF0D1B3E)
+            )
             OutlinedTextField(
                 value = title,
                 onValueChange = onTitle,
@@ -335,7 +334,6 @@ private fun Step1BasicInfo(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             )
-
             OutlinedTextField(
                 value = description,
                 onValueChange = onDescription,
@@ -344,7 +342,6 @@ private fun Step1BasicInfo(
                 minLines = 3,
                 shape = RoundedCornerShape(12.dp)
             )
-
             Text("Property Type *", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(PROPERTY_TYPES) { type ->
@@ -384,7 +381,6 @@ private fun Step2Details(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("Pricing", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
-
             OutlinedTextField(
                 value = pricePerNight,
                 onValueChange = onPrice,
@@ -396,7 +392,6 @@ private fun Step2Details(
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Text("₨", color = Color(0xFF8899AA)) }
             )
-
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = pricePerWeek,
@@ -415,10 +410,8 @@ private fun Step2Details(
                     shape = RoundedCornerShape(12.dp)
                 )
             }
-
             HorizontalDivider(color = Color(0xFFEEEEEE))
             Text("Property Details", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
-
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = bedrooms,
@@ -437,7 +430,6 @@ private fun Step2Details(
                     shape = RoundedCornerShape(12.dp)
                 )
             }
-
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = maxGuests,
@@ -456,10 +448,8 @@ private fun Step2Details(
                     shape = RoundedCornerShape(12.dp)
                 )
             }
-
             HorizontalDivider(color = Color(0xFFEEEEEE))
             Text("Amenities", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
-
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AMENITIES_LIST.chunked(3).forEach { row ->
                     Row(
@@ -510,7 +500,6 @@ private fun Step3LocationPhotos(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("Location", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
-
             OutlinedTextField(
                 value = city,
                 onValueChange = onCity,
@@ -521,7 +510,6 @@ private fun Step3LocationPhotos(
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Icon(Icons.Default.LocationOn, null, tint = Color(0xFFD4AF37)) }
             )
-
             OutlinedTextField(
                 value = address,
                 onValueChange = onAddress,
@@ -530,11 +518,9 @@ private fun Step3LocationPhotos(
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Icon(Icons.Default.Home, null, tint = Color(0xFF8899AA)) }
             )
-
             HorizontalDivider(color = Color(0xFFEEEEEE))
             Text("Property Photos", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
             Text("Add at least 3 photos of your property", fontSize = 13.sp, color = Color(0xFF8899AA))
-
             Button(
                 onClick = { launcher.launch("image/*") },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -545,7 +531,6 @@ private fun Step3LocationPhotos(
                 Spacer(Modifier.width(8.dp))
                 Text("Add Photos (${selectedImages.size} selected)")
             }
-
             if (selectedImages.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(selectedImages) { uri ->
@@ -596,7 +581,6 @@ private fun Step4RulesVerification(
     ) { uri -> uri?.let { onPt1Selected(it) } }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // House Rules Card
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -607,7 +591,6 @@ private fun Step4RulesVerification(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("House Rules", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
-
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = checkInTime,
@@ -624,14 +607,12 @@ private fun Step4RulesVerification(
                         shape = RoundedCornerShape(12.dp)
                     )
                 }
-
                 RuleToggle("Pets Allowed", petsAllowed, onPets)
                 RuleToggle("Smoking Allowed", smokingAllowed, onSmoking)
                 RuleToggle("Parties Allowed", partiesAllowed, onParties)
             }
         }
 
-        // PT-1 Verification Card
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -642,7 +623,6 @@ private fun Step4RulesVerification(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Verification Document", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -659,7 +639,6 @@ private fun Step4RulesVerification(
                         color = Color(0xFF8899AA)
                     )
                 }
-
                 if (pt1DocumentUri != null) {
                     Row(
                         modifier = Modifier
@@ -671,7 +650,12 @@ private fun Step4RulesVerification(
                     ) {
                         Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("PT-1 document uploaded ✓", fontSize = 13.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Medium)
+                        Text(
+                            "PT-1 document uploaded ✓",
+                            fontSize = 13.sp,
+                            color = Color(0xFF4CAF50),
+                            fontWeight = FontWeight.Medium
+                        )
                         Spacer(modifier = Modifier.weight(1f))
                         TextButton(onClick = { onPt1Selected(null) }) {
                             Text("Remove", color = Color.Red, fontSize = 12.sp)

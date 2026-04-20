@@ -1,6 +1,5 @@
 package com.example.havenhub.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,16 +16,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.example.havenhub.R
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
-import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.PropertyViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,7 +48,6 @@ fun MyPropertiesScreen(
                 title = { Text("My Properties", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        // ✅ Updated to AutoMirrored to fix deprecation warning
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -69,7 +67,12 @@ fun MyPropertiesScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding).background(Color(0xFFF5F7FA))) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(Color(0xFFF5F7FA))
+        ) {
             when {
                 uiState.isLoading -> {
                     CircularProgressIndicator(
@@ -105,7 +108,7 @@ fun MyPropertiesScreen(
                     ) {
                         items(
                             items = uiState.myProperties,
-                            key = { it.propertyId } // ✅ Key added for better performance
+                            key = { it.propertyId }
                         ) { property ->
                             MyPropertyCard(
                                 property = property,
@@ -157,21 +160,51 @@ fun MyPropertyCard(
     onDelete: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column {
-            Box(modifier = Modifier.fillMaxWidth().height(180.dp)) {
-                Image(
-                    painter = painterResource(id = getPropertyImage(property.propertyId)),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+            ) {
+                // ✅ FIX: AsyncImage se imgbb URL load karo
+                // Fallback: agar imageUrls empty ho to placeholder dikhao
+                val imageUrl = property.imageUrls.firstOrNull()
 
-                // ✅ Status Badge (Fixed Ambiguity)
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model            = imageUrl,
+                        contentDescription = property.title,
+                        modifier         = Modifier.fillMaxSize(),
+                        contentScale     = ContentScale.Crop,
+                        // ✅ Load hone tak aur error pe placeholder
+                        placeholder      = coil.compose.AsyncImagePainter.State.Empty.painter,
+                        error            = coil.compose.AsyncImagePainter.State.Empty.painter
+                    )
+                } else {
+                    // ✅ Koi image nahi — grey placeholder dikhao
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFFEEEEEE)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector   = Icons.Default.Home,
+                            contentDescription = null,
+                            modifier      = Modifier.size(48.dp),
+                            tint          = Color(0xFFBBBBBB)
+                        )
+                    }
+                }
+
+                // ✅ Status Badge
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -181,16 +214,66 @@ fun MyPropertyCard(
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = getLocalStatusLabel(property.status),
-                        fontSize = 11.sp,
-                        color = Color.White,
+                        text       = getLocalStatusLabel(property.status),
+                        fontSize   = 11.sp,
+                        color      = Color.White,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
             Column(modifier = Modifier.padding(14.dp)) {
-                Text(text = property.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(
+                    text       = property.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 16.sp
+                )
+
+                // ✅ City aur price bhi dikhao
+                if (property.city.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            null,
+                            modifier = Modifier.size(14.dp),
+                            tint     = Color(0xFF8899AA)
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text     = property.city,
+                            fontSize = 12.sp,
+                            color    = Color(0xFF8899AA)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text       = property.formattedPrice + "/night",
+                    fontSize   = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color      = Color(0xFF0D1B3E)
+                )
+
+                // ✅ PT-1 status dikhao
+                if (property.hasPt1Document) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.VerifiedUser,
+                            null,
+                            modifier = Modifier.size(13.dp),
+                            tint     = Color(0xFF4CAF50)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text     = "PT-1 Uploaded",
+                            fontSize = 11.sp,
+                            color    = Color(0xFF4CAF50)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = Color(0xFFEEEEEE))
@@ -225,7 +308,6 @@ fun MyPropertyCard(
     }
 }
 
-// ✅ FIXED: Renamed functions to avoid conflict with other files
 private fun getLocalStatusColor(status: String): Color = when (status.uppercase()) {
     "APPROVED" -> Color(0xFF4CAF50)
     "PENDING"  -> Color(0xFFFF9800)

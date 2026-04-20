@@ -38,6 +38,69 @@ fun NotificationsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val userId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
+    // ✅ Admin note dialog state
+    var showNoteDialog    by remember { mutableStateOf(false) }
+    var dialogTitle       by remember { mutableStateOf("") }
+    var dialogNote        by remember { mutableStateOf("") }
+    var dialogIsApproved  by remember { mutableStateOf(true) }
+
+    // ✅ Admin note dialog
+    if (showNoteDialog) {
+        AlertDialog(
+            onDismissRequest = { showNoteDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (dialogIsApproved) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                        null,
+                        tint = if (dialogIsApproved) Color(0xFF4CAF50) else Color.Red,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(dialogTitle, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (dialogIsApproved)
+                            "Aapki property admin ne approve kar di hai!"
+                        else
+                            "Aapki property admin ne reject kar di hai.",
+                        fontSize = 14.sp
+                    )
+                    if (dialogNote.isNotEmpty()) {
+                        HorizontalDivider()
+                        Text(
+                            "Admin Note:",
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 13.sp,
+                            color      = TextSecondary
+                        )
+                        // ✅ Admin note prominently dikhao
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (dialogIsApproved)
+                                    Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                            )
+                        ) {
+                            Text(
+                                text     = dialogNote,
+                                modifier = Modifier.padding(12.dp),
+                                fontSize = 14.sp,
+                                color    = if (dialogIsApproved)
+                                    Color(0xFF2E7D32) else Color(0xFFC62828)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showNoteDialog = false }) { Text("OK") }
+            }
+        )
+    }
+
     LaunchedEffect(userId) {
         if (userId.isNotEmpty()) viewModel.loadNotifications(userId)
     }
@@ -57,7 +120,7 @@ fun NotificationsScreen(
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text       = "${uiState.unreadCount}",
+                                    "${uiState.unreadCount}",
                                     color      = Color.White,
                                     fontSize   = 12.sp,
                                     fontWeight = FontWeight.Bold
@@ -102,7 +165,7 @@ fun NotificationsScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         Icons.Default.NotificationsNone,
-                        contentDescription = null,
+                        null,
                         modifier = Modifier.size(72.dp),
                         tint     = TextSecondary
                     )
@@ -123,28 +186,47 @@ fun NotificationsScreen(
                     }
 
                     NotificationCard(
-                        item    = notification,
+                        item     = notification,
                         enumType = enumType,
-                        onClick = {
+                        onClick  = {
                             viewModel.markAsRead(notification.notificationId, userId)
 
                             when (enumType) {
+                                // ✅ FIX: Property approved/rejected — admin note dialog dikhao
+                                NotificationType.PROPERTY_APPROVED -> {
+                                    dialogTitle      = "Property Approved ✓"
+                                    dialogNote       = notification.adminNote.ifEmpty { notification.body }
+                                    dialogIsApproved = true
+                                    showNoteDialog   = true
+                                }
+                                NotificationType.PROPERTY_REJECTED -> {
+                                    dialogTitle      = "Property Rejected"
+                                    dialogNote       = notification.adminNote.ifEmpty { notification.body }
+                                    dialogIsApproved = false
+                                    showNoteDialog   = true
+                                }
                                 NotificationType.BOOKING_CONFIRMED,
                                 NotificationType.BOOKING_CANCELLED,
                                 NotificationType.BOOKING_REMINDER,
                                 NotificationType.BOOKING_COMPLETED,
                                 NotificationType.BOOKING_REQUESTED -> {
                                     if (notification.referenceId.isNotEmpty()) {
-                                        navController.navigate(Screen.BookingDetails.createRoute(notification.referenceId))
+                                        navController.navigate(
+                                            Screen.BookingDetails.createRoute(notification.referenceId)
+                                        )
                                     }
                                 }
                                 NotificationType.NEW_MESSAGE -> {
                                     if (notification.referenceId.isNotEmpty()) {
-                                        navController.navigate(Screen.Chat.createRoute(notification.referenceId))
+                                        navController.navigate(
+                                            Screen.Chat.createRoute(notification.referenceId)
+                                        )
                                     }
                                 }
                                 else -> {
-                                    navController.navigate("notification_detail/${notification.notificationId}")
+                                    navController.navigate(
+                                        "notification_detail/${notification.notificationId}"
+                                    )
                                 }
                             }
                         }
@@ -171,16 +253,14 @@ fun NotificationCard(item: Notification, enumType: NotificationType, onClick: ()
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                // ✅ Changed to call screenNotificationColor
                 .background(screenNotificationColor(enumType).copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                // ✅ Changed to call screenNotificationIcon
-                imageVector = screenNotificationIcon(enumType),
+                imageVector        = screenNotificationIcon(enumType),
                 contentDescription = null,
-                tint = screenNotificationColor(enumType),
-                modifier = Modifier.size(20.dp)
+                tint               = screenNotificationColor(enumType),
+                modifier           = Modifier.size(20.dp)
             )
         }
 
@@ -189,25 +269,39 @@ fun NotificationCard(item: Notification, enumType: NotificationType, onClick: ()
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = enumType.name.replace("_", " "),
+                    text       = enumType.name.replace("_", " "),
                     fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 14.sp,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f)
+                    fontSize   = 14.sp,
+                    color      = TextPrimary,
+                    modifier   = Modifier.weight(1f)
                 )
                 Text(
-                    text = item.createdAt?.toString()?.take(10) ?: "-",
+                    text     = item.createdAt?.toString()?.take(10) ?: "-",
                     fontSize = 11.sp,
-                    color = TextSecondary
+                    color    = TextSecondary
                 )
             }
             Spacer(Modifier.height(2.dp))
             Text(
-                text = item.body,
+                text     = item.body,
                 fontSize = 13.sp,
-                color = if (!item.isRead) TextPrimary else TextSecondary,
+                color    = if (!item.isRead) TextPrimary else TextSecondary,
                 maxLines = 2
             )
+            // ✅ Admin note preview notification card mein dikhao
+            if (item.adminNote.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text     = "Note: ${item.adminNote}",
+                    fontSize = 12.sp,
+                    color    = when (enumType) {
+                        NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)
+                        NotificationType.PROPERTY_REJECTED -> Color.Red
+                        else -> TextSecondary
+                    },
+                    maxLines = 1
+                )
+            }
         }
 
         if (!item.isRead) {
@@ -220,10 +314,12 @@ fun NotificationCard(item: Notification, enumType: NotificationType, onClick: ()
             )
         }
     }
-    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = BorderGray.copy(alpha = 0.5f))
+    HorizontalDivider(
+        modifier  = Modifier.padding(horizontal = 16.dp),
+        color     = BorderGray.copy(alpha = 0.5f)
+    )
 }
 
-// ✅ Renamed these functions to prevent conflicts with DetailScreen
 fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED,
     NotificationType.BOOKING_CONFIRMED,
@@ -234,6 +330,8 @@ fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.PAYMENT_FAILED,
     NotificationType.REFUND_ISSUED     -> Icons.Default.Payment
     NotificationType.NEW_MESSAGE       -> Icons.AutoMirrored.Filled.Message
+    NotificationType.PROPERTY_APPROVED -> Icons.Default.CheckCircle  // ✅
+    NotificationType.PROPERTY_REJECTED -> Icons.Default.Cancel        // ✅
     else                               -> Icons.Default.Notifications
 }
 
@@ -242,5 +340,7 @@ fun screenNotificationColor(type: NotificationType): Color = when (type) {
     NotificationType.BOOKING_CONFIRMED -> PrimaryBlue
     NotificationType.BOOKING_CANCELLED -> Color.Red
     NotificationType.PAYMENT_RECEIVED  -> Color(0xFF4CAF50)
+    NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)  // ✅
+    NotificationType.PROPERTY_REJECTED -> Color.Red           // ✅
     else                               -> Color.Gray
 }

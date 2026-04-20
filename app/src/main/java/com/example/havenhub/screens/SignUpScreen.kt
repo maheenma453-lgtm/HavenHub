@@ -38,14 +38,11 @@ import com.example.havenhub.viewmodel.AuthViewModel
 @Composable
 fun SignUpScreen(
     navController: NavController,
-    selectedRole : String = "",           // ✅ Naya parameter
+    selectedRole : String        = "",
     viewModel    : AuthViewModel = hiltViewModel()
 ) {
-    // ✅ Role ek baar set karo jab screen open ho
     LaunchedEffect(selectedRole) {
-        if (selectedRole.isNotEmpty()) {
-            viewModel.onRoleSelected(selectedRole)
-        }
+        if (selectedRole.isNotEmpty()) viewModel.onRoleSelected(selectedRole)
     }
 
     val uiState         by viewModel.uiState.collectAsState()
@@ -59,19 +56,21 @@ fun SignUpScreen(
 
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmVisible  by remember { mutableStateOf(false) }
+    var visible         by remember { mutableStateOf(false) }
 
-    var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
+
     val alpha by animateFloatAsState(
         targetValue   = if (visible) 1f else 0f,
-        animationSpec = tween(600, easing = EaseOut), label = "a"
+        animationSpec = tween(600, easing = EaseOut),
+        label = "a"
     )
 
     LaunchedEffect(uiState.isLoggedIn) {
         if (uiState.isLoggedIn) {
-            val dest = when (uiState.userRole) {
-                "admin", "ADMIN" -> Screen.AdminDashboard.route
-                else             -> Screen.Home.route
+            val dest = when (uiState.userRole.lowercase()) {
+                "admin" -> Screen.AdminDashboard.route
+                else    -> Screen.Home.route
             }
             navController.navigate(dest) { popUpTo(0) { inclusive = true } }
         }
@@ -84,6 +83,7 @@ fun SignUpScreen(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Back button
         Row(
             modifier          = Modifier
                 .fillMaxWidth()
@@ -99,28 +99,36 @@ fun SignUpScreen(
                 )
             }
         }
-
+        // ── Logo + Brand ──────────────────────────────────────────────────────
         Image(
             painter            = painterResource(id = R.drawable.havenhub),
             contentDescription = "HavenHub",
             contentScale       = ContentScale.Fit,
             modifier           = Modifier
-                .fillMaxWidth(0.65f)
+                .fillMaxWidth(0.55f)
                 .wrapContentHeight()
-                .padding(vertical = 0.dp)
                 .alpha(alpha)
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            "HavenHub",
-            fontSize      = 22.sp,
-            fontWeight    = FontWeight.ExtraBold,
-            color         = PrimaryBlue,
-            letterSpacing = (-0.5).sp,
-            modifier      = Modifier.alpha(alpha)
-        )
+        Row(modifier = Modifier.alpha(alpha)) {
+            Text(
+                "Haven",
+                fontSize      = 22.sp,
+                fontWeight    = FontWeight.ExtraBold,
+                color         = PrimaryBlue,
+                letterSpacing = (-0.5).sp
+            )
+            Text(
+                "Hub",
+                fontSize      = 22.sp,
+                fontWeight    = FontWeight.ExtraBold,
+                color         = AccentGold,
+                letterSpacing = (-0.5).sp
+            )
+        }
+
         Text(
             "Create your account",
             fontSize = 12.sp,
@@ -130,7 +138,7 @@ fun SignUpScreen(
                 .alpha(alpha)
         )
 
-        // ✅ Role badge
+        // Role badge
         if (uiState.selectedRole.isNotEmpty()) {
             Box(
                 modifier = Modifier
@@ -148,6 +156,7 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(10.dp))
         }
 
+        // ── Form Card ─────────────────────────────────────────────────────────
         Card(
             modifier  = Modifier
                 .fillMaxWidth()
@@ -176,7 +185,9 @@ fun SignUpScreen(
                     modifier = Modifier
                         .width(36.dp).height(3.dp)
                         .clip(CircleShape)
-                        .background(Brush.horizontalGradient(listOf(AccentGold, AccentGoldLight)))
+                        .background(
+                            Brush.horizontalGradient(listOf(AccentGold, AccentGoldLight))
+                        )
                 )
                 Spacer(modifier = Modifier.height(18.dp))
 
@@ -187,6 +198,7 @@ fun SignUpScreen(
                     errorBorderColor     = ErrorRed
                 )
 
+                // Full Name
                 OutlinedTextField(
                     value          = fullName,
                     onValueChange  = { viewModel.onFullNameChange(it) },
@@ -201,6 +213,7 @@ fun SignUpScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Email
                 OutlinedTextField(
                     value           = email,
                     onValueChange   = { viewModel.onEmailChange(it) },
@@ -216,6 +229,7 @@ fun SignUpScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Password
                 OutlinedTextField(
                     value                = password,
                     onValueChange        = { viewModel.onPasswordChange(it) },
@@ -242,6 +256,7 @@ fun SignUpScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Confirm Password
                 OutlinedTextField(
                     value                = confirmPassword,
                     onValueChange        = { viewModel.onConfirmPasswordChange(it) },
@@ -270,6 +285,7 @@ fun SignUpScreen(
                     colors               = fieldColors
                 )
 
+                // Error box
                 uiState.errorMessage?.let {
                     Spacer(modifier = Modifier.height(10.dp))
                     Box(
@@ -283,12 +299,13 @@ fun SignUpScreen(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
+                // Create Account button
                 Button(
-                    onClick  = { viewModel.signUp() },
-                    enabled  = !uiState.isLoading,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape    = RoundedCornerShape(14.dp),
-                    colors   = ButtonDefaults.buttonColors(
+                    onClick   = { viewModel.signUp() },
+                    enabled   = !uiState.isLoading,
+                    modifier  = Modifier.fillMaxWidth().height(52.dp),
+                    shape     = RoundedCornerShape(14.dp),
+                    colors    = ButtonDefaults.buttonColors(
                         containerColor         = PrimaryBlue,
                         disabledContainerColor = BorderGray
                     ),
@@ -314,6 +331,7 @@ fun SignUpScreen(
 
         Spacer(modifier = Modifier.height(18.dp))
 
+        // Sign In link
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier          = Modifier.alpha(alpha)
