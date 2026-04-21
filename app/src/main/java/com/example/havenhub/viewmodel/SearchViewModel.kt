@@ -1,5 +1,6 @@
 package com.example.havenhub.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Property
@@ -7,6 +8,7 @@ import com.example.havenhub.data.PropertyType
 import com.example.havenhub.repository.PropertyRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -21,20 +23,37 @@ data class SearchUiState(
     val maxPrice: Double? = null,
     val selectedCity: String? = null,
     val propertyType: PropertyType? = null,
-    val minBedrooms: Int? = null
+    val minBedrooms: Int? = null,
+    val recentSearches: List<String> = emptyList()
 )
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
-    private val propertyRepository: PropertyRepository
+    private val propertyRepository: PropertyRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
+    private val sharedPrefs = context.getSharedPreferences("haven_hub_prefs", Context.MODE_PRIVATE)
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
+        loadSavedHistory()
         performSearch()
         setupAutoSearch()
+    }
+
+    private fun loadSavedHistory() {
+        val savedString = sharedPrefs.getString("recent_searches", "") ?: ""
+        if (savedString.isNotEmpty()) {
+            val list = savedString.split("|").filter { it.isNotBlank() }
+            _uiState.update { it.copy(recentSearches = list) }
+        }
+    }
+
+    private fun saveHistoryToStorage(history: List<String>) {
+        val stringToSave = history.joinToString("|")
+        sharedPrefs.edit().putString("recent_searches", stringToSave).apply()
     }
 
     @OptIn(FlowPreview::class)
@@ -52,6 +71,37 @@ class SearchViewModel @Inject constructor(
         _uiState.update { it.copy(searchQuery = query) }
     }
 
+    fun addToHistory(query: String) {
+        if (query.isBlank()) return
+        _uiState.update { currentState ->
+            val currentList = currentState.recentSearches.toMutableList()
+            if (currentList.contains(query)) currentList.remove(query)
+            currentList.add(0, query)
+            val updatedList = currentList.take(5)
+
+            saveHistoryToStorage(updatedList)
+            currentState.copy(recentSearches = updatedList)
+        }
+    }
+
+    // ✅ Naya Function: Sirf ek item delete karne ke liye
+    fun removeFromHistory(query: String) {
+        _uiState.update { currentState ->
+            val currentList = currentState.recentSearches.toMutableList()
+            currentList.remove(query) // List se nikala
+
+            val updatedList = currentList.toList()
+            saveHistoryToStorage(updatedList) // Storage mein update kiya
+
+            currentState.copy(recentSearches = updatedList)
+        }
+    }
+
+    fun clearHistory() {
+        sharedPrefs.edit().remove("recent_searches").apply()
+        _uiState.update { it.copy(recentSearches = emptyList()) }
+    }
+
     fun performSearch() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -60,7 +110,7 @@ class SearchViewModel @Inject constructor(
             when (result) {
                 is Resource.Success -> {
                     val currentState = _uiState.value
-                    var filteredList = result.data
+                    var filteredList = result.data ?: emptyList()
 
                     if (currentState.searchQuery.isNotBlank()) {
                         val q = currentState.searchQuery.lowercase().trim()
@@ -71,25 +121,11 @@ class SearchViewModel @Inject constructor(
                         }
                     }
 
-                    currentState.minPrice?.let { min ->
-                        filteredList = filteredList.filter { it.pricePerNight >= min }
-                    }
-                    currentState.maxPrice?.let { max ->
-                        filteredList = filteredList.filter { it.pricePerNight <= max }
-                    }
-
-                    currentState.selectedCity?.let { city ->
-                        filteredList = filteredList.filter { it.city.equals(city, ignoreCase = true) }
-                    }
-
-                    // ✅ FIX: Comparison logic fixed to avoid Type Mismatch
-                    currentState.propertyType?.let { type ->
-                        filteredList = filteredList.filter { it.propertyType == type.toString() }
-                    }
-
-                    currentState.minBedrooms?.let { min ->
-                        filteredList = filteredList.filter { it.bedrooms >= min }
-                    }
+                    currentState.minPrice?.let { min -> filteredList = filteredList.filter { it.pricePerNight >= min } }
+                    currentState.maxPrice?.let { max -> filteredList = filteredList.filter { it.pricePerNight <= max } }
+                    currentState.selectedCity?.let { city -> filteredList = filteredList.filter { it.city.equals(city, ignoreCase = true) } }
+                    currentState.propertyType?.let { type -> filteredList = filteredList.filter { it.propertyType == type.toString() } }
+                    currentState.minBedrooms?.let { min -> filteredList = filteredList.filter { it.bedrooms >= min } }
 
                     _uiState.update { it.copy(isLoading = false, searchResults = filteredList) }
                 }
@@ -104,16 +140,12 @@ class SearchViewModel @Inject constructor(
     }
 
     fun applyFilters(minPrice: Double?, maxPrice: Double?, city: String?, type: PropertyType?, bedrooms: Int?) {
-        _uiState.update { it.copy(
-            minPrice = minPrice, maxPrice = maxPrice, selectedCity = city, propertyType = type, minBedrooms = bedrooms
-        ) }
+        _uiState.update { it.copy(minPrice = minPrice, maxPrice = maxPrice, selectedCity = city, propertyType = type, minBedrooms = bedrooms) }
         performSearch()
     }
 
     fun clearFilters() {
-        _uiState.update { it.copy(
-            minPrice = null, maxPrice = null, selectedCity = null, propertyType = null, minBedrooms = null
-        ) }
+        _uiState.update { it.copy(minPrice = null, maxPrice = null, selectedCity = null, propertyType = null, minBedrooms = null) }
         performSearch()
     }
 }

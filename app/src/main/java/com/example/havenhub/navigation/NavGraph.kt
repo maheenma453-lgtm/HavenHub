@@ -14,7 +14,6 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.havenhub.screens.*
-import com.example.havenhub.screens.HomeScreen
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
@@ -64,7 +63,7 @@ fun HavenHubNavGraph(
                 else         -> BottomNavBar(
                     navController      = navController,
                     unreadMessageCount = unreadMessageCount,
-                    userRole           = uiState.userRole   // ✅ role pass karo
+                    userRole           = uiState.userRole
                 )
             }
         }
@@ -106,19 +105,14 @@ fun HavenHubNavGraph(
 // ── Property ──────────────────────────────────────────────────────
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
 
-            // ✅ AddProperty — sirf landlord
             composable(Screen.AddProperty.route) {
                 val role = uiState.userRole
                 when {
                     uiState.isLoading -> {
-                        Box(Modifier.fillMaxSize(), Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
+                        Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                     }
                     role == "landlord" -> AddPropertyScreen(navController)
-                    role.isNotEmpty()  -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
+                    role.isNotEmpty()  -> { LaunchedEffect(Unit) { navController.popBackStack() } }
                 }
             }
 
@@ -156,7 +150,6 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ✅ Booking — sirf tenant
             composable(
                 route     = Screen.Booking.route,
                 arguments = listOf(navArgument(Screen.Booking.ARG_PROPERTY_ID) {
@@ -166,17 +159,13 @@ fun HavenHubNavGraph(
                 val role = uiState.userRole
                 when {
                     uiState.isLoading -> {
-                        Box(Modifier.fillMaxSize(), Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
+                        Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                     }
                     role == "tenant"  -> BookingScreen(
                         navController = navController,
                         propertyId    = back.arguments?.getString(Screen.Booking.ARG_PROPERTY_ID) ?: ""
                     )
-                    role.isNotEmpty() -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
+                    role.isNotEmpty() -> { LaunchedEffect(Unit) { navController.popBackStack() } }
                 }
             }
 
@@ -314,6 +303,10 @@ fun HavenHubNavGraph(
 
 // ── Vacation ──────────────────────────────────────────────────────
             composable(Screen.VacationRentals.route) { VacationRentalsScreen(navController) }
+
+            // ✅ Vacation Map Screen Register
+            composable(Screen.VacationMap.route)      { VacationMapScreen(navController) }
+
             composable(Screen.PreBooking.route)      { PreBookingScreen(navController) }
 
             composable(
