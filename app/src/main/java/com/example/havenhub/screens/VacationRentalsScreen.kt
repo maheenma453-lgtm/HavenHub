@@ -151,7 +151,6 @@ fun VacationRentalsScreen(
                 }
             }
 
-            // --- CLICKABLE VIEW MAP SECTION ---
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
@@ -163,18 +162,7 @@ fun VacationRentalsScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("Nearby Stays", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = VNavy)
                     }
-
-                    // View Map ab clickable hai visual feedback ke sath
-                    Text(
-                        text = "View Map",
-                        color = VGold,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { /* Yahan map ki navigation dalain */ }
-                            .padding(4.dp)
-                    )
+                    Text("View Map", color = VGold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -225,7 +213,7 @@ fun DynamicPropertyCard(
                 ) {
                     Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Star, null, tint = VGold, modifier = Modifier.size(14.dp))
-                        // Rating formatting: 4.4, 4.9 etc.
+                        // FIX: Ab rating sirf 4.4 ya 4.9 ki tarah show hogi
                         Text(" ${"%.1f".format(rating)}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }

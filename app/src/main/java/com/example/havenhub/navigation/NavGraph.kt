@@ -304,9 +304,6 @@ fun HavenHubNavGraph(
 // ── Vacation ──────────────────────────────────────────────────────
             composable(Screen.VacationRentals.route) { VacationRentalsScreen(navController) }
 
-            // ✅ Vacation Map Screen Register
-            composable(Screen.VacationMap.route)      { VacationMapScreen(navController) }
-
             composable(Screen.PreBooking.route)      { PreBookingScreen(navController) }
 
             composable(
