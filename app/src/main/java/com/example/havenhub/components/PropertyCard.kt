@@ -1,4 +1,5 @@
 package com.example.havenhub.components
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,26 +31,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.havenhub.R
 
-/**
- * Property listing card used in Home, Search, and Property list screens.
- *
- * @param imageUrl      Remote URL for the property thumbnail
- * @param title         Property name/title
- * @param location      Human-readable address or area
- * @param pricePerNight Formatted price string (e.g. "PKR 5,000")
- * @param rating        Average rating (0.0 – 5.0)
- * @param reviewCount   Total number of reviews
- * @param isFavorited   Initial favorite state
- * @param isVerified    Shows a "Verified" badge when true
- * @param propertyType  e.g. "Apartment", "Villa", "Studio"
- * @param onClick       Card tap callback
- * @param onFavoriteToggle Favorite button callback, passes new state
- */
 @Composable
 fun PropertyCard(
     imageUrl: String,
@@ -66,6 +55,21 @@ fun PropertyCard(
     modifier: Modifier = Modifier
 ) {
     var favorited by remember { mutableStateOf(isFavorited) }
+    val context = LocalContext.current
+
+    // Smart image resolver: URL hai toh URL, warna drawable naam se ID nikalo
+    val imageModel: Any = when {
+        imageUrl.startsWith("http://") || imageUrl.startsWith("https://") -> {
+            imageUrl
+        }
+        imageUrl.isNotEmpty() -> {
+            val resId = context.resources.getIdentifier(
+                imageUrl, "drawable", context.packageName
+            )
+            if (resId != 0) resId else R.drawable.havenhub
+        }
+        else -> R.drawable.havenhub
+    }
 
     Card(
         onClick = onClick,
@@ -74,10 +78,12 @@ fun PropertyCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column {
-            // ── Thumbnail ──────────────────────────────────────────────────
             Box {
                 AsyncImage(
-                    model = imageUrl,
+                    model = ImageRequest.Builder(context)
+                        .data(imageModel)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -140,12 +146,11 @@ fun PropertyCard(
                 }
             }
 
-            // ── Info ───────────────────────────────────────────────────────
+            // Info section
             Column(
                 modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Title
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
@@ -154,7 +159,6 @@ fun PropertyCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // Location
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.LocationOn,
@@ -174,7 +178,6 @@ fun PropertyCard(
 
                 Spacer(Modifier.height(2.dp))
 
-                // Price & Rating row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -211,5 +214,3 @@ fun PropertyCard(
         }
     }
 }
-
-

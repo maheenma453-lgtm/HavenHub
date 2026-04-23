@@ -8,21 +8,20 @@ data class Notification(
     @DocumentId
     val notificationId: String = "",
     val recipientId: String = "",
-    val targetRole: String = "", // ✅ Admin ke liye ye zaruri hai
+    val targetRole: String = "",
     val title: String = "",
     val body: String = "",
-    val type: String = NotificationType.GENERAL.name, // ✅ String rakhein parsing ke liye
+    val type: String = NotificationType.GENERAL.name,
     val referenceId: String = "",
     val isRead: Boolean = false,
     val isActive: Boolean = true,
+    val adminNote: String = "",          // ✅ NEW: Admin ka note landlord ko dikhane ke liye
     @ServerTimestamp
     val createdAt: Timestamp? = null,
     val readAt: Timestamp? = null
 ) {
-    // No-arg constructor for Firestore
     constructor() : this(notificationId = "")
 
-    // Enum conversion helper
     val notificationType: NotificationType
         get() = try {
             NotificationType.valueOf(type)

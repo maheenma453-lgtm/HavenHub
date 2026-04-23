@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Message
@@ -39,10 +40,10 @@ fun NotificationsScreen(
     val userId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     // ✅ Admin note dialog state
-    var showNoteDialog    by remember { mutableStateOf(false) }
-    var dialogTitle       by remember { mutableStateOf("") }
-    var dialogNote        by remember { mutableStateOf("") }
-    var dialogIsApproved  by remember { mutableStateOf(true) }
+    var showNoteDialog   by remember { mutableStateOf(false) }
+    var dialogTitle      by remember { mutableStateOf("") }
+    var dialogNote       by remember { mutableStateOf("") }
+    var dialogIsApproved by remember { mutableStateOf(true) }
 
     // ✅ Admin note dialog
     if (showNoteDialog) {
@@ -53,7 +54,7 @@ fun NotificationsScreen(
                     Icon(
                         if (dialogIsApproved) Icons.Default.CheckCircle else Icons.Default.Cancel,
                         null,
-                        tint = if (dialogIsApproved) Color(0xFF4CAF50) else Color.Red,
+                        tint     = if (dialogIsApproved) Color(0xFF4CAF50) else Color.Red,
                         modifier = Modifier.size(22.dp)
                     )
                     Spacer(Modifier.width(8.dp))
@@ -61,10 +62,10 @@ fun NotificationsScreen(
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         if (dialogIsApproved)
-                            "Aapki property admin ne approve kar di hai!"
+                            "Mubarak! Aapki property admin ne approve kar di hai! 🎉"
                         else
                             "Aapki property admin ne reject kar di hai.",
                         fontSize = 14.sp
@@ -77,8 +78,9 @@ fun NotificationsScreen(
                             fontSize   = 13.sp,
                             color      = TextSecondary
                         )
-                        // ✅ Admin note prominently dikhao
+                        // ✅ Admin note card mein clearly dikhao
                         Card(
+                            shape  = RoundedCornerShape(8.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (dialogIsApproved)
                                     Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
@@ -96,7 +98,12 @@ fun NotificationsScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = { showNoteDialog = false }) { Text("OK") }
+                Button(
+                    onClick = { showNoteDialog = false },
+                    colors  = ButtonDefaults.buttonColors(
+                        containerColor = if (dialogIsApproved) Color(0xFF4CAF50) else Color.Red
+                    )
+                ) { Text("OK") }
             }
         )
     }
@@ -192,13 +199,14 @@ fun NotificationsScreen(
                             viewModel.markAsRead(notification.notificationId, userId)
 
                             when (enumType) {
-                                // ✅ FIX: Property approved/rejected — admin note dialog dikhao
+                                // ✅ FIX: Property approved — dialog mein admin note dikhao
                                 NotificationType.PROPERTY_APPROVED -> {
                                     dialogTitle      = "Property Approved ✓"
                                     dialogNote       = notification.adminNote.ifEmpty { notification.body }
                                     dialogIsApproved = true
                                     showNoteDialog   = true
                                 }
+                                // ✅ FIX: Property rejected — dialog mein reject reason dikhao
                                 NotificationType.PROPERTY_REJECTED -> {
                                     dialogTitle      = "Property Rejected"
                                     dialogNote       = notification.adminNote.ifEmpty { notification.body }
@@ -288,19 +296,32 @@ fun NotificationCard(item: Notification, enumType: NotificationType, onClick: ()
                 color    = if (!item.isRead) TextPrimary else TextSecondary,
                 maxLines = 2
             )
-            // ✅ Admin note preview notification card mein dikhao
+            // ✅ Admin note preview card mein bhi dikhao
             if (item.adminNote.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text     = "Note: ${item.adminNote}",
-                    fontSize = 12.sp,
-                    color    = when (enumType) {
-                        NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)
-                        NotificationType.PROPERTY_REJECTED -> Color.Red
-                        else -> TextSecondary
-                    },
-                    maxLines = 1
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Info,
+                        null,
+                        modifier = Modifier.size(12.dp),
+                        tint     = when (enumType) {
+                            NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)
+                            NotificationType.PROPERTY_REJECTED -> Color.Red
+                            else                               -> TextSecondary
+                        }
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        text     = item.adminNote,
+                        fontSize = 12.sp,
+                        color    = when (enumType) {
+                            NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)
+                            NotificationType.PROPERTY_REJECTED -> Color.Red
+                            else                               -> TextSecondary
+                        },
+                        maxLines = 1
+                    )
+                }
             }
         }
 
@@ -340,7 +361,7 @@ fun screenNotificationColor(type: NotificationType): Color = when (type) {
     NotificationType.BOOKING_CONFIRMED -> PrimaryBlue
     NotificationType.BOOKING_CANCELLED -> Color.Red
     NotificationType.PAYMENT_RECEIVED  -> Color(0xFF4CAF50)
-    NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)  // ✅
-    NotificationType.PROPERTY_REJECTED -> Color.Red           // ✅
+    NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)  // ✅ Green
+    NotificationType.PROPERTY_REJECTED -> Color.Red           // ✅ Red
     else                               -> Color.Gray
 }

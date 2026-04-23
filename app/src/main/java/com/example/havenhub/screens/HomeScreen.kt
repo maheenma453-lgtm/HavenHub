@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
@@ -38,7 +39,51 @@ import com.example.havenhub.viewmodel.HomeUiState
 import kotlinx.coroutines.launch
 
 // ═══════════════════════════════════════════════════════════════════
-// MAIN ENTRY POINT — Role check
+// HELPER: Property ke liye safe image resolve karo
+// ═══════════════════════════════════════════════════════════════════
+private fun resolveImage(property: Property): Int {
+    if (property.drawableImageName.isNotEmpty()) {
+        return getPropertyImage(property.drawableImageName)
+    }
+    if (property.resolvedDrawableName.isNotEmpty()) {
+        return getPropertyImage(property.resolvedDrawableName)
+    }
+    return getPropertyImage(property.propertyId)
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// imgbb URL hai toh AsyncImage, warna local drawable
+// ═══════════════════════════════════════════════════════════════════
+@Composable
+private fun PropertyImage(
+    property    : Property,
+    modifier    : Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop
+) {
+    //val remoteUrl = property.imageUrls.firstOrNull()
+    //if (!remoteUrl.isNullOrEmpty()) {
+    val remoteUrl = property.imageUrls.firstOrNull { it.isNotBlank() }
+    if (!remoteUrl.isNullOrEmpty()) {
+
+        AsyncImage(
+            model              = remoteUrl,
+            contentDescription = property.title,
+            modifier           = modifier,
+            contentScale       = contentScale
+        )
+    } else {
+        Image(
+            painter            = painterResource(id = resolveImage(property)),
+            contentDescription = property.title,
+            modifier           = modifier,
+            contentScale       = contentScale
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MAIN ENTRY POINT — Role check + data load
+// ✅ FIX: userRole empty hone par return karo — race condition fix
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 fun HomeScreen(
@@ -51,9 +96,22 @@ fun HomeScreen(
     val userRole  = authState.userRole
     val userId    = authState.currentUser?.uid ?: ""
 
+    // ✅ FIX: userRole empty hone tak kuch mat karo
+    // Jab role Firebase se load hogi tab hi data fetch karega
     LaunchedEffect(userId, userRole) {
-        if (userRole == "landlord" && userId.isNotEmpty()) {
-            viewModel.loadLandlordStats(userId)
+        if (userRole.isEmpty()) return@LaunchedEffect
+
+        when {
+            userRole == "landlord" && userId.isNotEmpty() -> {
+                viewModel.loadLandlordStats(userId)
+            }
+            userRole != "landlord" && userId.isNotEmpty() -> {
+                viewModel.loadHomeData()
+            }
+            userRole != "landlord" -> {
+                // Guest / userId abhi nahi mila — phir bhi properties load karo
+                viewModel.loadHomeData()
+            }
         }
     }
 
@@ -64,7 +122,7 @@ fun HomeScreen(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// LANDLORD HOME SCREEN — Clean, no duplications
+// LANDLORD HOME SCREEN
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun LandlordHomeScreen(
@@ -189,9 +247,7 @@ private fun LandlordHomeScreen(
             }
         }
 
-        // ── Quick Actions — 4 cards in 2x2 grid ─────────────────
-        // Add Property | Revenue
-        // Active Bookings | Pending Requests
+        // ── Quick Actions — 2x2 grid ──────────────────────────────
         item {
             Spacer(Modifier.height(20.dp))
             Text(
@@ -204,17 +260,15 @@ private fun LandlordHomeScreen(
             Spacer(Modifier.height(12.dp))
 
             Column(
-                modifier              = Modifier
+                modifier            = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-                verticalArrangement   = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Row 1: Add Property + Revenue
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Card 1 — Add Property
                     Card(
                         modifier  = Modifier
                             .weight(1f)
@@ -239,20 +293,14 @@ private fun LandlordHomeScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontSize   = 13.sp
                             )
-                            Text(
-                                "Property",
-                                color    = Color.White,
-                                fontSize = 11.sp
-                            )
+                            Text("Property", color = Color.White, fontSize = 11.sp)
                         }
                     }
 
-                    // Card 2 — Revenue
                     Card(
                         modifier  = Modifier
                             .weight(1f)
-                            .height(100.dp)
-                            .clickable { /* Revenue screen — future */ },
+                            .height(100.dp),
                         shape     = RoundedCornerShape(16.dp),
                         colors    = CardDefaults.cardColors(containerColor = Color(0xFFD4AF37)),
                         elevation = CardDefaults.cardElevation(4.dp)
@@ -283,12 +331,10 @@ private fun LandlordHomeScreen(
                     }
                 }
 
-                // Row 2: Active Bookings + Pending Requests
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Card 3 — Active Bookings
                     Card(
                         modifier  = Modifier
                             .weight(1f)
@@ -313,15 +359,10 @@ private fun LandlordHomeScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontSize   = 18.sp
                             )
-                            Text(
-                                "Active Bookings",
-                                color    = Color(0xFF8899AA),
-                                fontSize = 10.sp
-                            )
+                            Text("Active Bookings", color = Color(0xFF8899AA), fontSize = 10.sp)
                         }
                     }
 
-                    // Card 4 — Pending Requests
                     Card(
                         modifier  = Modifier
                             .weight(1f)
@@ -346,18 +387,14 @@ private fun LandlordHomeScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontSize   = 18.sp
                             )
-                            Text(
-                                "Pending Req.",
-                                color    = Color(0xFF8899AA),
-                                fontSize = 10.sp
-                            )
+                            Text("Pending Req.", color = Color(0xFF8899AA), fontSize = 10.sp)
                         }
                     }
                 }
             }
         }
 
-        // ── My Properties Preview ────────────────────────────────
+        // ── My Properties Preview ─────────────────────────────────
         item {
             Spacer(Modifier.height(24.dp))
             Row(
@@ -393,7 +430,6 @@ private fun LandlordHomeScreen(
             Spacer(Modifier.height(12.dp))
         }
 
-        // Properties list or empty state
         if (uiState.isLoading) {
             item { LoadingShimmer() }
         } else if (uiState.featuredProperties.isEmpty()) {
@@ -472,23 +508,28 @@ private fun TenantHomeScreen(
     viewModel    : HomeViewModel,
     uiState      : HomeUiState
 ) {
-    val categories          = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
-    var selectedCategory    by remember { mutableStateOf("All") }
+    val categories       = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
+    var selectedCategory by remember { mutableStateOf("All") }
     val featuredScrollState = rememberScrollState()
     val scope               = rememberCoroutineScope()
 
-    val allProperties = (uiState.featuredProperties + uiState.nearbyProperties)
-        .distinctBy { it.propertyId }
-
-    val filteredFeatured = if (selectedCategory == "All") uiState.featuredProperties
-    else uiState.featuredProperties.filter {
-        it.propertyType.equals(selectedCategory.uppercase(), ignoreCase = true)
+    val allProperties = uiState.allProperties.ifEmpty {
+        (uiState.featuredProperties + uiState.nearbyProperties).distinctBy { it.propertyId }
     }
 
-    val filteredAll = if (selectedCategory == "All") allProperties
-    else allProperties.filter {
-        it.propertyType.equals(selectedCategory.uppercase(), ignoreCase = true)
-    }
+    val filteredFeatured = if (selectedCategory == "All")
+        uiState.featuredProperties
+    else
+        uiState.featuredProperties.filter {
+            it.propertyType.equals(selectedCategory, ignoreCase = true)
+        }
+
+    val filteredAll = if (selectedCategory == "All")
+        allProperties
+    else
+        allProperties.filter {
+            it.propertyType.equals(selectedCategory, ignoreCase = true)
+        }
 
     LazyColumn(
         modifier       = Modifier
@@ -592,11 +633,7 @@ private fun TenantHomeScreen(
                         fontSize   = 18.sp,
                         color      = Color(0xFF0D1B3E)
                     )
-                    Text(
-                        "Handpicked for you",
-                        fontSize = 12.sp,
-                        color    = Color(0xFF8899AA)
-                    )
+                    Text("Handpicked for you", fontSize = 12.sp, color = Color(0xFF8899AA))
                 }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -649,7 +686,7 @@ private fun TenantHomeScreen(
             when {
                 uiState.isLoading -> LoadingShimmer()
 
-                uiState.errorMessage != null -> {
+                uiState.errorMessage != null && allProperties.isEmpty() -> {
                     Text(
                         text     = "Error: ${uiState.errorMessage}",
                         modifier = Modifier.padding(20.dp),
@@ -690,7 +727,11 @@ private fun TenantHomeScreen(
                         modifier         = Modifier.fillMaxWidth().padding(20.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No featured properties", color = Color(0xFF8899AA), fontSize = 14.sp)
+                        Text(
+                            "No featured properties",
+                            color    = Color(0xFF8899AA),
+                            fontSize = 14.sp
+                        )
                     }
                 }
 
@@ -836,7 +877,8 @@ private fun TenantHomeScreen(
                         Text("🔍", fontSize = 40.sp)
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "No $selectedCategory properties found",
+                            if (selectedCategory == "All") "No properties found"
+                            else "No $selectedCategory properties found",
                             color    = Color(0xFF8899AA),
                             fontSize = 14.sp
                         )
@@ -1033,6 +1075,9 @@ fun HomeHeaderSection(
     }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// FEATURED PROPERTY CARD
+// ─────────────────────────────────────────────────────────────────
 @Composable
 fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
@@ -1050,11 +1095,10 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
                     .fillMaxWidth()
                     .height(165.dp)
             ) {
-                Image(
-                    painter            = painterResource(id = getPropertyImage(property.propertyId)),
-                    contentDescription = null,
-                    modifier           = Modifier.fillMaxSize(),
-                    contentScale       = ContentScale.Crop
+                PropertyImage(
+                    property     = property,
+                    modifier     = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
                 Box(
                     modifier = Modifier
@@ -1167,6 +1211,9 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// NEARBY / ALL PROPERTY CARD
+// ─────────────────────────────────────────────────────────────────
 @Composable
 fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
@@ -1187,11 +1234,10 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
                     .size(100.dp)
                     .clip(RoundedCornerShape(12.dp))
             ) {
-                Image(
-                    painter            = painterResource(id = getPropertyImage(property.propertyId)),
-                    contentDescription = null,
-                    modifier           = Modifier.fillMaxSize(),
-                    contentScale       = ContentScale.Crop
+                PropertyImage(
+                    property     = property,
+                    modifier     = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
                 if (property.isAvailable) {
                     Box(
@@ -1280,6 +1326,9 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// LOADING SHIMMER
+// ─────────────────────────────────────────────────────────────────
 @Composable
 fun LoadingShimmer() {
     Box(
@@ -1291,3 +1340,18 @@ fun LoadingShimmer() {
         CircularProgressIndicator(color = Color(0xFFD4AF37))
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

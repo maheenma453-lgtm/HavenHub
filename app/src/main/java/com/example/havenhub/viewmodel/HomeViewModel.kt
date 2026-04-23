@@ -19,15 +19,14 @@ import javax.inject.Inject
 data class HomeUiState(
     val featuredProperties  : List<Property> = emptyList(),
     val nearbyProperties    : List<Property> = emptyList(),
-    val isLoading           : Boolean         = false,
-    val errorMessage        : String?         = null,
-
-    // Landlord Quick Actions ke liye
-    val totalProperties     : Int             = 0,
-    val activeBookingsCount : Int             = 0,
-    val pendingRequestsCount: Int             = 0,   // ✅ NEW: PENDING status bookings
-    val totalRevenue        : Double          = 0.0,
-    val averageRating       : Float           = 0f
+    val allProperties       : List<Property> = emptyList(),
+    val isLoading           : Boolean        = false,
+    val errorMessage        : String?        = null,
+    val totalProperties     : Int            = 0,
+    val activeBookingsCount : Int            = 0,
+    val pendingRequestsCount: Int            = 0,
+    val totalRevenue        : Double         = 0.0,
+    val averageRating       : Float          = 0f
 )
 
 @HiltViewModel
@@ -37,79 +36,124 @@ class HomeViewModel @Inject constructor(
     private val paymentRepository : PaymentRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState())
+    private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    init {
-        loadHomeData()
-    }
-
+    // ─────────────────────────────────────────────────────────────
+    // TENANT: Saari approved properties load karo
+    // ─────────────────────────────────────────────────────────────
     fun loadHomeData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
+
+                // Featured properties
                 val featuredResult = propertyRepository.getFeaturedProperties()
-                val nearbyResult   = propertyRepository.getNearbyProperties()
+                val featured: List<Property> = when (featuredResult) {
+                    is Resource.Success -> featuredResult.data
+                    is Resource.Error   -> emptyList()
+                    Resource.Loading    -> emptyList()
+                }
+
+                // Nearby = saari approved
+                val nearbyResult = propertyRepository.getNearbyProperties()
+                val nearby: List<Property> = when (nearbyResult) {
+                    is Resource.Success -> nearbyResult.data
+                    is Resource.Error   -> emptyList()
+                    Resource.Loading    -> emptyList()
+                }
+
+                // Merge — deduplicate by propertyId
+                val combined = (featured + nearby).distinctBy { it.propertyId }
+
+                // Agar dono empty hain — getAllProperties fallback
+                val finalAll     : List<Property>
+                val finalFeatured: List<Property>
+                val finalNearby  : List<Property>
+
+                if (combined.isEmpty()) {
+                    val allResult = propertyRepository.getAllProperties()
+                    val allList: List<Property> = when (allResult) {
+                        is Resource.Success -> allResult.data
+                        else                -> emptyList()
+                    }
+                    finalAll      = allList
+                    finalFeatured = allList.filter {  it.isFeatured }
+                    finalNearby   = allList.filter { !it.isFeatured }
+                } else {
+                    finalAll      = combined
+                    finalFeatured = featured.ifEmpty { combined.filter {  it.isFeatured } }
+                    finalNearby   = nearby.ifEmpty   { combined.filter { !it.isFeatured } }
+                }
+
+                val errorMsg = when {
+                    featuredResult is Resource.Error -> featuredResult.message
+                    nearbyResult   is Resource.Error -> nearbyResult.message
+                    else                             -> null
+                }
 
                 _uiState.update { state ->
                     state.copy(
-                        featuredProperties = if (featuredResult is Resource.Success)
-                            featuredResult.data ?: emptyList() else emptyList(),
-                        nearbyProperties   = if (nearbyResult is Resource.Success)
-                            nearbyResult.data ?: emptyList() else emptyList(),
+                        featuredProperties = finalFeatured,
+                        nearbyProperties   = finalNearby,
+                        allProperties      = finalAll,
                         isLoading          = false,
-                        errorMessage       = when {
-                            featuredResult is Resource.Error -> featuredResult.message
-                            nearbyResult   is Resource.Error -> nearbyResult.message
-                            else                             -> null
-                        }
+                        errorMessage       = if (finalAll.isEmpty()) errorMsg else null
                     )
                 }
+
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.localizedMessage)
+                }
             }
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // LANDLORD: Stats + apni properties load karo
+    // ─────────────────────────────────────────────────────────────
     fun loadLandlordStats(landlordId: String) {
         viewModelScope.launch {
             try {
-                // 1. Total Properties
+                // Landlord ki apni properties
                 val propertiesResult = propertyRepository.getMyProperties(landlordId)
-                val properties = if (propertiesResult is Resource.Success)
-                    propertiesResult.data ?: emptyList() else emptyList<Property>()
-                val totalProps = properties.size
+                val properties: List<Property> = when (propertiesResult) {
+                    is Resource.Success -> propertiesResult.data
+                    else                -> emptyList()
+                }
 
-                // Average Rating
-                val avgRating = if (properties.isNotEmpty())
-                    properties.map { it.averageRating.toFloat() }.average().toFloat()
+                val totalProps = properties.size
+                val avgRating  = if (properties.isNotEmpty())
+                    properties.map { it.averageRating }.average().toFloat()
                 else 0f
 
-                // 2. Bookings — Active (CONFIRMED) + Pending (PENDING)
-                val bookings = bookingRepository.getLandlordBookings(landlordId)
-                val activeCount  = bookings.count {
-                    it.status == BookingStatus.CONFIRMED.name
-                }
-                val pendingCount = bookings.count {   // ✅ NEW
-                    it.status == BookingStatus.PENDING.name
-                }
+                // Bookings
+                val bookings     = bookingRepository.getLandlordBookings(landlordId)
+                val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
+                val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
-                // 3. Total Revenue
+                // Revenue
                 val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
-                val revenue = if (paymentsResult is Resource.Success)
-                    paymentsResult.data?.sumOf { it.amount } ?: 0.0 else 0.0
+                val revenue: Double = when (paymentsResult) {
+                    is Resource.Success -> paymentsResult.data.sumOf { it.amount }
+                    else                -> 0.0
+                }
 
                 _uiState.update { state ->
                     state.copy(
+                        featuredProperties   = properties,
+                        allProperties        = properties,
                         totalProperties      = totalProps,
                         activeBookingsCount  = activeCount,
-                        pendingRequestsCount = pendingCount,   // ✅ NEW
+                        pendingRequestsCount = pendingCount,
                         totalRevenue         = revenue,
                         averageRating        = avgRating
                     )
                 }
+
             } catch (e: Exception) {
-                // Stats load fail hone par quietly ignore
+                // Silent fail — stats na aayein toh crash mat karo
             }
         }
     }

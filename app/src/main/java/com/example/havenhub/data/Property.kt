@@ -33,8 +33,11 @@ data class Property(
     val floor: Int? = null,
 
     val imageUrls: List<String> = emptyList(),
-    val pt1DocumentUrl: String = "",        // ✅ NEW: Admin ke liye PT-1 imgbb link
+    val pt1DocumentUrl: String = "",
     val amenities: List<String> = emptyList(),
+
+    // ✅ NEW: Drawable image name field (Firestore se aayega)
+    val drawableImageName: String = "",
 
     val petsAllowed: Boolean = false,
     val smokingAllowed: Boolean = false,
@@ -53,7 +56,8 @@ data class Property(
 
     @ServerTimestamp
     val createdAt: Timestamp? = null,
-    val updatedAt: Timestamp? = null
+
+    val updatedAt: Long? = null
 
 ) {
     constructor() : this(propertyId = "")
@@ -64,8 +68,33 @@ data class Property(
 
     val isLive: Boolean get() = status == "APPROVED" && isAvailable
 
-    // ✅ PT-1 uploaded hai ya nahi
     val hasPt1Document: Boolean get() = pt1DocumentUrl.isNotBlank()
+
+    // ✅ NEW: Auto drawable resolve — agar drawableImageName empty ho
+    // toh city aur propertyType se guess karo
+    val resolvedDrawableName: String
+
+        get() {
+            if (drawableImageName.isNotEmpty()) return drawableImageName
+            // City + Type se match karo
+            val c = city.lowercase().trim()
+            val t = propertyType.lowercase().trim()
+            return when {
+                c.contains("lahore")     && t == "apartment"  -> "apartment_lahore"
+                c.contains("rawalpindi") && t == "apartment"  -> "apartment_rawalpindi"
+                c.contains("karachi")    && t == "house"      -> "house_karachi"
+                c.contains("kaghan")                          -> "house_kaghanvalley"
+                c.contains("hunza")                           -> "hunza_farmhouse"
+                c.contains("naran")                           -> "naran_farmhouse"
+                c.contains("skardu")                          -> "skardu"
+                c.contains("swat")       && t == "villa"      -> "swat_villa"
+                c.contains("murree")     || c.contains("murri") -> "vila_murree"
+                c.contains("islamabad")  && t == "room"       -> "room_islamabad"
+                c.contains("sialkot")    && t == "room"       -> "room_sialkot"
+                c.contains("faisalabad") && t == "studio"     -> "studio_faisalabad"
+                else                                          -> ""
+            }
+        }
 
     val propertyStatusEnum: PropertyStatus
         get() = try {
