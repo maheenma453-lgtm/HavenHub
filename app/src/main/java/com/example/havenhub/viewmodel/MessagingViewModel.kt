@@ -48,10 +48,7 @@ class MessagingViewModel @Inject constructor(
             messagingRepository.getConversationsRealtime(userId).collect { result ->
                 when (result) {
                     is Resource.Success -> _uiState.update {
-                        it.copy(
-                            isLoading     = false,
-                            conversations = result.data ?: emptyList()
-                        )
+                        it.copy(isLoading = false, conversations = result.data ?: emptyList())
                     }
                     is Resource.Error   -> _uiState.update {
                         it.copy(isLoading = false, errorMessage = result.message)
@@ -62,10 +59,15 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    // ✅ FIX: otherUserId se chatId generate karo aur listen start karo
-    fun loadChat(otherUserId: String) {
+    // ✅ FIX: propertyId ke saath consistent chatId banao
+    fun loadChat(otherUserId: String, propertyId: String = "") {
         if (currentUserId.isEmpty() || otherUserId.isEmpty()) return
-        val chatId = messagingRepository.generateChatId(currentUserId, otherUserId)
+
+        val chatId = if (propertyId.isNotEmpty() && propertyId != "none")
+            Message.buildConversationId(currentUserId, otherUserId, propertyId)
+        else
+            messagingRepository.generateChatId(currentUserId, otherUserId)
+
         listenToMessages(chatId)
     }
 
@@ -100,15 +102,15 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
+    // ✅ FIX: propertyId parameter add kiya — same conversationId guarantee
     fun sendMessage(
         receiverId  : String,
         content     : String,
-        // ✅ FIX: "TEXT" uppercase tha — Message.TYPE_TEXT = "text" lowercase use karo
+        propertyId  : String  = "",
         messageType : String  = Message.TYPE_TEXT,
         mediaUrl    : String? = null
     ) {
         if (content.isBlank() && mediaUrl == null) return
-        // ✅ FIX: currentUserId empty check — agar empty hai to message send mat karo
         if (currentUserId.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "User not logged in") }
             return
@@ -116,9 +118,13 @@ class MessagingViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(sendSuccess = false) }
-            val chatId = messagingRepository.generateChatId(currentUserId, receiverId)
 
-            // ✅ FIX: pehle conversation banao, phir message bhejo
+            // ✅ FIX: same formula jaise loadChat mein
+            val chatId = if (propertyId.isNotEmpty() && propertyId != "none")
+                Message.buildConversationId(currentUserId, receiverId, propertyId)
+            else
+                messagingRepository.generateChatId(currentUserId, receiverId)
+
             messagingRepository.createOrGetConversation(currentUserId, receiverId)
 
             val result = messagingRepository.sendMessage(

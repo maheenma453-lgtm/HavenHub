@@ -7,6 +7,7 @@ import com.example.havenhub.data.PropertyStatus
 import com.example.havenhub.data.User
 import com.example.havenhub.data.VerificationStatus
 import com.example.havenhub.repository.AdminRepository
+import com.example.havenhub.repository.NotificationRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -14,16 +15,17 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class VerificationUiState(
-    val isLoading         : Boolean          = false,
-    val pendingUsers       : List<User>       = emptyList(),
-    val pendingProperties  : List<Property>   = emptyList(),
-    val actionSuccess      : Boolean          = false,
-    val errorMessage       : String?          = null
+    val isLoading         : Boolean        = false,
+    val pendingUsers      : List<User>     = emptyList(),
+    val pendingProperties : List<Property> = emptyList(),
+    val actionSuccess     : Boolean        = false,
+    val errorMessage      : String?        = null
 )
 
 @HiltViewModel
 class VerificationViewModel @Inject constructor(
-    private val adminRepository: AdminRepository
+    private val adminRepository        : AdminRepository,
+    private val notificationRepository : NotificationRepository  // ✅ NEW: Inject karo
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VerificationUiState())
@@ -60,18 +62,55 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    // ✅ approveProperty function add kiya
+    // ✅ UPDATED: Approve ke baad landlord ko notification bhejo adminNote ke saath
     fun approveProperty(propertyId: String, adminNote: String = "") {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            handleResult(adminRepository.approveProperty(propertyId, adminNote))
+
+            val result = adminRepository.approveProperty(propertyId, adminNote)
+
+            if (result is Resource.Success) {
+                // ✅ Property ka owner aur title dhundo — notification ke liye
+                val property = _uiState.value.pendingProperties
+                    .find { it.propertyId == propertyId }
+
+                if (property != null) {
+                    notificationRepository.sendPropertyApprovedNotification(
+                        ownerId       = property.ownerId,
+                        propertyId    = propertyId,
+                        propertyTitle = property.title,
+                        adminNote     = adminNote      // ✅ Admin ka note landlord ko jayega
+                    )
+                }
+            }
+
+            handleResult(result)
         }
     }
 
+    // ✅ UPDATED: Reject ke baad landlord ko notification bhejo reason ke saath
     fun rejectProperty(propertyId: String, reason: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            handleResult(adminRepository.rejectProperty(propertyId, reason))
+
+            val result = adminRepository.rejectProperty(propertyId, reason)
+
+            if (result is Resource.Success) {
+                // ✅ Property ka owner aur title dhundo — notification ke liye
+                val property = _uiState.value.pendingProperties
+                    .find { it.propertyId == propertyId }
+
+                if (property != null) {
+                    notificationRepository.sendPropertyRejectedNotification(
+                        ownerId       = property.ownerId,
+                        propertyId    = propertyId,
+                        propertyTitle = property.title,
+                        adminNote     = reason         // ✅ Reject reason landlord ko jayega
+                    )
+                }
+            }
+
+            handleResult(result)
         }
     }
 

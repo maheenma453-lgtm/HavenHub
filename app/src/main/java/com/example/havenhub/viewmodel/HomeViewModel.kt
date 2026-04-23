@@ -19,6 +19,7 @@ import javax.inject.Inject
 data class HomeUiState(
     val featuredProperties  : List<Property> = emptyList(),
     val nearbyProperties    : List<Property> = emptyList(),
+    val allProperties       : List<Property> = emptyList(),
     val isLoading           : Boolean        = false,
     val errorMessage        : String?        = null,
     val totalProperties     : Int            = 0,
@@ -38,73 +39,121 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    init {
-        loadHomeData()
-    }
-
+    // ─────────────────────────────────────────────────────────────
+    // TENANT: Saari approved properties load karo
+    // ─────────────────────────────────────────────────────────────
     fun loadHomeData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val allResult = propertyRepository.getAllProperties()
 
-                android.util.Log.d("HAVENHUB", "Result type: ${allResult::class.simpleName}")
+                // Featured properties
+                val featuredResult = propertyRepository.getFeaturedProperties()
+                val featured: List<Property> = when (featuredResult) {
+                    is Resource.Success -> featuredResult.data
+                    is Resource.Error   -> emptyList()
+                    Resource.Loading    -> emptyList()
+                }
 
-                val allProperties = if (allResult is Resource.Success)
-                    allResult.data ?: emptyList() else emptyList()
+                // Nearby = saari approved
+                val nearbyResult = propertyRepository.getNearbyProperties()
+                val nearby: List<Property> = when (nearbyResult) {
+                    is Resource.Success -> nearbyResult.data
+                    is Resource.Error   -> emptyList()
+                    Resource.Loading    -> emptyList()
+                }
 
-                android.util.Log.d("HAVENHUB", "Total properties: ${allProperties.size}")
+                // Merge — deduplicate by propertyId
+                val combined = (featured + nearby).distinctBy { it.propertyId }
 
-                val featured = allProperties.filter { it.isFeatured }
-                val featuredToShow = if (featured.isEmpty()) allProperties else featured
+                // Agar dono empty hain — getAllProperties fallback
+                val finalAll     : List<Property>
+                val finalFeatured: List<Property>
+                val finalNearby  : List<Property>
 
-                android.util.Log.d("HAVENHUB", "Featured: ${featuredToShow.size}, Nearby: ${allProperties.size}")
+                if (combined.isEmpty()) {
+                    val allResult = propertyRepository.getAllProperties()
+                    val allList: List<Property> = when (allResult) {
+                        is Resource.Success -> allResult.data
+                        else                -> emptyList()
+                    }
+                    finalAll      = allList
+                    finalFeatured = allList.filter {  it.isFeatured }
+                    finalNearby   = allList.filter { !it.isFeatured }
+                } else {
+                    finalAll      = combined
+                    finalFeatured = featured.ifEmpty { combined.filter {  it.isFeatured } }
+                    finalNearby   = nearby.ifEmpty   { combined.filter { !it.isFeatured } }
+                }
+
+                val errorMsg = when {
+                    featuredResult is Resource.Error -> featuredResult.message
+                    nearbyResult   is Resource.Error -> nearbyResult.message
+                    else                             -> null
+                }
 
                 _uiState.update { state ->
                     state.copy(
-                        featuredProperties = featuredToShow,
-                        nearbyProperties   = allProperties,
+                        featuredProperties = finalFeatured,
+                        nearbyProperties   = finalNearby,
+                        allProperties      = finalAll,
                         isLoading          = false,
-                        errorMessage       = if (allResult is Resource.Error) allResult.message else null
+                        errorMessage       = if (finalAll.isEmpty()) errorMsg else null
                     )
                 }
+
             } catch (e: Exception) {
-                android.util.Log.e("HAVENHUB", "Error loading: ${e.localizedMessage}")
-                _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.localizedMessage)
+                }
             }
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // LANDLORD: Stats + apni properties load karo
+    // ─────────────────────────────────────────────────────────────
     fun loadLandlordStats(landlordId: String) {
         viewModelScope.launch {
             try {
+                // Landlord ki apni properties
                 val propertiesResult = propertyRepository.getMyProperties(landlordId)
-                val properties = if (propertiesResult is Resource.Success)
-                    propertiesResult.data ?: emptyList() else emptyList<Property>()
+                val properties: List<Property> = when (propertiesResult) {
+                    is Resource.Success -> propertiesResult.data
+                    else                -> emptyList()
+                }
 
-                val avgRating = if (properties.isNotEmpty())
-                    properties.map { it.averageRating.toFloat() }.average().toFloat()
+                val totalProps = properties.size
+                val avgRating  = if (properties.isNotEmpty())
+                    properties.map { it.averageRating }.average().toFloat()
                 else 0f
 
-                val bookings = bookingRepository.getLandlordBookings(landlordId)
+                // Bookings
+                val bookings     = bookingRepository.getLandlordBookings(landlordId)
                 val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
                 val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
+                // Revenue
                 val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
-                val revenue = if (paymentsResult is Resource.Success)
-                    paymentsResult.data?.sumOf { it.amount } ?: 0.0 else 0.0
+                val revenue: Double = when (paymentsResult) {
+                    is Resource.Success -> paymentsResult.data.sumOf { it.amount }
+                    else                -> 0.0
+                }
 
                 _uiState.update { state ->
                     state.copy(
-                        totalProperties      = properties.size,
+                        featuredProperties   = properties,
+                        allProperties        = properties,
+                        totalProperties      = totalProps,
                         activeBookingsCount  = activeCount,
                         pendingRequestsCount = pendingCount,
                         totalRevenue         = revenue,
                         averageRating        = avgRating
                     )
                 }
+
             } catch (e: Exception) {
-                android.util.Log.e("HAVENHUB", "Landlord stats error: ${e.localizedMessage}")
+                // Silent fail — stats na aayein toh crash mat karo
             }
         }
     }

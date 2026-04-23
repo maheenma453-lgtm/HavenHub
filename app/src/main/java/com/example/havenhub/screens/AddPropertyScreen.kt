@@ -162,7 +162,7 @@ fun AddPropertyScreen(
                                     areaSqFt = area.toDoubleOrNull(),
                                     amenities = selectedAmenities.toList(),
                                     images = selectedImages,
-                                    pt1DocumentUri = pt1DocumentUri  // ✅ FIX: PT-1 pass karo
+                                    pt1DocumentUri = pt1DocumentUri
                                 )
                             }
                         }
@@ -576,6 +576,8 @@ private fun Step4RulesVerification(
     pt1DocumentUri: Uri?, onPt1Selected: (Uri?) -> Unit,
     pt1Error: String?
 ) {
+    // ✅ FIX: "image/*" use karo taake imgbb successfully upload kare
+    // PEHLE: pt1Launcher.launch("*/*") — PDF bhi allow hoti thi, imgbb reject karta tha
     val pt1Launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { onPt1Selected(it) } }
@@ -623,6 +625,8 @@ private fun Step4RulesVerification(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Verification Document", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D1B3E))
+
+                // Info banner
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -634,12 +638,24 @@ private fun Step4RulesVerification(
                     Icon(Icons.Default.Info, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "PT-1 (Property Tax) document is required for listing approval by admin.",
+                        // ✅ FIX: user ko clear batao ke image chahiye, PDF nahi
+                        "PT-1 (Property Tax) document ki PHOTO upload karein (JPG/PNG). Admin review karega.",
                         fontSize = 12.sp,
                         color = Color(0xFF8899AA)
                     )
                 }
+
                 if (pt1DocumentUri != null) {
+                    // ✅ Preview bhi dikhao taake landlord confirm kar sake
+                    AsyncImage(
+                        model = pt1DocumentUri,
+                        contentDescription = "PT-1 Preview",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -663,7 +679,8 @@ private fun Step4RulesVerification(
                     }
                 } else {
                     OutlinedButton(
-                        onClick = { pt1Launcher.launch("*/*") },
+                        // ✅ KEY FIX: "image/*" — sirf images allow hongi, PDF nahi
+                        onClick = { pt1Launcher.launch("image/*") },
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
@@ -676,7 +693,7 @@ private fun Step4RulesVerification(
                     ) {
                         Icon(Icons.Default.UploadFile, null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Upload PT-1 Document *")
+                        Text("Upload PT-1 Photo (JPG/PNG) *")
                     }
                     pt1Error?.let {
                         Text(it, color = Color.Red, fontSize = 12.sp)
@@ -705,3 +722,15 @@ private fun RuleToggle(label: String, value: Boolean, onToggle: (Boolean) -> Uni
         )
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+

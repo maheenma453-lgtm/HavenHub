@@ -5,9 +5,9 @@ import com.example.havenhub.data.Property
 import com.example.havenhub.data.Review
 import com.example.havenhub.data.User
 import com.example.havenhub.utils.Resource
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,6 +22,66 @@ class FirebaseDataManager @Inject constructor(
     private val bookingsCollection      = firestore.collection("bookings")
     private val reviewsCollection       = firestore.collection("reviews")
     private val notificationsCollection = firestore.collection("notifications")
+
+    // ── Helper — updatedAt ko safely Long mein convert karo ──────────────────
+
+    private fun extractUpdatedAt(doc: com.google.firebase.firestore.DocumentSnapshot): Long? {
+        return when (val raw = doc.get("updatedAt")) {
+            is Long      -> raw
+            is Timestamp -> raw.toDate().time
+            else         -> null
+        }
+    }
+
+    // ── Helper — DocumentSnapshot se manually Property banao ─────────────────
+    // toObject() fail hota hai jab koi bhi field missing/mismatch ho
+    // Yeh function har field ko safely handle karta hai
+
+    private fun parseProperty(doc: com.google.firebase.firestore.DocumentSnapshot): Property? {
+        return try {
+            Property(
+                propertyId        = doc.id,
+                ownerId           = doc.getString("ownerId") ?: "",
+                ownerName         = doc.getString("ownerName") ?: "",
+                title             = doc.getString("title") ?: "",
+                description       = doc.getString("description") ?: "",
+                propertyType      = doc.getString("propertyType") ?: "APARTMENT",
+                status            = doc.getString("status") ?: "PENDING",
+                address           = doc.getString("address") ?: "",
+                city              = doc.getString("city") ?: "",
+                pricePerNight     = doc.getDouble("pricePerNight") ?: 0.0,
+                pricePerMonth     = doc.getDouble("pricePerMonth"),
+                pricePerWeek      = doc.getDouble("pricePerWeek"),
+                securityDeposit   = doc.getDouble("securityDeposit") ?: 0.0,
+                bedrooms          = (doc.getLong("bedrooms") ?: 1L).toInt(),
+                bathrooms         = (doc.getLong("bathrooms") ?: 1L).toInt(),
+                maxGuests         = (doc.getLong("maxGuests") ?: 2L).toInt(),
+                areaSqFt          = doc.getDouble("areaSqFt"),
+                floor             = doc.getLong("floor")?.toInt(),
+                imageUrls         = (doc.get("imageUrls") as? List<*>)
+                    ?.filterIsInstance<String>() ?: emptyList(),
+                pt1DocumentUrl    = doc.getString("pt1DocumentUrl") ?: "",
+                amenities         = (doc.get("amenities") as? List<*>)
+                    ?.filterIsInstance<String>() ?: emptyList(),
+                drawableImageName = doc.getString("drawableImageName") ?: "",
+                petsAllowed       = doc.getBoolean("petsAllowed") ?: false,
+                smokingAllowed    = doc.getBoolean("smokingAllowed") ?: false,
+                partiesAllowed    = doc.getBoolean("partiesAllowed") ?: false,
+                checkInTime       = doc.getString("checkInTime") ?: "14:00",
+                checkOutTime      = doc.getString("checkOutTime") ?: "11:00",
+                minNights         = (doc.getLong("minNights") ?: 1L).toInt(),
+                averageRating     = (doc.getDouble("averageRating") ?: 0.0).toFloat(),
+                reviewCount       = (doc.getLong("reviewCount") ?: 0L).toInt(),
+                adminNote         = doc.getString("adminNote") ?: "",
+                isAvailable       = doc.getBoolean("isAvailable") ?: true,
+                isFeatured        = doc.getBoolean("isFeatured") ?: false,
+                createdAt         = doc.getTimestamp("createdAt"),
+                updatedAt         = extractUpdatedAt(doc)
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     // ── User ─────────────────────────────────────────────────────────────────
 
@@ -76,38 +136,45 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ✅ FIX: createdAt field exist na kare to bhi crash na ho
+    // ✅ FIX: toObject() hata diya — manual parseProperty() use karo
+    // Ab koi bhi missing field crash/skip nahi karega
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
-            val snapshot = propertiesCollection
-                .get()
-                .await()
-            val properties = snapshot.toObjects(Property::class.java)
-                .sortedByDescending { it.createdAt } // client-side sort — index issue avoid
+            val snapshot = propertiesCollection.get().await()
+
+            val properties = snapshot.documents.mapNotNull { doc ->
+                parseProperty(doc)
+            }.sortedByDescending { it.createdAt?.seconds ?: 0L }
+
             Resource.Success(properties)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch properties")
         }
     }
 
+    // ✅ FIX: getPropertiesByOwner mein bhi manual parse
     suspend fun getPropertiesByOwner(ownerId: String): Resource<List<Property>> {
         return try {
             val snapshot = propertiesCollection
                 .whereEqualTo("ownerId", ownerId)
                 .get()
                 .await()
-            val properties = snapshot.toObjects(Property::class.java)
-                .sortedByDescending { it.createdAt }
+
+            val properties = snapshot.documents.mapNotNull { doc ->
+                parseProperty(doc)
+            }.sortedByDescending { it.createdAt?.seconds ?: 0L }
+
             Resource.Success(properties)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch owner properties")
         }
     }
 
+    // ✅ FIX: getPropertyById mein bhi manual parse
     suspend fun getPropertyById(propertyId: String): Resource<Property> {
         return try {
-            val snapshot = propertiesCollection.document(propertyId).get().await()
-            val property = snapshot.toObject(Property::class.java)
+            val doc = propertiesCollection.document(propertyId).get().await()
+            val property = parseProperty(doc)
                 ?: return Resource.Error("Property not found")
             Resource.Success(property)
         } catch (e: Exception) {
@@ -159,9 +226,7 @@ class FirebaseDataManager @Inject constructor(
 
     suspend fun getAllBookings(): Resource<List<Booking>> {
         return try {
-            val snapshot = bookingsCollection
-                .get()
-                .await()
+            val snapshot = bookingsCollection.get().await()
             val bookings = snapshot.toObjects(Booking::class.java)
                 .sortedByDescending { it.createdAt }
             Resource.Success(bookings)

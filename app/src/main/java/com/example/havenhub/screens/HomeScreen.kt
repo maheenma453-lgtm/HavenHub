@@ -26,16 +26,59 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.HomeViewModel
 
-private val HavenDeepBlue = Color(0xFF0D1B3E)
-private val HavenGold = Color(0xFFD4AF37)
-private val HavenBackground = Color(0xFFF1F5F9)
-private val HavenSurface = Color(0xFFFFFFFF)
+// ═══════════════════════════════════════════════════════════════════
+// HELPER: Property ke liye safe image resolve karo
+// ═══════════════════════════════════════════════════════════════════
+private fun resolveImage(property: Property): Int {
+    if (property.drawableImageName.isNotEmpty()) {
+        return getPropertyImage(property.drawableImageName)
+    }
+    if (property.resolvedDrawableName.isNotEmpty()) {
+        return getPropertyImage(property.resolvedDrawableName)
+    }
+    return getPropertyImage(property.propertyId)
+}
 
+// ═══════════════════════════════════════════════════════════════════
+// imgbb URL hai toh AsyncImage, warna local drawable
+// ═══════════════════════════════════════════════════════════════════
+@Composable
+private fun PropertyImage(
+    property    : Property,
+    modifier    : Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop
+) {
+    //val remoteUrl = property.imageUrls.firstOrNull()
+    //if (!remoteUrl.isNullOrEmpty()) {
+    val remoteUrl = property.imageUrls.firstOrNull { it.isNotBlank() }
+    if (!remoteUrl.isNullOrEmpty()) {
+
+        AsyncImage(
+            model              = remoteUrl,
+            contentDescription = property.title,
+            modifier           = modifier,
+            contentScale       = contentScale
+        )
+    } else {
+        Image(
+            painter            = painterResource(id = resolveImage(property)),
+            contentDescription = property.title,
+            modifier           = modifier,
+            contentScale       = contentScale
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MAIN ENTRY POINT — Role check + data load
+// ✅ FIX: userRole empty hone par return karo — race condition fix
+// ═══════════════════════════════════════════════════════════════════
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -45,25 +88,47 @@ fun HomeScreen(
     val categories = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
     var selectedCategory by remember { mutableStateOf("All") }
 
-    // ✅ nearbyProperties mein saari properties hain
-    val filteredProperties by remember(uiState.nearbyProperties, selectedCategory) {
-        derivedStateOf {
-            val all = uiState.nearbyProperties.distinctBy { it.propertyId }
-            if (selectedCategory == "All") all
-            else all.filter {
-                it.propertyTypeEnum.displayName().equals(selectedCategory, ignoreCase = true)
+    // ✅ FIX: userRole empty hone tak kuch mat karo
+    // Jab role Firebase se load hogi tab hi data fetch karega
+    LaunchedEffect(userId, userRole) {
+        if (userRole.isEmpty()) return@LaunchedEffect
+
+        when {
+            userRole == "landlord" && userId.isNotEmpty() -> {
+                viewModel.loadLandlordStats(userId)
+            }
+            userRole != "landlord" && userId.isNotEmpty() -> {
+                viewModel.loadHomeData()
+            }
+            userRole != "landlord" -> {
+                // Guest / userId abhi nahi mila — phir bhi properties load karo
+                viewModel.loadHomeData()
             }
         }
     }
 
-    // ✅ Featured — isFeatured = true wali + filter
-    val filteredFeatured by remember(uiState.featuredProperties, selectedCategory) {
-        derivedStateOf {
-            val featured = uiState.featuredProperties.distinctBy { it.propertyId }
-            if (selectedCategory == "All") featured
-            else featured.filter {
-                it.propertyTypeEnum.displayName().equals(selectedCategory, ignoreCase = true)
-            }
+    when (userRole) {
+        "landlord" -> LandlordHomeScreen(navController = navController, uiState = uiState)
+        else       -> TenantHomeScreen(navController = navController, viewModel = viewModel, uiState = uiState)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LANDLORD HOME SCREEN
+// ═══════════════════════════════════════════════════════════════════
+@Composable
+private fun LandlordHomeScreen(
+    navController: NavController,
+    uiState      : HomeUiState
+) {
+    val formattedRevenue = remember(uiState.totalRevenue) {
+        when {
+            uiState.totalRevenue >= 1_000_000 ->
+                "PKR %.1fM".format(uiState.totalRevenue / 1_000_000)
+            uiState.totalRevenue >= 1_000     ->
+                "PKR %.0fK".format(uiState.totalRevenue / 1_000)
+            else                              ->
+                "PKR %.0f".format(uiState.totalRevenue)
         }
     }
 
@@ -106,6 +171,505 @@ fun HomeScreen(
                                 .padding(20.dp),
                             contentAlignment = Alignment.Center
                         ) {
+                            Icon(
+                                Icons.Default.Notifications, null,
+                                tint     = Color(0xFFD4AF37),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        LandlordStatChip(
+                            icon     = "🏠",
+                            label    = "Properties",
+                            value    = "${uiState.totalProperties}",
+                            modifier = Modifier.weight(1f)
+                        )
+                        LandlordStatChip(
+                            icon     = "📋",
+                            label    = "Active",
+                            value    = "${uiState.activeBookingsCount}",
+                            modifier = Modifier.weight(1f)
+                        )
+                        LandlordStatChip(
+                            icon     = "⭐",
+                            label    = "Rating",
+                            value    = if (uiState.averageRating > 0f)
+                                "%.1f".format(uiState.averageRating)
+                            else "—",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Quick Actions — 2x2 grid ──────────────────────────────
+        item {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "Quick Actions",
+                fontWeight = FontWeight.Bold,
+                fontSize   = 18.sp,
+                color      = Color(0xFF0D1B3E),
+                modifier   = Modifier.padding(horizontal = 20.dp)
+            )
+            Spacer(Modifier.height(12.dp))
+
+            Column(
+                modifier            = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Card(
+                        modifier  = Modifier
+                            .weight(1f)
+                            .height(100.dp)
+                            .clickable { navController.navigate(Screen.AddProperty.route) },
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = Color(0xFF0D1B3E)),
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Column(
+                            modifier            = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("➕", fontSize = 22.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Add",
+                                color      = Color(0xFFD4AF37),
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 13.sp
+                            )
+                            Text("Property", color = Color.White, fontSize = 11.sp)
+                        }
+                    }
+
+                    Card(
+                        modifier  = Modifier
+                            .weight(1f)
+                            .height(100.dp),
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = Color(0xFFD4AF37)),
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Column(
+                            modifier            = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("💰", fontSize = 22.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                formattedRevenue,
+                                color      = Color(0xFF0D1B3E),
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 12.sp,
+                                maxLines   = 1,
+                                overflow   = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                "Revenue",
+                                color    = Color(0xFF0D1B3E).copy(0.7f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Card(
+                        modifier  = Modifier
+                            .weight(1f)
+                            .height(100.dp)
+                            .clickable { navController.navigate(Screen.MyBookings.route) },
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Column(
+                            modifier            = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("📅", fontSize = 22.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "${uiState.activeBookingsCount}",
+                                color      = Color(0xFF0D1B3E),
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 18.sp
+                            )
+                            Text("Active Bookings", color = Color(0xFF8899AA), fontSize = 10.sp)
+                        }
+                    }
+
+                    Card(
+                        modifier  = Modifier
+                            .weight(1f)
+                            .height(100.dp)
+                            .clickable { navController.navigate(Screen.MyBookings.route) },
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = Color(0xFFF0F4FF)),
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Column(
+                            modifier            = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("📋", fontSize = 22.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "${uiState.pendingRequestsCount}",
+                                color      = Color(0xFF0D1B3E),
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 18.sp
+                            )
+                            Text("Pending Req.", color = Color(0xFF8899AA), fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── My Properties Preview ─────────────────────────────────
+        item {
+            Spacer(Modifier.height(24.dp))
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "My Properties",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp,
+                        color      = Color(0xFF0D1B3E)
+                    )
+                    Text(
+                        "Your listed properties",
+                        fontSize = 12.sp,
+                        color    = Color(0xFF8899AA)
+                    )
+                }
+                Text(
+                    "See All",
+                    fontSize   = 13.sp,
+                    color      = Color(0xFFD4AF37),
+                    fontWeight = FontWeight.SemiBold,
+                    modifier   = Modifier.clickable {
+                        navController.navigate(Screen.MyProperties.route)
+                    }
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
+        if (uiState.isLoading) {
+            item { LoadingShimmer() }
+        } else if (uiState.featuredProperties.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White)
+                        .clickable { navController.navigate(Screen.AddProperty.route) }
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("🏠", fontSize = 40.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "No properties yet",
+                            fontWeight = FontWeight.Bold,
+                            color      = Color(0xFF0D1B3E),
+                            fontSize   = 16.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Tap to add your first property",
+                            color    = Color(0xFFD4AF37),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        } else {
+            items(uiState.featuredProperties.take(3)) { property ->
+                NearbyPropertyCard(property) {
+                    navController.navigate(
+                        Screen.PropertyDetail.createRoute(property.propertyId)
+                    )
+                }
+            }
+        }
+
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+// ── Small stat chip inside landlord header ───────────────────────
+@Composable
+private fun LandlordStatChip(
+    icon    : String,
+    label   : String,
+    value   : String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(icon,  fontSize = 16.sp)
+            Text(value, color = Color.White,            fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = Color.White.copy(0.7f), fontSize = 10.sp)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TENANT HOME SCREEN
+// ═══════════════════════════════════════════════════════════════════
+@Composable
+private fun TenantHomeScreen(
+    navController: NavController,
+    viewModel    : HomeViewModel,
+    uiState      : HomeUiState
+) {
+    val categories       = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
+    var selectedCategory by remember { mutableStateOf("All") }
+    val featuredScrollState = rememberScrollState()
+    val scope               = rememberCoroutineScope()
+
+    val allProperties = uiState.allProperties.ifEmpty {
+        (uiState.featuredProperties + uiState.nearbyProperties).distinctBy { it.propertyId }
+    }
+
+    val filteredFeatured = if (selectedCategory == "All")
+        uiState.featuredProperties
+    else
+        uiState.featuredProperties.filter {
+            it.propertyType.equals(selectedCategory, ignoreCase = true)
+        }
+
+    val filteredAll = if (selectedCategory == "All")
+        allProperties
+    else
+        allProperties.filter {
+            it.propertyType.equals(selectedCategory, ignoreCase = true)
+        }
+
+    LazyColumn(
+        modifier       = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF5F7FA)),
+        contentPadding = PaddingValues(bottom = 80.dp)
+    ) {
+        // ── Tenant Header with Search ────────────────────────────
+        item {
+            HomeHeaderSection(
+                onSearchClick       = { navController.navigate(Screen.Search.route) },
+                onNotificationClick = { navController.navigate(Screen.Notifications.route) }
+            )
+        }
+
+        // ── Browse by Type ───────────────────────────────────────
+        item {
+            Spacer(Modifier.height(20.dp))
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Browse by Type",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp,
+                        color      = Color(0xFF0D1B3E)
+                    )
+                    Text(
+                        "Find your perfect stay",
+                        fontSize = 12.sp,
+                        color    = Color(0xFF8899AA)
+                    )
+                }
+                Text(
+                    "See All",
+                    fontSize   = 13.sp,
+                    color      = Color(0xFFD4AF37),
+                    fontWeight = FontWeight.SemiBold,
+                    modifier   = Modifier.clickable {
+                        navController.navigate(Screen.PropertyList.route)
+                    }
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            LazyRow(
+                contentPadding        = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(categories) { category ->
+                    val isSelected   = selectedCategory == category
+                    val categoryIcon = when (category) {
+                        "House"     -> "🏡"
+                        "Apartment" -> "🏢"
+                        "Room"      -> "🛏"
+                        "Villa"     -> "🏰"
+                        "Studio"    -> "🏠"
+                        else        -> "🔍"
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier            = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                if (isSelected) Color(0xFF0D1B3E) else Color.White
+                            )
+                            .clickable { selectedCategory = category }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Text(categoryIcon, fontSize = 20.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text       = category,
+                            color      = if (isSelected) Color(0xFFD4AF37) else Color(0xFF0D1B3E),
+                            fontSize   = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Featured Properties ──────────────────────────────────
+        item {
+            Spacer(Modifier.height(28.dp))
+            Row(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Featured Properties",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp,
+                        color      = Color(0xFF0D1B3E)
+                    )
+                    Text("Handpicked for you", fontSize = 12.sp, color = Color(0xFF8899AA))
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (featuredScrollState.value > 0)
+                                    Color(0xFF0D1B3E) else Color(0xFFE0E0E0)
+                            )
+                            .clickable {
+                                scope.launch {
+                                    featuredScrollState.animateScrollTo(
+                                        (featuredScrollState.value - 550).coerceAtLeast(0)
+                                    )
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("‹", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (featuredScrollState.value < featuredScrollState.maxValue)
+                                    Color(0xFF0D1B3E) else Color(0xFFE0E0E0)
+                            )
+                            .clickable {
+                                scope.launch {
+                                    featuredScrollState.animateScrollTo(
+                                        (featuredScrollState.value + 550)
+                                            .coerceAtMost(featuredScrollState.maxValue)
+                                    )
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("›", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            when {
+                uiState.isLoading -> LoadingShimmer()
+
+                uiState.errorMessage != null && allProperties.isEmpty() -> {
+                    Text(
+                        text     = "Error: ${uiState.errorMessage}",
+                        modifier = Modifier.padding(20.dp),
+                        color    = Color.Red
+                    )
+                }
+
+                filteredFeatured.isEmpty() && selectedCategory != "All" -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White)
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🏠", fontSize = 32.sp)
+                            Spacer(Modifier.height(8.dp))
                             Text(
                                 "No featured $selectedCategory properties",
                                 color = Color.Gray,
@@ -113,12 +677,45 @@ fun HomeScreen(
                             )
                         }
                     }
-                    filteredFeatured.isEmpty() -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
+                }
+
+                filteredFeatured.isEmpty() -> {
+                    Box(
+                        modifier         = Modifier.fillMaxWidth().padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No featured properties",
+                            color    = Color(0xFF8899AA),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                else -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(featuredScrollState)
+                            .padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        filteredFeatured.take(7).forEach { property ->
+                            FeaturedPropertyCard(property) {
+                                navController.navigate(
+                                    Screen.PropertyDetail.createRoute(property.propertyId)
+                                )
+                            }
+                        }
+                        // See All Card
+                        Card(
+                            modifier  = Modifier
+                                .width(160.dp)
+                                .height(260.dp)
+                                .clickable { navController.navigate(Screen.PropertyList.route) },
+                            shape     = RoundedCornerShape(20.dp),
+                            colors    = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(6.dp)
                         ) {
                             Text("No featured properties", color = Color.Gray, fontSize = 14.sp)
                         }
@@ -142,7 +739,23 @@ fun HomeScreen(
 
             // ── Vacation Banner ──
             item {
-                VacationPromoBanner { navController.navigate(Screen.VacationRentals.route) }
+                Box(
+                    modifier         = Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("🔍", fontSize = 40.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            if (selectedCategory == "All") "No properties found"
+                            else "No $selectedCategory properties found",
+                            color    = Color(0xFF8899AA),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
             }
 
             // ── All Properties ──
@@ -223,6 +836,9 @@ fun HomeHeaderSection(onSearchClick: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// FEATURED PROPERTY CARD
+// ─────────────────────────────────────────────────────────────────
 @Composable
 fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
@@ -232,11 +848,14 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = HavenSurface)
     ) {
         Column {
-            Box(Modifier.fillMaxWidth().height(160.dp)) {
-                Image(
-                    painter = painterResource(id = getPropertyImage(property.propertyId)),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(165.dp)
+            ) {
+                PropertyImage(
+                    property     = property,
+                    modifier     = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
                 Surface(
@@ -343,6 +962,9 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// NEARBY / ALL PROPERTY CARD
+// ─────────────────────────────────────────────────────────────────
 @Composable
 fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
@@ -354,12 +976,18 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = HavenSurface),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(95.dp).clip(RoundedCornerShape(16.dp))) {
-                Image(
-                    painter = painterResource(id = getPropertyImage(property.propertyId)),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
+        Row(
+            modifier          = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(12.dp))
+            ) {
+                PropertyImage(
+                    property     = property,
+                    modifier     = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
                 if (property.isAvailable) {
@@ -444,6 +1072,9 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// LOADING SHIMMER
+// ─────────────────────────────────────────────────────────────────
 @Composable
 fun SectionHeader(title: String, subtitle: String, onSeeAll: () -> Unit) {
     Row(
@@ -559,3 +1190,18 @@ fun EmptyStateView(category: String) {
         )
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
