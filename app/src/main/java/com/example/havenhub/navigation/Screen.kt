@@ -84,14 +84,27 @@ sealed class Screen(val route: String) {
     }
 
     object MessageList : Screen("message_list")
-    object Chat : Screen("chat/{userId}") {
-        const val ARG_USER_ID = "userId"
-        fun createRoute(userId: String) = "chat/$userId"
+
+    // ✅ FIX: ownerName + propertyId add kiye
+    object Chat : Screen("chat/{userId}/{ownerName}/{propertyId}") {
+        const val ARG_USER_ID    = "userId"
+        const val ARG_OWNER_NAME = "ownerName"
+        const val ARG_PROPERTY_ID = "propertyId"
+        fun createRoute(
+            userId    : String,
+            ownerName : String = "Owner",
+            propertyId: String = ""
+        ): String {
+            // ✅ Spaces aur special chars encode karo
+            val encodedName = android.net.Uri.encode(ownerName.ifEmpty { "Owner" })
+            val encodedPid  = android.net.Uri.encode(propertyId.ifEmpty { "none" })
+            return "chat/$userId/$encodedName/$encodedPid"
+        }
     }
 
-    object VacationRentals : Screen("vacation_rentals")
-    object PreBooking      : Screen("pre_booking")
-    object VacationCalendar : Screen("vacation_calendar/{propertyId}") {
+    object VacationRentals  : Screen("vacation_rentals")
+    object PreBooking        : Screen("pre_booking")
+    object VacationCalendar  : Screen("vacation_calendar/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "vacation_calendar/$propertyId"
     }

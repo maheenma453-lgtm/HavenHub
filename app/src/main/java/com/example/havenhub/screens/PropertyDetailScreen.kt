@@ -48,7 +48,7 @@ fun PropertyDetailScreen(
     var currentUserRole by remember { mutableStateOf("") }
     val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    // ✅ FIX: Role Firestore se fetch karo — uppercase mein aayega "TENANT"/"LANDLORD"
+    // ✅ Role Firestore se fetch karo
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
             try {
@@ -80,31 +80,47 @@ fun PropertyDetailScreen(
                     color    = Color(0xFF0D1B3E)
                 )
             }
+
             property != null -> {
                 LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 90.dp)
                 ) {
 
-                    // ── Photo ──
+                    // ── Photo ─────────────────────────────────────────────
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(280.dp)
+                        ) {
                             Image(
-                                painter            = painterResource(id = getPropertyImage(propertyId)),
+                                painter            = painterResource(
+                                    id = getPropertyImage(
+                                        property.drawableImageName.ifEmpty {
+                                            property.resolvedDrawableName.ifEmpty { propertyId }
+                                        }
+                                    )
+                                ),
                                 contentDescription = "Property Image",
                                 modifier           = Modifier.fillMaxSize(),
                                 contentScale       = ContentScale.Crop
                             )
+                            // Top gradient
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(80.dp)
                                     .background(
                                         Brush.verticalGradient(
-                                            listOf(Color(0xFF0D1B3E).copy(alpha = 0.5f), Color.Transparent)
+                                            listOf(
+                                                Color(0xFF0D1B3E).copy(alpha = 0.5f),
+                                                Color.Transparent
+                                            )
                                         )
                                     )
                             )
+                            // Back button
                             IconButton(
                                 onClick  = { navController.popBackStack() },
                                 modifier = Modifier
@@ -113,9 +129,12 @@ fun PropertyDetailScreen(
                                     .clip(CircleShape)
                                     .background(Color.White.copy(alpha = 0.8f))
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color(0xFF0D1B3E))
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    "Back",
+                                    tint = Color(0xFF0D1B3E)
+                                )
                             }
-
                             // Status badge
                             Box(
                                 modifier = Modifier
@@ -132,7 +151,6 @@ fun PropertyDetailScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-
                             // Type badge
                             Box(
                                 modifier = Modifier
@@ -152,7 +170,7 @@ fun PropertyDetailScreen(
                         }
                     }
 
-                    // ── Title & Price ──
+                    // ── Title & Price ──────────────────────────────────────
                     item {
                         Column(
                             modifier = Modifier
@@ -223,34 +241,115 @@ fun PropertyDetailScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // ── Quick Stats ──
+                    // ── Owner Info Card ────────────────────────────────────
                     item {
                         Card(
-                            modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            modifier  = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
                             shape     = RoundedCornerShape(16.dp),
                             colors    = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(2.dp)
                         ) {
                             Row(
-                                modifier              = Modifier.fillMaxWidth().padding(16.dp),
+                                modifier          = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Avatar
+                                Box(
+                                    modifier         = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF0D1B3E)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text       = property.ownerName
+                                            .firstOrNull { it.isLetter() }
+                                            ?.uppercase() ?: "O",
+                                        color      = Color(0xFFD4AF37),
+                                        fontSize   = 20.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text       = property.ownerName.ifEmpty { "Property Owner" },
+                                        fontSize   = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color      = Color(0xFF0D1B3E)
+                                    )
+                                    Text(
+                                        text     = "Property Owner",
+                                        fontSize = 12.sp,
+                                        color    = Color(0xFF8899AA)
+                                    )
+                                }
+                                // ✅ Verified badge
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF4CAF50).copy(alpha = 0.1f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        "Verified",
+                                        fontSize   = 11.sp,
+                                        color      = Color(0xFF4CAF50),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // ── Quick Stats ────────────────────────────────────────
+                    item {
+                        Card(
+                            modifier  = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape     = RoundedCornerShape(16.dp),
+                            colors    = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(2.dp)
+                        ) {
+                            Row(
+                                modifier              = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
                                 horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
                                 StatItem("🛏", "Bedrooms",  "${property.bedrooms}")
-                                VerticalDivider(modifier = Modifier.height(40.dp), color = Color(0xFFEEEEEE))
+                                VerticalDivider(
+                                    modifier  = Modifier.height(40.dp),
+                                    color     = Color(0xFFEEEEEE)
+                                )
                                 StatItem("🚿", "Bathrooms", "${property.bathrooms}")
-                                VerticalDivider(modifier = Modifier.height(40.dp), color = Color(0xFFEEEEEE))
+                                VerticalDivider(
+                                    modifier  = Modifier.height(40.dp),
+                                    color     = Color(0xFFEEEEEE)
+                                )
                                 StatItem("📐", "Area",      "${property.areaSqFt ?: "-"} sqft")
-                                VerticalDivider(modifier = Modifier.height(40.dp), color = Color(0xFFEEEEEE))
+                                VerticalDivider(
+                                    modifier  = Modifier.height(40.dp),
+                                    color     = Color(0xFFEEEEEE)
+                                )
                                 StatItem("👤", "Guests",    "${property.maxGuests}")
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // ── Description ──
+                    // ── Description ────────────────────────────────────────
                     item {
                         Card(
-                            modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            modifier  = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
                             shape     = RoundedCornerShape(16.dp),
                             colors    = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(2.dp)
@@ -274,11 +373,13 @@ fun PropertyDetailScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // ── Amenities ──
+                    // ── Amenities ──────────────────────────────────────────
                     if (property.amenities.isNotEmpty()) {
                         item {
                             Card(
-                                modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                modifier  = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
                                 shape     = RoundedCornerShape(16.dp),
                                 colors    = CardDefaults.cardColors(containerColor = Color.White),
                                 elevation = CardDefaults.cardElevation(2.dp)
@@ -291,7 +392,9 @@ fun PropertyDetailScreen(
                                         color      = Color(0xFF0D1B3E)
                                     )
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
                                         items(property.amenities) { amenity ->
                                             AmenityChip(amenity)
                                         }
@@ -302,10 +405,12 @@ fun PropertyDetailScreen(
                         }
                     }
 
-                    // ── House Rules ──
+                    // ── House Rules ────────────────────────────────────────
                     item {
                         Card(
-                            modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            modifier  = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
                             shape     = RoundedCornerShape(16.dp),
                             colors    = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(2.dp)
@@ -329,10 +434,12 @@ fun PropertyDetailScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // ── Location ──
+                    // ── Location ───────────────────────────────────────────
                     item {
                         Card(
-                            modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            modifier  = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
                             shape     = RoundedCornerShape(16.dp),
                             colors    = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(2.dp)
@@ -364,10 +471,12 @@ fun PropertyDetailScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // ── Reviews ──
+                    // ── Reviews ────────────────────────────────────────────
                     item {
                         Card(
-                            modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            modifier  = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
                             shape     = RoundedCornerShape(16.dp),
                             colors    = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(2.dp)
@@ -385,9 +494,15 @@ fun PropertyDetailScreen(
                                         color      = Color(0xFF0D1B3E)
                                     )
                                     TextButton(onClick = {
-                                        navController.navigate(Screen.ViewReviews.createRoute(propertyId))
+                                        navController.navigate(
+                                            Screen.ViewReviews.createRoute(propertyId)
+                                        )
                                     }) {
-                                        Text("See All", color = Color(0xFFD4AF37), fontSize = 13.sp)
+                                        Text(
+                                            "See All",
+                                            color    = Color(0xFFD4AF37),
+                                            fontSize = 13.sp
+                                        )
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -420,18 +535,15 @@ fun PropertyDetailScreen(
 
                 } // LazyColumn end
 
-                // ── Sticky Bottom Bar ──
+                // ── Sticky Bottom Bar ──────────────────────────────────────
                 Surface(
                     modifier        = Modifier.align(Alignment.BottomCenter),
                     shadowElevation = 8.dp,
                     color           = Color.White
                 ) {
                     val landlordId = property.ownerId
-
-                    // ✅ FIX: .uppercase() se compare karo — Firestore mein "TENANT"/"LANDLORD" uppercase hai
                     val isTenant   = currentUserRole.uppercase() == "TENANT"
                     val isLandlord = currentUserRole.uppercase() == "LANDLORD"
-                    // ✅ Tenant apni hi property ka landlord nahi ho sakta lekin double check ke liye
                     val isOwner    = landlordId == currentUserId
 
                     Row(
@@ -456,13 +568,17 @@ fun PropertyDetailScreen(
                             )
                         }
 
-                        // ✅ FIX: Message button — sirf TENANT ko dikhao
-                        // Landlord ID available honi chahiye aur tenant khud landlord nahi hona chahiye
+                        // ✅ FIX: Message button — ownerName + propertyId pass karo
                         if (isTenant && landlordId.isNotEmpty() && !isOwner) {
                             OutlinedButton(
                                 onClick  = {
-                                    // ✅ FIX: Chat screen pe jaao landlord ke saath
-                                    navController.navigate(Screen.Chat.createRoute(landlordId))
+                                    navController.navigate(
+                                        Screen.Chat.createRoute(
+                                            userId     = landlordId,
+                                            ownerName  = property.ownerName.ifEmpty { "Owner" },
+                                            propertyId = propertyId
+                                        )
+                                    )
                                 },
                                 modifier = Modifier.height(50.dp),
                                 shape    = RoundedCornerShape(12.dp),
@@ -477,19 +593,25 @@ fun PropertyDetailScreen(
                                     modifier           = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
+                                // ✅ FIX: "Chat" ki jagah owner ka naam
                                 Text(
-                                    "Message",
+                                    text       = property.ownerName
+                                        .ifEmpty { "Owner" }
+                                        .split(" ")
+                                        .first(),   // Sirf first name — button mein fit ho
                                     fontWeight = FontWeight.SemiBold,
-                                    fontSize   = 14.sp
+                                    fontSize   = 13.sp
                                 )
                             }
                         }
 
-                        // ✅ FIX: Book Now — sirf TENANT ko dikhao, LANDLORD ko nahi
+                        // ✅ Book Now — sirf TENANT
                         if (isTenant && !isOwner) {
                             Button(
                                 onClick  = {
-                                    navController.navigate(Screen.Booking.createRoute(propertyId))
+                                    navController.navigate(
+                                        Screen.Booking.createRoute(propertyId)
+                                    )
                                 },
                                 modifier = Modifier.height(50.dp),
                                 shape    = RoundedCornerShape(12.dp),
@@ -506,11 +628,13 @@ fun PropertyDetailScreen(
                             }
                         }
 
-                        // ✅ NEW: Landlord ko apni property ka Edit button dikhao
+                        // ✅ Edit — sirf LANDLORD + isOwner
                         if (isLandlord && isOwner) {
                             Button(
                                 onClick  = {
-                                    navController.navigate(Screen.EditProperty.createRoute(propertyId))
+                                    navController.navigate(
+                                        Screen.EditProperty.createRoute(propertyId)
+                                    )
                                 },
                                 modifier = Modifier.height(50.dp),
                                 shape    = RoundedCornerShape(12.dp),
@@ -621,4 +745,3 @@ fun getStatusLabel(status: String): String = when (status.uppercase()) {
     "MAINTENANCE" -> "Maintenance"
     else          -> status
 }
-

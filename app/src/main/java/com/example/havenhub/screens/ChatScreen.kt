@@ -19,9 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.example.havenhub.data.Message
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.MessagingViewModel
-// ✅ FIX: FirebaseAuth import — currentUserId fallback ke liye
 import com.google.firebase.auth.FirebaseAuth
 
 private val SurfaceGray = Color(0xFFF2F2F2)
@@ -31,38 +31,39 @@ private val TextHint    = Color(0xFF9E9E9E)
 @Composable
 fun ChatScreen(
     navController : NavController,
-    userId        : String = "",         // landlord/tenant ka ID (other user)
-    currentUserId : String = "",         // current logged-in user ka ID
-    chatId        : String = "",         // optional — abhi use nahi ho raha
+    userId        : String = "",
+    ownerName     : String = "Owner",   // ✅ NEW — TopBar mein dikhega
+    propertyId    : String = "",        // ✅ NEW — conversationId ke liye
+    currentUserId : String = "",
+    chatId        : String = "",
     viewModel     : MessagingViewModel = hiltViewModel()
 ) {
-    val uiState      by viewModel.uiState.collectAsState()
-    var messageText  by remember { mutableStateOf("") }
-    val listState    = rememberLazyListState()
+    val uiState     by viewModel.uiState.collectAsState()
+    var messageText by remember { mutableStateOf("") }
+    val listState   = rememberLazyListState()
 
-    // ✅ FIX: Agar NavGraph se currentUserId empty aaye to FirebaseAuth se lo
+    // ✅ FirebaseAuth fallback
     val resolvedCurrentUserId = remember(currentUserId) {
         currentUserId.ifEmpty {
             FirebaseAuth.getInstance().currentUser?.uid ?: ""
         }
     }
 
-    // ✅ FIX: initUserId + loadChat — dono resolvedCurrentUserId se chalein
+    // ✅ FIX: propertyId ke saath loadChat karo
     LaunchedEffect(userId, resolvedCurrentUserId) {
         if (resolvedCurrentUserId.isNotEmpty() && userId.isNotEmpty()) {
             viewModel.initUserId(resolvedCurrentUserId)
-            viewModel.loadChat(userId)
+            viewModel.loadChat(otherUserId = userId, propertyId = propertyId)
         }
     }
 
-    // ✅ Auto-scroll to bottom jab naye messages aayein
+    // ✅ Auto-scroll to bottom
     LaunchedEffect(uiState.messages.size) {
         if (uiState.messages.isNotEmpty()) {
             listState.animateScrollToItem(uiState.messages.size - 1)
         }
     }
 
-    // ✅ Error snackbar
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
@@ -75,7 +76,13 @@ fun ChatScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Chat", color = Color.White) },
+                // ✅ FIX: "Chat" ki jagah owner ka naam
+                title = {
+                    Text(
+                        text  = ownerName.ifEmpty { "Chat" },
+                        color = Color.White
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
@@ -110,12 +117,13 @@ fun ChatScreen(
                         )
                     )
 
-                    // ✅ FIX: userId (otherUserId) ko receiverId pass karo
+                    // ✅ FIX: propertyId bhi pass karo
                     IconButton(onClick = {
                         if (messageText.isNotBlank()) {
                             viewModel.sendMessage(
                                 receiverId = userId,
-                                content    = messageText.trim()
+                                content    = messageText.trim(),
+                                propertyId = propertyId
                             )
                             messageText = ""
                         }
@@ -149,13 +157,12 @@ fun ChatScreen(
                 }
                 else -> {
                     LazyColumn(
-                        state           = listState,
-                        modifier        = Modifier.fillMaxSize(),
-                        contentPadding  = PaddingValues(12.dp),
+                        state               = listState,
+                        modifier            = Modifier.fillMaxSize(),
+                        contentPadding      = PaddingValues(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(uiState.messages) { message ->
-                            // ✅ FIX: resolvedCurrentUserId se compare karo
                             val isMe = message.senderId == resolvedCurrentUserId
 
                             Column(
