@@ -9,13 +9,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -23,124 +27,199 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.AuthViewModel
 
-private val RSWhite    = Color(0xFFFFFFFF)
-private val RSNavy     = Color(0xFF1A2744)
-private val RSGrayText = Color(0xFF8A8F9E)
-private val RSGrayBrd  = Color(0xFFE2E6F0)
-private val RSBgLight  = Color(0xFFF4F7FB)
-private val RSRedError = Color(0xFFE53935)
+// ── Brand Colors ──────────────────────────────────────────────────────────────
+private val RS_NavyDark      = Color(0xFF0D1B3E)
+private val RS_NavyPrimary   = Color(0xFF1A2A6C)
+private val RS_GoldPrimary   = Color(0xFFC9A84C)
+private val RS_GoldLight     = Color(0xFFE8C96A)
+private val RS_GoldDark      = Color(0xFF9A7A30)
+private val RS_White         = Color(0xFFFFFFFF)
+private val RS_Surface       = Color(0xFFF4F6FB)
+private val RS_GrayText      = Color(0xFF8A94A6)
+private val RS_GrayBorder    = Color(0xFFDDE2EF)
+private val RS_ErrorRed      = Color(0xFFD94040)
 
-private val RSTenantBg     = Color(0xFFE8F4FD)
-private val RSTenantBorder = Color(0xFF4A9BB8)
-private val RSOwnerBg      = Color(0xFFE8F5E9)
-private val RSOwnerBorder  = Color(0xFF2E7D32)
-private val RSAdminBg      = Color(0xFFF3E5F5)
-private val RSAdminBorder  = Color(0xFF7B1FA2)
-private val RSBtnTeal      = Color(0xFF1A8A8A)
+// Role accent colors
+private val RS_TenantAccent   = Color(0xFF1A6FA8)
+private val RS_LandlordAccent = Color(0xFF2E7D52)
+private val RS_AdminAccent    = Color(0xFF6A3AAF)
 
 @Composable
 fun RoleSelectionScreen(
     navController: NavController,
     viewModel    : AuthViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState           by viewModel.uiState.collectAsState()
     var localSelectedRole by remember { mutableStateOf("") }
+    var visible           by remember { mutableStateOf(false) }
 
-    var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
-    val enterAlpha by animateFloatAsState(
+
+    val fadeAlpha by animateFloatAsState(
         targetValue   = if (visible) 1f else 0f,
-        animationSpec = tween(500, easing = EaseOut), label = "alpha"
+        animationSpec = tween(500, easing = EaseOut),
+        label         = "fadeAlpha"
     )
-    val enterSlide by animateFloatAsState(
-        targetValue   = if (visible) 0f else 24f,
-        animationSpec = tween(550, easing = EaseOutCubic), label = "slide"
+    val slideY by animateFloatAsState(
+        targetValue   = if (visible) 0f else 30f,
+        animationSpec = tween(550, easing = EaseOutCubic),
+        label         = "slideY"
     )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(RSBgLight)
+            .background(RS_Surface)
     ) {
         Column(
-            modifier = Modifier
+            modifier            = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(52.dp))
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // ── Top Navy Header ───────────────────────────────────────────────
+            Box(
                 modifier = Modifier
-                    .alpha(enterAlpha)
-                    .offset(y = enterSlide.dp)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(RS_NavyDark, RS_NavyPrimary),
+                            startY = 0f, endY = 500f
+                        )
+                    )
             ) {
-                Text("👋", fontSize = 32.sp)
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text       = "How will you use HavenHub?",
-                    fontSize   = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color      = RSNavy,
-                    textAlign  = TextAlign.Center,
-                    lineHeight = 26.sp
+                // Decorative ring
+                Box(
+                    modifier = Modifier
+                        .size(160.dp)
+                        .align(Alignment.TopEnd)
+                        .offset(x = 50.dp, y = (-30).dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(RS_GoldPrimary.copy(alpha = 0.12f), Color.Transparent)
+                            )
+                        )
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text       = "Select your role to get a personalized\nexperience on HavenHub",
-                    fontSize   = 13.sp,
-                    color      = RSGrayText,
-                    textAlign  = TextAlign.Center,
-                    lineHeight = 19.sp
+
+                Column(
+                    modifier            = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 28.dp, bottom = 32.dp)
+                        .graphicsLayer { alpha = fadeAlpha }
+                        .offset(y = slideY.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Brand wordmark
+                    Row {
+                        Text(
+                            "HAVEN",
+                            fontSize      = 20.sp,
+                            fontWeight    = FontWeight.Black,
+                            color         = RS_White,
+                            letterSpacing = 1.5.sp
+                        )
+                        Text(
+                            "HUB",
+                            fontSize      = 20.sp,
+                            fontWeight    = FontWeight.Black,
+                            color         = RS_GoldPrimary,
+                            letterSpacing = 1.5.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Gold accent line
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(3.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(RS_GoldDark, RS_GoldPrimary, RS_GoldLight)
+                                )
+                            )
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        "How will you use\nHavenHub?",
+                        fontSize      = 24.sp,
+                        fontWeight    = FontWeight.Black,
+                        color         = RS_White,
+                        textAlign     = TextAlign.Center,
+                        lineHeight    = 32.sp,
+                        letterSpacing = (-0.3).sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        "Select your role to get a personalized experience",
+                        fontSize   = 13.sp,
+                        color      = RS_White.copy(alpha = 0.55f),
+                        textAlign  = TextAlign.Center,
+                        lineHeight = 19.sp
+                    )
+                }
+
+                // Bottom curve
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(RS_Surface)
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
+            // ── Role Cards ────────────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .alpha(enterAlpha)
-                    .offset(y = (enterSlide * 1.2f).dp),
+                    .padding(horizontal = 20.dp)
+                    .graphicsLayer { alpha = fadeAlpha }
+                    .offset(y = slideY.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 RSRoleCard(
-                    emoji          = "🧳",
-                    title          = "Tenant / Traveler",
-                    subtitle       = "Search & book rental properties",
-                    isSelected     = localSelectedRole == "tenant",
-                    selectedBg     = RSTenantBg,
-                    selectedBorder = RSTenantBorder,
-                    onClick        = {
+                    emoji       = "🧳",
+                    title       = "Tenant / Traveler",
+                    subtitle    = "Search & book verified rental properties",
+                    isSelected  = localSelectedRole == "tenant",
+                    accentColor = RS_TenantAccent,
+                    onClick     = {
                         localSelectedRole = "tenant"
                         viewModel.onRoleSelected("tenant")
                     }
                 )
                 RSRoleCard(
-                    emoji          = "🏠",
-                    title          = "Property Owner",
-                    subtitle       = "List & manage your properties",
-                    isSelected     = localSelectedRole == "landlord",
-                    selectedBg     = RSOwnerBg,
-                    selectedBorder = RSOwnerBorder,
-                    onClick        = {
+                    emoji       = "🏠",
+                    title       = "Landlord",
+                    subtitle    = "List & manage your rental properties",
+                    isSelected  = localSelectedRole == "landlord",
+                    accentColor = RS_LandlordAccent,
+                    onClick     = {
                         localSelectedRole = "landlord"
                         viewModel.onRoleSelected("landlord")
                     }
                 )
                 RSRoleCard(
-                    emoji          = "🛡️",
-                    title          = "Admin",
-                    subtitle       = "Verify & moderate platform",
-                    isSelected     = localSelectedRole == "admin",
-                    selectedBg     = RSAdminBg,
-                    selectedBorder = RSAdminBorder,
-                    onClick        = {
+                    emoji       = "🛡️",
+                    title       = "Admin",
+                    subtitle    = "Verify & moderate the platform",
+                    isSelected  = localSelectedRole == "admin",
+                    accentColor = RS_AdminAccent,
+                    onClick     = {
                         localSelectedRole = "admin"
                         viewModel.onRoleSelected("admin")
                     }
@@ -149,17 +228,19 @@ fun RoleSelectionScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            // Error message
             uiState.errorMessage?.let {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(RSRedError.copy(alpha = 0.08f))
+                        .background(RS_ErrorRed.copy(alpha = 0.08f))
                         .padding(10.dp)
                 ) {
                     Text(
                         it,
-                        color     = RSRedError,
+                        color     = RS_ErrorRed,
                         fontSize  = 12.sp,
                         textAlign = TextAlign.Center,
                         modifier  = Modifier.fillMaxWidth()
@@ -168,33 +249,41 @@ fun RoleSelectionScreen(
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
-            // ✅ FIXED — role ke saath navigate karo
+            // ── Continue Button ───────────────────────────────────────────────
             Button(
-                onClick = {
+                onClick   = {
                     navController.navigate(Screen.SignUp.createRoute(localSelectedRole))
                 },
-                enabled  = localSelectedRole.isNotEmpty(),
-                modifier = Modifier
+                enabled   = localSelectedRole.isNotEmpty(),
+                modifier  = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
-                    .alpha(enterAlpha),
-                shape  = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
+                    .padding(horizontal = 20.dp)
+                    .height(54.dp)
+                    .graphicsLayer { alpha = fadeAlpha },
+                shape     = RoundedCornerShape(15.dp),
+                colors    = ButtonDefaults.buttonColors(
                     containerColor = when (localSelectedRole) {
-                        "landlord" -> RSOwnerBorder
-                        "admin"    -> RSAdminBorder
-                        else       -> RSBtnTeal
+                        "landlord" -> RS_LandlordAccent
+                        "admin"    -> RS_AdminAccent
+                        else       -> RS_NavyPrimary
                     },
-                    disabledContainerColor = RSGrayBrd
+                    disabledContainerColor = RS_GrayBorder
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
                 Text(
-                    text          = "Continue  →",
+                    text          = "Continue",
                     fontSize      = 15.sp,
                     fontWeight    = FontWeight.Bold,
-                    color         = RSWhite,
-                    letterSpacing = 0.3.sp
+                    color         = RS_White,
+                    letterSpacing = 0.4.sp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector        = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint               = RS_White,
+                    modifier           = Modifier.size(18.dp)
                 )
             }
 
@@ -202,12 +291,12 @@ fun RoleSelectionScreen(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier          = Modifier.alpha(enterAlpha)
+                modifier          = Modifier.graphicsLayer { alpha = fadeAlpha }
             ) {
-                Text("Already have an account? ", color = RSGrayText, fontSize = 13.sp)
+                Text("Already have an account? ", color = RS_GrayText, fontSize = 13.sp)
                 Text(
                     "Sign In",
-                    color      = RSBtnTeal,
+                    color      = RS_GoldDark,
                     fontSize   = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier   = Modifier.clickable {
@@ -223,28 +312,28 @@ fun RoleSelectionScreen(
     }
 }
 
+// ── Role Card Component ───────────────────────────────────────────────────────
 @Composable
 private fun RSRoleCard(
-    emoji          : String,
-    title          : String,
-    subtitle       : String,
-    isSelected     : Boolean,
-    selectedBg     : Color,
-    selectedBorder : Color,
-    onClick        : () -> Unit
+    emoji      : String,
+    title      : String,
+    subtitle   : String,
+    isSelected : Boolean,
+    accentColor: Color,
+    onClick    : () -> Unit
 ) {
-    val bgColor     = if (isSelected) selectedBg     else RSWhite
-    val borderColor = if (isSelected) selectedBorder else RSGrayBrd
-    val borderWidth = if (isSelected) 2.dp           else 1.dp
+    val bgColor     = if (isSelected) accentColor.copy(alpha = 0.07f) else RS_White
+    val borderColor = if (isSelected) accentColor else RS_GrayBorder
+    val borderWidth = if (isSelected) 2.dp else 1.dp
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(bgColor)
-            .border(borderWidth, borderColor, RoundedCornerShape(14.dp))
+            .border(borderWidth, borderColor, RoundedCornerShape(16.dp))
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
         Row(
             verticalAlignment     = Alignment.CenterVertically,
@@ -252,48 +341,47 @@ private fun RSRoleCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(52.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isSelected) selectedBorder.copy(alpha = 0.12f)
-                        else Color(0xFFF0F4F8)
+                        if (isSelected) accentColor.copy(alpha = 0.12f) else RS_Surface
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = emoji, fontSize = 22.sp)
+                Text(text = emoji, fontSize = 24.sp)
             }
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text       = title,
                     fontSize   = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color      = if (isSelected) selectedBorder else RSNavy
+                    fontWeight = FontWeight.ExtraBold,
+                    color      = if (isSelected) accentColor else RS_NavyDark
                 )
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text     = subtitle,
-                    fontSize = 12.sp,
-                    color    = RSGrayText,
-                    modifier = Modifier.padding(top = 2.dp)
+                    text       = subtitle,
+                    fontSize   = 12.sp,
+                    color      = RS_GrayText,
+                    lineHeight = 17.sp
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(24.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isSelected) selectedBorder
-                        else RSGrayBrd.copy(alpha = 0.6f)
+                        if (isSelected) accentColor else RS_GrayBorder.copy(alpha = 0.5f)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 if (isSelected) {
-                    Text(
-                        text       = "✓",
-                        color      = RSWhite,
-                        fontSize   = 11.sp,
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        imageVector        = Icons.Default.Check,
+                        contentDescription = null,
+                        tint               = RS_White,
+                        modifier           = Modifier.size(14.dp)
                     )
                 }
             }
