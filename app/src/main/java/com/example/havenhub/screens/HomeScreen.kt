@@ -1,6 +1,5 @@
 package com.example.havenhub.screens
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,35 +28,33 @@ import coil.compose.AsyncImage
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.utils.getPropertyImage
+import com.example.havenhub.viewmodel.HomeUiState
 import com.example.havenhub.viewmodel.HomeViewModel
+import kotlinx.coroutines.launch
+
+// ── Theme colors ─────────────────────────────────────────────────
+private val HavenDeepBlue   = Color(0xFF0D1B3E)
+private val HavenGold       = Color(0xFFD4AF37)
+private val HavenSurface    = Color(0xFFFFFFFF)
+private val HavenBackground = Color(0xFFF5F7FA)
 
 // ═══════════════════════════════════════════════════════════════════
 // HELPER: Property ke liye safe image resolve karo
 // ═══════════════════════════════════════════════════════════════════
 private fun resolveImage(property: Property): Int {
-    if (property.drawableImageName.isNotEmpty()) {
-        return getPropertyImage(property.drawableImageName)
-    }
-    if (property.resolvedDrawableName.isNotEmpty()) {
-        return getPropertyImage(property.resolvedDrawableName)
-    }
+    if (property.drawableImageName.isNotEmpty()) return getPropertyImage(property.drawableImageName)
+    if (property.resolvedDrawableName.isNotEmpty()) return getPropertyImage(property.resolvedDrawableName)
     return getPropertyImage(property.propertyId)
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// imgbb URL hai toh AsyncImage, warna local drawable
-// ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun PropertyImage(
     property    : Property,
     modifier    : Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop
 ) {
-    //val remoteUrl = property.imageUrls.firstOrNull()
-    //if (!remoteUrl.isNullOrEmpty()) {
     val remoteUrl = property.imageUrls.firstOrNull { it.isNotBlank() }
     if (!remoteUrl.isNullOrEmpty()) {
-
         AsyncImage(
             model              = remoteUrl,
             contentDescription = property.title,
@@ -76,34 +72,23 @@ private fun PropertyImage(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// MAIN ENTRY POINT — Role check + data load
-// ✅ FIX: userRole empty hone par return karo — race condition fix
+// MAIN ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 fun HomeScreen(
     navController: NavController,
-    viewModel: HomeViewModel = hiltViewModel()
+    viewModel    : HomeViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val categories = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
-    var selectedCategory by remember { mutableStateOf("All") }
+    val uiState  by viewModel.uiState.collectAsState()
+    val userId   by viewModel.userId.collectAsState()
+    val userRole by viewModel.userRole.collectAsState()
 
-    // ✅ FIX: userRole empty hone tak kuch mat karo
-    // Jab role Firebase se load hogi tab hi data fetch karega
     LaunchedEffect(userId, userRole) {
         if (userRole.isEmpty()) return@LaunchedEffect
-
         when {
-            userRole == "landlord" && userId.isNotEmpty() -> {
-                viewModel.loadLandlordStats(userId)
-            }
-            userRole != "landlord" && userId.isNotEmpty() -> {
-                viewModel.loadHomeData()
-            }
-            userRole != "landlord" -> {
-                // Guest / userId abhi nahi mila — phir bhi properties load karo
-                viewModel.loadHomeData()
-            }
+            userRole == "landlord" && userId.isNotEmpty() -> viewModel.loadLandlordStats(userId)
+            userId.isNotEmpty()                           -> viewModel.loadHomeData()
+            else                                          -> viewModel.loadHomeData()
         }
     }
 
@@ -121,325 +106,219 @@ private fun LandlordHomeScreen(
     navController: NavController,
     uiState      : HomeUiState
 ) {
+    val categories       = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
+    var selectedCategory by remember { mutableStateOf("All") }
+
     val formattedRevenue = remember(uiState.totalRevenue) {
         when {
-            uiState.totalRevenue >= 1_000_000 ->
-                "PKR %.1fM".format(uiState.totalRevenue / 1_000_000)
-            uiState.totalRevenue >= 1_000     ->
-                "PKR %.0fK".format(uiState.totalRevenue / 1_000)
-            else                              ->
-                "PKR %.0f".format(uiState.totalRevenue)
+            uiState.totalRevenue >= 1_000_000 -> "PKR %.1fM".format(uiState.totalRevenue / 1_000_000)
+            uiState.totalRevenue >= 1_000     -> "PKR %.0fK".format(uiState.totalRevenue / 1_000)
+            else                              -> "PKR %.0f".format(uiState.totalRevenue)
         }
     }
 
     Scaffold(containerColor = HavenBackground) { paddingValues ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
+            modifier       = Modifier.fillMaxSize().padding(paddingValues),
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            // ── Header ──
             item {
-                HomeHeaderSection(onSearchClick = { navController.navigate(Screen.Search.route) })
+                HomeHeaderSection(
+                    onSearchClick       = { navController.navigate(Screen.Search.route) },
+                    onNotificationClick = { navController.navigate(Screen.Notifications.route) }
+                )
             }
 
-            // ── Categories ──
             item {
                 CategorySection(
-                    categories = categories,
+                    categories       = categories,
                     selectedCategory = selectedCategory,
                     onCategorySelect = { selectedCategory = it }
                 )
             }
 
-            // ── Featured Properties ──
+            // Stats Row
             item {
-                SectionHeader("Featured Collection", "Top picks for your comfort") {
-                    navController.navigate(Screen.PropertyList.route)
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    LandlordStatChip("🏠", "Properties", "${uiState.totalProperties}", Modifier.weight(1f))
+                    LandlordStatChip("📋", "Active",     "${uiState.activeBookingsCount}", Modifier.weight(1f))
+                    LandlordStatChip(
+                        "⭐", "Rating",
+                        if (uiState.averageRating > 0f) "%.1f".format(uiState.averageRating) else "—",
+                        Modifier.weight(1f)
+                    )
                 }
+            }
 
-                when {
-                    uiState.isLoading -> LoadingShimmerRow()
-                    filteredFeatured.isEmpty() && selectedCategory != "All" -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 8.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White)
-                                .padding(20.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Notifications, null,
-                                tint     = Color(0xFFD4AF37),
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(20.dp))
-
+            // Quick Actions
+            item {
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "Quick Actions",
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 18.sp,
+                    color      = HavenDeepBlue,
+                    modifier   = Modifier.padding(horizontal = 20.dp)
+                )
+                Spacer(Modifier.height(12.dp))
+                Column(
+                    modifier            = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        LandlordStatChip(
-                            icon     = "🏠",
-                            label    = "Properties",
-                            value    = "${uiState.totalProperties}",
-                            modifier = Modifier.weight(1f)
-                        )
-                        LandlordStatChip(
-                            icon     = "📋",
-                            label    = "Active",
-                            value    = "${uiState.activeBookingsCount}",
-                            modifier = Modifier.weight(1f)
-                        )
-                        LandlordStatChip(
-                            icon     = "⭐",
-                            label    = "Rating",
-                            value    = if (uiState.averageRating > 0f)
-                                "%.1f".format(uiState.averageRating)
-                            else "—",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-
-        // ── Quick Actions — 2x2 grid ──────────────────────────────
-        item {
-            Spacer(Modifier.height(20.dp))
-            Text(
-                "Quick Actions",
-                fontWeight = FontWeight.Bold,
-                fontSize   = 18.sp,
-                color      = Color(0xFF0D1B3E),
-                modifier   = Modifier.padding(horizontal = 20.dp)
-            )
-            Spacer(Modifier.height(12.dp))
-
-            Column(
-                modifier            = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Card(
-                        modifier  = Modifier
-                            .weight(1f)
-                            .height(100.dp)
-                            .clickable { navController.navigate(Screen.AddProperty.route) },
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color(0xFF0D1B3E)),
-                        elevation = CardDefaults.cardElevation(4.dp)
-                    ) {
-                        Column(
-                            modifier            = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Card(
+                            modifier  = Modifier.weight(1f).height(100.dp)
+                                .clickable { navController.navigate(Screen.AddProperty.route) },
+                            shape     = RoundedCornerShape(16.dp),
+                            colors    = CardDefaults.cardColors(containerColor = HavenDeepBlue),
+                            elevation = CardDefaults.cardElevation(4.dp)
                         ) {
-                            Text("➕", fontSize = 22.sp)
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Add",
-                                color      = Color(0xFFD4AF37),
-                                fontWeight = FontWeight.Bold,
-                                fontSize   = 13.sp
-                            )
-                            Text("Property", color = Color.White, fontSize = 11.sp)
+                            Column(
+                                Modifier.fillMaxSize().padding(12.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("➕", fontSize = 22.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Text("Add",      color = HavenGold,  fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("Property", color = Color.White, fontSize = 11.sp)
+                            }
+                        }
+                        Card(
+                            modifier  = Modifier.weight(1f).height(100.dp),
+                            shape     = RoundedCornerShape(16.dp),
+                            colors    = CardDefaults.cardColors(containerColor = HavenGold),
+                            elevation = CardDefaults.cardElevation(4.dp)
+                        ) {
+                            Column(
+                                Modifier.fillMaxSize().padding(12.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("💰", fontSize = 22.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    formattedRevenue,
+                                    color      = HavenDeepBlue,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize   = 12.sp,
+                                    maxLines   = 1,
+                                    overflow   = TextOverflow.Ellipsis
+                                )
+                                Text("Revenue", color = HavenDeepBlue.copy(0.7f), fontSize = 11.sp)
+                            }
                         }
                     }
-
-                    Card(
-                        modifier  = Modifier
-                            .weight(1f)
-                            .height(100.dp),
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color(0xFFD4AF37)),
-                        elevation = CardDefaults.cardElevation(4.dp)
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Column(
-                            modifier            = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Card(
+                            modifier  = Modifier.weight(1f).height(100.dp)
+                                .clickable { navController.navigate(Screen.MyBookings.route) },
+                            shape     = RoundedCornerShape(16.dp),
+                            colors    = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(4.dp)
                         ) {
-                            Text("💰", fontSize = 22.sp)
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                formattedRevenue,
-                                color      = Color(0xFF0D1B3E),
-                                fontWeight = FontWeight.Bold,
-                                fontSize   = 12.sp,
-                                maxLines   = 1,
-                                overflow   = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                "Revenue",
-                                color    = Color(0xFF0D1B3E).copy(0.7f),
-                                fontSize = 11.sp
-                            )
+                            Column(
+                                Modifier.fillMaxSize().padding(12.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("📅", fontSize = 22.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Text("${uiState.activeBookingsCount}", color = HavenDeepBlue, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text("Active Bookings", color = Color(0xFF8899AA), fontSize = 10.sp)
+                            }
                         }
-                    }
-                }
-
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Card(
-                        modifier  = Modifier
-                            .weight(1f)
-                            .height(100.dp)
-                            .clickable { navController.navigate(Screen.MyBookings.route) },
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(4.dp)
-                    ) {
-                        Column(
-                            modifier            = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Card(
+                            modifier  = Modifier.weight(1f).height(100.dp)
+                                .clickable { navController.navigate(Screen.MyBookings.route) },
+                            shape     = RoundedCornerShape(16.dp),
+                            colors    = CardDefaults.cardColors(containerColor = Color(0xFFF0F4FF)),
+                            elevation = CardDefaults.cardElevation(4.dp)
                         ) {
-                            Text("📅", fontSize = 22.sp)
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "${uiState.activeBookingsCount}",
-                                color      = Color(0xFF0D1B3E),
-                                fontWeight = FontWeight.Bold,
-                                fontSize   = 18.sp
-                            )
-                            Text("Active Bookings", color = Color(0xFF8899AA), fontSize = 10.sp)
-                        }
-                    }
-
-                    Card(
-                        modifier  = Modifier
-                            .weight(1f)
-                            .height(100.dp)
-                            .clickable { navController.navigate(Screen.MyBookings.route) },
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color(0xFFF0F4FF)),
-                        elevation = CardDefaults.cardElevation(4.dp)
-                    ) {
-                        Column(
-                            modifier            = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("📋", fontSize = 22.sp)
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "${uiState.pendingRequestsCount}",
-                                color      = Color(0xFF0D1B3E),
-                                fontWeight = FontWeight.Bold,
-                                fontSize   = 18.sp
-                            )
-                            Text("Pending Req.", color = Color(0xFF8899AA), fontSize = 10.sp)
+                            Column(
+                                Modifier.fillMaxSize().padding(12.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("📋", fontSize = 22.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Text("${uiState.pendingRequestsCount}", color = HavenDeepBlue, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text("Pending Req.", color = Color(0xFF8899AA), fontSize = 10.sp)
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // ── My Properties Preview ─────────────────────────────────
-        item {
-            Spacer(Modifier.height(24.dp))
-            Row(
-                modifier              = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        "My Properties",
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 18.sp,
-                        color      = Color(0xFF0D1B3E)
-                    )
-                    Text(
-                        "Your listed properties",
-                        fontSize = 12.sp,
-                        color    = Color(0xFF8899AA)
-                    )
-                }
-                Text(
-                    "See All",
-                    fontSize   = 13.sp,
-                    color      = Color(0xFFD4AF37),
-                    fontWeight = FontWeight.SemiBold,
-                    modifier   = Modifier.clickable {
-                        navController.navigate(Screen.MyProperties.route)
-                    }
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-        }
-
-        if (uiState.isLoading) {
-            item { LoadingShimmer() }
-        } else if (uiState.featuredProperties.isEmpty()) {
+            // My Properties Header
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White)
-                        .clickable { navController.navigate(Screen.AddProperty.route) }
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
+                Spacer(Modifier.height(24.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🏠", fontSize = 40.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "No properties yet",
-                            fontWeight = FontWeight.Bold,
-                            color      = Color(0xFF0D1B3E),
-                            fontSize   = 16.sp
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Tap to add your first property",
-                            color    = Color(0xFFD4AF37),
-                            fontSize = 13.sp
-                        )
+                    Column {
+                        Text("My Properties",         fontWeight = FontWeight.Bold, fontSize = 18.sp, color = HavenDeepBlue)
+                        Text("Your listed properties", fontSize = 12.sp, color = Color(0xFF8899AA))
+                    }
+                    Text(
+                        "See All",
+                        fontSize   = 13.sp,
+                        color      = HavenGold,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier   = Modifier.clickable { navController.navigate(Screen.MyProperties.route) }
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
+            // Properties List
+            when {
+                uiState.isLoading -> item { LoadingShimmerRow() }
+                uiState.featuredProperties.isEmpty() -> item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White)
+                            .clickable { navController.navigate(Screen.AddProperty.route) }
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🏠", fontSize = 40.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Text("No properties yet", fontWeight = FontWeight.Bold, color = HavenDeepBlue, fontSize = 16.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Tap to add your first property", color = HavenGold, fontSize = 13.sp)
+                        }
+                    }
+                }
+                else -> items(uiState.featuredProperties.take(3)) { property ->
+                    NearbyPropertyCard(property) {
+                        navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId))
                     }
                 }
             }
-        } else {
-            items(uiState.featuredProperties.take(3)) { property ->
-                NearbyPropertyCard(property) {
-                    navController.navigate(
-                        Screen.PropertyDetail.createRoute(property.propertyId)
-                    )
-                }
-            }
-        }
 
-        item { Spacer(Modifier.height(16.dp)) }
+            item { Spacer(Modifier.height(16.dp)) }
+        }
     }
 }
 
-// ── Small stat chip inside landlord header ───────────────────────
+// ── Small stat chip ──────────────────────────────────────────────
 @Composable
 private fun LandlordStatChip(
     icon    : String,
@@ -450,14 +329,14 @@ private fun LandlordStatChip(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Color.White.copy(alpha = 0.12f))
+            .background(HavenDeepBlue.copy(alpha = 0.08f))
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(icon,  fontSize = 16.sp)
-            Text(value, color = Color.White,            fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Text(label, color = Color.White.copy(0.7f), fontSize = 10.sp)
+            Text(value, color = HavenDeepBlue,            fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = HavenDeepBlue.copy(0.6f), fontSize = 10.sp)
         }
     }
 }
@@ -487,7 +366,7 @@ private fun TenantHomeScreen(
             it.propertyType.equals(selectedCategory, ignoreCase = true)
         }
 
-    val filteredAll = if (selectedCategory == "All")
+    val filteredProperties = if (selectedCategory == "All")
         allProperties
     else
         allProperties.filter {
@@ -495,12 +374,10 @@ private fun TenantHomeScreen(
         }
 
     LazyColumn(
-        modifier       = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F7FA)),
+        modifier       = Modifier.fillMaxSize().background(HavenBackground),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
-        // ── Tenant Header with Search ────────────────────────────
+        // ── Header ──
         item {
             HomeHeaderSection(
                 onSearchClick       = { navController.navigate(Screen.Search.route) },
@@ -508,37 +385,24 @@ private fun TenantHomeScreen(
             )
         }
 
-        // ── Browse by Type ───────────────────────────────────────
+        // ── Browse by Type ──
         item {
             Spacer(Modifier.height(20.dp))
             Row(
-                modifier              = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(
-                        "Browse by Type",
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 18.sp,
-                        color      = Color(0xFF0D1B3E)
-                    )
-                    Text(
-                        "Find your perfect stay",
-                        fontSize = 12.sp,
-                        color    = Color(0xFF8899AA)
-                    )
+                    Text("Browse by Type",       fontWeight = FontWeight.Bold, fontSize = 18.sp, color = HavenDeepBlue)
+                    Text("Find your perfect stay", fontSize = 12.sp, color = Color(0xFF8899AA))
                 }
                 Text(
                     "See All",
                     fontSize   = 13.sp,
-                    color      = Color(0xFFD4AF37),
+                    color      = HavenGold,
                     fontWeight = FontWeight.SemiBold,
-                    modifier   = Modifier.clickable {
-                        navController.navigate(Screen.PropertyList.route)
-                    }
+                    modifier   = Modifier.clickable { navController.navigate(Screen.PropertyList.route) }
                 )
             }
             Spacer(Modifier.height(14.dp))
@@ -560,9 +424,7 @@ private fun TenantHomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier            = Modifier
                             .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                if (isSelected) Color(0xFF0D1B3E) else Color.White
-                            )
+                            .background(if (isSelected) HavenDeepBlue else Color.White)
                             .clickable { selectedCategory = category }
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
@@ -570,7 +432,7 @@ private fun TenantHomeScreen(
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text       = category,
-                            color      = if (isSelected) Color(0xFFD4AF37) else Color(0xFF0D1B3E),
+                            color      = if (isSelected) HavenGold else HavenDeepBlue,
                             fontSize   = 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         )
@@ -579,24 +441,17 @@ private fun TenantHomeScreen(
             }
         }
 
-        // ── Featured Properties ──────────────────────────────────
+        // ── Featured Properties ──
         item {
             Spacer(Modifier.height(28.dp))
             Row(
-                modifier              = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(
-                        "Featured Properties",
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 18.sp,
-                        color      = Color(0xFF0D1B3E)
-                    )
-                    Text("Handpicked for you", fontSize = 12.sp, color = Color(0xFF8899AA))
+                    Text("Featured Properties", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = HavenDeepBlue)
+                    Text("Handpicked for you",  fontSize = 12.sp, color = Color(0xFF8899AA))
                 }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -606,10 +461,7 @@ private fun TenantHomeScreen(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(
-                                if (featuredScrollState.value > 0)
-                                    Color(0xFF0D1B3E) else Color(0xFFE0E0E0)
-                            )
+                            .background(if (featuredScrollState.value > 0) HavenDeepBlue else Color(0xFFE0E0E0))
                             .clickable {
                                 scope.launch {
                                     featuredScrollState.animateScrollTo(
@@ -627,7 +479,7 @@ private fun TenantHomeScreen(
                             .clip(CircleShape)
                             .background(
                                 if (featuredScrollState.value < featuredScrollState.maxValue)
-                                    Color(0xFF0D1B3E) else Color(0xFFE0E0E0)
+                                    HavenDeepBlue else Color(0xFFE0E0E0)
                             )
                             .clickable {
                                 scope.launch {
@@ -657,7 +509,7 @@ private fun TenantHomeScreen(
                     )
                 }
 
-                filteredFeatured.isEmpty() && selectedCategory != "All" -> {
+                filteredFeatured.isEmpty() -> {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -671,24 +523,12 @@ private fun TenantHomeScreen(
                             Text("🏠", fontSize = 32.sp)
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "No featured $selectedCategory properties",
-                                color = Color.Gray,
+                                if (selectedCategory == "All") "No featured properties"
+                                else "No featured $selectedCategory properties",
+                                color    = Color.Gray,
                                 fontSize = 13.sp
                             )
                         }
-                    }
-                }
-
-                filteredFeatured.isEmpty() -> {
-                    Box(
-                        modifier         = Modifier.fillMaxWidth().padding(20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "No featured properties",
-                            color    = Color(0xFF8899AA),
-                            fontSize = 14.sp
-                        )
                     }
                 }
 
@@ -707,7 +547,7 @@ private fun TenantHomeScreen(
                                 )
                             }
                         }
-                        // See All Card
+                        // See All card
                         Card(
                             modifier  = Modifier
                                 .width(160.dp)
@@ -717,71 +557,49 @@ private fun TenantHomeScreen(
                             colors    = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(6.dp)
                         ) {
-                            Text("No featured properties", color = Color.Gray, fontSize = 14.sp)
-                        }
-                    }
-                    else -> {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 24.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            items(filteredFeatured) { property ->
-                                FeaturedPropertyCard(property) {
-                                    navController.navigate(
-                                        Screen.PropertyDetail.createRoute(property.propertyId)
-                                    )
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("→", fontSize = 28.sp, color = HavenGold)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text("See All", color = HavenDeepBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 }
                             }
                         }
                     }
                 }
             }
+        }
 
-            // ── Vacation Banner ──
-            item {
-                Box(
-                    modifier         = Modifier
-                        .fillMaxWidth()
-                        .padding(40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🔍", fontSize = 40.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            if (selectedCategory == "All") "No properties found"
-                            else "No $selectedCategory properties found",
-                            color    = Color(0xFF8899AA),
-                            fontSize = 14.sp
+        // ── Vacation Banner ✅ FIX: VacationRentals route ──
+        item {
+            VacationPromoBanner {
+                navController.navigate(Screen.VacationRentals.route)  // ✅ FIXED
+            }
+        }
+
+        // ── All Properties ──
+        item {
+            SectionHeader(
+                title    = if (selectedCategory == "All") "All Properties" else "$selectedCategory Properties",
+                subtitle = "${filteredProperties.size} properties available"
+            ) {
+                navController.navigate(Screen.PropertyList.route)
+            }
+        }
+
+        when {
+            uiState.isLoading -> {
+                items(3) { LoadingShimmerCard() }
+            }
+            filteredProperties.isEmpty() -> {
+                item { EmptyStateView(selectedCategory) }
+            }
+            else -> {
+                items(filteredProperties) { property ->
+                    NearbyPropertyCard(property) {
+                        navController.navigate(
+                            Screen.PropertyDetail.createRoute(property.propertyId)
                         )
-                    }
-                }
-            }
-
-            // ── All Properties ──
-            item {
-                SectionHeader(
-                    title = if (selectedCategory == "All") "All Properties" else "$selectedCategory Properties",
-                    subtitle = "${filteredProperties.size} properties available"
-                ) {
-                    navController.navigate(Screen.PropertyList.route)
-                }
-            }
-
-            when {
-                uiState.isLoading -> {
-                    items(3) { LoadingShimmerCard() }
-                }
-                filteredProperties.isEmpty() -> {
-                    item { EmptyStateView(selectedCategory) }
-                }
-                else -> {
-                    items(filteredProperties) { property ->
-                        NearbyPropertyCard(property) {
-                            navController.navigate(
-                                Screen.PropertyDetail.createRoute(property.propertyId)
-                            )
-                        }
                     }
                 }
             }
@@ -789,8 +607,14 @@ private fun TenantHomeScreen(
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SHARED COMPOSABLES
+// ═══════════════════════════════════════════════════════════════════
 @Composable
-fun HomeHeaderSection(onSearchClick: () -> Unit) {
+fun HomeHeaderSection(
+    onSearchClick      : () -> Unit,
+    onNotificationClick: () -> Unit = {}
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -801,32 +625,28 @@ fun HomeHeaderSection(onSearchClick: () -> Unit) {
         Column {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("Explore Pakistan", color = HavenGold, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Text("Find Your Haven", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text("Explore Pakistan", color = HavenGold,  fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("Find Your Haven",  color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black)
                 }
                 Surface(color = Color.White.copy(0.15f), shape = CircleShape) {
                     Icon(
                         Icons.Default.Notifications,
                         null,
-                        tint = HavenGold,
-                        modifier = Modifier.padding(10.dp)
+                        tint     = HavenGold,
+                        modifier = Modifier
+                            .padding(10.dp)
+                            .clickable { onNotificationClick() }
                     )
                 }
             }
             Spacer(Modifier.height(24.dp))
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .clickable { onSearchClick() },
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White,
+                modifier        = Modifier.fillMaxWidth().height(56.dp).clickable { onSearchClick() },
+                shape           = RoundedCornerShape(16.dp),
+                color           = Color.White,
                 shadowElevation = 8.dp
             ) {
-                Row(
-                    Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Search, null, tint = HavenGold)
                     Spacer(Modifier.width(12.dp))
                     Text("Where do you want to stay?", color = Color.Gray, fontSize = 14.sp)
@@ -836,105 +656,62 @@ fun HomeHeaderSection(onSearchClick: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// FEATURED PROPERTY CARD
-// ─────────────────────────────────────────────────────────────────
 @Composable
 fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.width(280.dp).clickable { onClick() },
-        shape = RoundedCornerShape(24.dp),
+        modifier  = Modifier.width(280.dp).clickable { onClick() },
+        shape     = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(4.dp),
-        colors = CardDefaults.cardColors(containerColor = HavenSurface)
+        colors    = CardDefaults.cardColors(containerColor = HavenSurface)
     ) {
         Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(165.dp)
-            ) {
-                PropertyImage(
-                    property     = property,
-                    modifier     = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+            Box(Modifier.fillMaxWidth().height(165.dp)) {
+                PropertyImage(property = property, modifier = Modifier.fillMaxSize())
                 Surface(
-                    modifier = Modifier
-                        .padding(12.dp)
-                        .align(Alignment.TopEnd),
-                    color = Color.Black.copy(0.5f),
-                    shape = RoundedCornerShape(8.dp)
+                    modifier = Modifier.padding(12.dp).align(Alignment.TopEnd),
+                    color    = Color.Black.copy(0.5f),
+                    shape    = RoundedCornerShape(8.dp)
                 ) {
-                    Row(
-                        Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Star, null, tint = HavenGold, modifier = Modifier.size(14.dp))
-                        Text(
-                            " ${property.averageRating}",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(" ${property.averageRating}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                // Price badge
                 Surface(
-                    modifier = Modifier
-                        .padding(12.dp)
-                        .align(Alignment.TopStart),
-                    color = HavenGold,
-                    shape = RoundedCornerShape(8.dp)
+                    modifier = Modifier.padding(12.dp).align(Alignment.TopStart),
+                    color    = HavenGold,
+                    shape    = RoundedCornerShape(8.dp)
                 ) {
                     Text(
                         property.formattedPrice,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = HavenDeepBlue,
-                        fontSize = 11.sp,
+                        modifier   = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color      = HavenDeepBlue,
+                        fontSize   = 11.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
-                // Type badge
                 Surface(
-                    modifier = Modifier
-                        .padding(12.dp)
-                        .align(Alignment.BottomStart),
-                    color = HavenDeepBlue.copy(0.85f),
-                    shape = RoundedCornerShape(6.dp)
+                    modifier = Modifier.padding(12.dp).align(Alignment.BottomStart),
+                    color    = HavenDeepBlue.copy(0.85f),
+                    shape    = RoundedCornerShape(6.dp)
                 ) {
                     Text(
                         property.propertyTypeEnum.displayName(),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = HavenGold,
-                        fontSize = 10.sp,
+                        modifier   = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color      = HavenGold,
+                        fontSize   = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
             Column(Modifier.padding(16.dp)) {
-                Text(
-                    text = property.title,
-                    color = HavenDeepBlue,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(property.title, color = HavenDeepBlue, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.LocationOn,
-                        null,
-                        tint = HavenGold,
-                        modifier = Modifier.size(13.dp)
-                    )
+                    Icon(Icons.Default.LocationOn, null, tint = HavenGold, modifier = Modifier.size(13.dp))
                     Text(" ${property.city}", color = Color.Gray, fontSize = 13.sp)
                 }
                 Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.KingBed, null, tint = Color.Gray, modifier = Modifier.size(13.dp))
                         Text(" ${property.bedrooms} beds", color = Color.Gray, fontSize = 12.sp)
@@ -943,15 +720,12 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
                         Text(" ${property.maxGuests}", color = Color.Gray, fontSize = 12.sp)
                     }
                     if (property.isAvailable) {
-                        Surface(
-                            color = Color(0xFF4CAF50).copy(0.1f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
+                        Surface(color = Color(0xFF4CAF50).copy(0.1f), shape = RoundedCornerShape(6.dp)) {
                             Text(
                                 "Available",
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                color = Color(0xFF4CAF50),
-                                fontSize = 10.sp,
+                                modifier   = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                color      = Color(0xFF4CAF50),
+                                fontSize   = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -962,71 +736,36 @@ fun FeaturedPropertyCard(property: Property, onClick: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// NEARBY / ALL PROPERTY CARD
-// ─────────────────────────────────────────────────────────────────
 @Composable
 fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 6.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = HavenSurface),
+        modifier  = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp).clickable { onClick() },
+        shape     = RoundedCornerShape(20.dp),
+        colors    = CardDefaults.cardColors(containerColor = HavenSurface),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        Row(
-            modifier          = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(12.dp))
-            ) {
-                PropertyImage(
-                    property     = property,
-                    modifier     = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(100.dp).clip(RoundedCornerShape(12.dp))) {
+                PropertyImage(property = property, modifier = Modifier.fillMaxSize())
                 if (property.isAvailable) {
                     Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(6.dp)
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF4CAF50))
+                        Modifier.align(Alignment.TopStart).padding(6.dp)
+                            .size(8.dp).clip(CircleShape).background(Color(0xFF4CAF50))
                     )
                 }
             }
-            Column(
-                Modifier
-                    .padding(start = 14.dp)
-                    .weight(1f)
-            ) {
-                Text(
-                    text = property.title,
-                    color = HavenDeepBlue,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Column(Modifier.padding(start = 14.dp).weight(1f)) {
+                Text(property.title, color = HavenDeepBlue, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, null, tint = HavenGold, modifier = Modifier.size(12.dp))
                     Text(" ${property.city}", color = Color.Gray, fontSize = 12.sp)
                     Spacer(Modifier.width(8.dp))
-                    Surface(
-                        color = HavenDeepBlue.copy(0.08f),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
+                    Surface(color = HavenDeepBlue.copy(0.08f), shape = RoundedCornerShape(4.dp)) {
                         Text(
                             property.propertyTypeEnum.displayName(),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            fontSize = 10.sp,
-                            color = HavenDeepBlue,
+                            modifier   = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            fontSize   = 10.sp,
+                            color      = HavenDeepBlue,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -1041,30 +780,20 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "${property.formattedPrice}/night",
-                        fontWeight = FontWeight.ExtraBold,
-                        color = HavenDeepBlue,
-                        fontSize = 14.sp
-                    )
+                    Text("${property.formattedPrice}/night", fontWeight = FontWeight.ExtraBold, color = HavenDeepBlue, fontSize = 14.sp)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
+                        modifier          = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFFFFF8E1))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Icon(Icons.Default.Star, null, tint = HavenGold, modifier = Modifier.size(12.dp))
-                        Text(
-                            " ${property.averageRating}",
-                            fontSize = 12.sp,
-                            color = HavenDeepBlue,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(" ${property.averageRating}", fontSize = 12.sp, color = HavenDeepBlue, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1072,53 +801,43 @@ fun NearbyPropertyCard(property: Property, onClick: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// LOADING SHIMMER
-// ─────────────────────────────────────────────────────────────────
 @Composable
 fun SectionHeader(title: String, subtitle: String, onSeeAll: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 12.dp),
+        modifier              = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom
+        verticalAlignment     = Alignment.Bottom
     ) {
         Column {
-            Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = HavenDeepBlue)
+            Text(title,    fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = HavenDeepBlue)
             Text(subtitle, fontSize = 12.sp, color = Color.Gray)
         }
-        Text(
-            "See All",
-            color = HavenGold,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.clickable { onSeeAll() }
-        )
+        Text("See All", color = HavenGold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSeeAll() })
     }
 }
 
 @Composable
 fun CategorySection(
-    categories: List<String>,
+    categories      : List<String>,
     selectedCategory: String,
     onCategorySelect: (String) -> Unit
 ) {
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+        contentPadding        = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         items(categories) { cat ->
             val isSelected = cat == selectedCategory
             Surface(
                 modifier = Modifier.clickable { onCategorySelect(cat) },
-                color = if (isSelected) HavenDeepBlue else Color.White,
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, if (isSelected) HavenDeepBlue else Color.LightGray.copy(0.5f))
+                color    = if (isSelected) HavenDeepBlue else Color.White,
+                shape    = RoundedCornerShape(12.dp),
+                border   = BorderStroke(1.dp, if (isSelected) HavenDeepBlue else Color.LightGray.copy(0.5f))
             ) {
                 Text(
                     cat,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    color = if (isSelected) HavenGold else HavenDeepBlue,
+                    modifier   = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    color      = if (isSelected) HavenGold else HavenDeepBlue,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -1126,26 +845,39 @@ fun CategorySection(
     }
 }
 
+// ✅ VacationPromoBanner — onClick caller se aata hai, yahan koi hardcoded route nahi
 @Composable
 fun VacationPromoBanner(onClick: () -> Unit) {
     Card(
-        modifier = Modifier
+        modifier  = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 8.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = HavenDeepBlue)
+        shape     = RoundedCornerShape(24.dp),
+        colors    = CardDefaults.cardColors(containerColor = HavenDeepBlue)
     ) {
         Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("VACATION HUB", color = HavenGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Text("Explore Northern Stays", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                Text("VACATION HUB",               color = HavenGold,            fontWeight = FontWeight.Bold,  fontSize = 12.sp)
+                Text("Explore Northern Stays",      color = Color.White,          fontSize   = 18.sp,            fontWeight = FontWeight.Black)
                 Spacer(Modifier.height(4.dp))
                 Text("Hunza • Swat • Murree • Naran", color = Color.White.copy(0.7f), fontSize = 12.sp)
             }
             Text("🏔️", fontSize = 40.sp)
         }
     }
+}
+
+@Composable
+fun LoadingShimmer() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .height(220.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.LightGray.copy(0.3f))
+    )
 }
 
 @Composable
@@ -1175,33 +907,16 @@ fun LoadingShimmerRow() {
 @Composable
 fun EmptyStateView(category: String) {
     Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(60.dp),
+        Modifier.fillMaxWidth().padding(60.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("🏢", fontSize = 60.sp)
         Spacer(Modifier.height(8.dp))
         Text(
             "No $category properties yet",
-            color = Color.Gray,
+            color      = Color.Gray,
             fontWeight = FontWeight.Medium,
-            fontSize = 15.sp
+            fontSize   = 15.sp
         )
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -41,40 +41,42 @@ class FirebaseDataManager @Inject constructor(
         return try {
             Property(
                 propertyId        = doc.id,
-                ownerId           = doc.getString("ownerId") ?: "",
-                ownerName         = doc.getString("ownerName") ?: "",
-                title             = doc.getString("title") ?: "",
-                description       = doc.getString("description") ?: "",
-                propertyType      = doc.getString("propertyType") ?: "APARTMENT",
-                status            = doc.getString("status") ?: "PENDING",
-                address           = doc.getString("address") ?: "",
-                city              = doc.getString("city") ?: "",
-                pricePerNight     = doc.getDouble("pricePerNight") ?: 0.0,
+                ownerId           = doc.getString("ownerId")           ?: "",
+                ownerName         = doc.getString("ownerName")         ?: "",
+                title             = doc.getString("title")             ?: "",
+                description       = doc.getString("description")       ?: "",
+                propertyType      = doc.getString("propertyType")      ?: "APARTMENT",
+                status            = doc.getString("status")            ?: "PENDING",
+                address           = doc.getString("address")           ?: "",
+                city              = doc.getString("city")              ?: "",
+                pricePerNight     = doc.getDouble("pricePerNight")     ?: 0.0,
                 pricePerMonth     = doc.getDouble("pricePerMonth"),
                 pricePerWeek      = doc.getDouble("pricePerWeek"),
-                securityDeposit   = doc.getDouble("securityDeposit") ?: 0.0,
-                bedrooms          = (doc.getLong("bedrooms") ?: 1L).toInt(),
-                bathrooms         = (doc.getLong("bathrooms") ?: 1L).toInt(),
-                maxGuests         = (doc.getLong("maxGuests") ?: 2L).toInt(),
+                securityDeposit   = doc.getDouble("securityDeposit")   ?: 0.0,
+                bedrooms          = (doc.getLong("bedrooms")           ?: 1L).toInt(),
+                bathrooms         = (doc.getLong("bathrooms")          ?: 1L).toInt(),
+                maxGuests         = (doc.getLong("maxGuests")          ?: 2L).toInt(),
                 areaSqFt          = doc.getDouble("areaSqFt"),
                 floor             = doc.getLong("floor")?.toInt(),
                 imageUrls         = (doc.get("imageUrls") as? List<*>)
-                    ?.filterIsInstance<String>() ?: emptyList(),
-                pt1DocumentUrl    = doc.getString("pt1DocumentUrl") ?: "",
+                    ?.filterIsInstance<String>()   ?: emptyList(),
+                pt1DocumentUrl    = doc.getString("pt1DocumentUrl")    ?: "",
                 amenities         = (doc.get("amenities") as? List<*>)
-                    ?.filterIsInstance<String>() ?: emptyList(),
+                    ?.filterIsInstance<String>()   ?: emptyList(),
                 drawableImageName = doc.getString("drawableImageName") ?: "",
-                petsAllowed       = doc.getBoolean("petsAllowed") ?: false,
-                smokingAllowed    = doc.getBoolean("smokingAllowed") ?: false,
-                partiesAllowed    = doc.getBoolean("partiesAllowed") ?: false,
-                checkInTime       = doc.getString("checkInTime") ?: "14:00",
-                checkOutTime      = doc.getString("checkOutTime") ?: "11:00",
-                minNights         = (doc.getLong("minNights") ?: 1L).toInt(),
-                averageRating     = (doc.getDouble("averageRating") ?: 0.0).toFloat(),
-                reviewCount       = (doc.getLong("reviewCount") ?: 0L).toInt(),
-                adminNote         = doc.getString("adminNote") ?: "",
-                isAvailable       = doc.getBoolean("isAvailable") ?: true,
-                isFeatured        = doc.getBoolean("isFeatured") ?: false,
+                petsAllowed       = doc.getBoolean("petsAllowed")      ?: false,
+                smokingAllowed    = doc.getBoolean("smokingAllowed")   ?: false,
+                partiesAllowed    = doc.getBoolean("partiesAllowed")   ?: false,
+                checkInTime       = doc.getString("checkInTime")       ?: "14:00",
+                checkOutTime      = doc.getString("checkOutTime")      ?: "11:00",
+                minNights         = (doc.getLong("minNights")          ?: 1L).toInt(),
+                averageRating     = (doc.getDouble("averageRating")    ?: 0.0).toFloat(),
+                reviewCount       = (doc.getLong("reviewCount")        ?: 0L).toInt(),
+                adminNote         = doc.getString("adminNote")         ?: "",
+                // ✅ FIX: Constructor mein 'available' aur 'featured' hain
+                //         'isAvailable' aur 'isFeatured' sirf @Exclude getters hain
+                available         = doc.getBoolean("isAvailable")      ?: true,
+                featured          = doc.getBoolean("isFeatured")       ?: false,
                 createdAt         = doc.getTimestamp("createdAt"),
                 updatedAt         = extractUpdatedAt(doc)
             )
@@ -97,7 +99,7 @@ class FirebaseDataManager @Inject constructor(
     suspend fun getUser(uid: String): Resource<User> {
         return try {
             val snapshot = usersCollection.document(uid).get().await()
-            val user = snapshot.toObject(User::class.java)
+            val user     = snapshot.toObject(User::class.java)
                 ?: return Resource.Error("User not found")
             Resource.Success(user)
         } catch (e: Exception) {
@@ -136,44 +138,36 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ✅ FIX: toObject() hata diya — manual parseProperty() use karo
-    // Ab koi bhi missing field crash/skip nahi karega
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
-            val snapshot = propertiesCollection.get().await()
-
-            val properties = snapshot.documents.mapNotNull { doc ->
-                parseProperty(doc)
-            }.sortedByDescending { it.createdAt?.seconds ?: 0L }
-
+            val snapshot   = propertiesCollection.get().await()
+            val properties = snapshot.documents
+                .mapNotNull { doc -> parseProperty(doc) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
             Resource.Success(properties)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch properties")
         }
     }
 
-    // ✅ FIX: getPropertiesByOwner mein bhi manual parse
     suspend fun getPropertiesByOwner(ownerId: String): Resource<List<Property>> {
         return try {
-            val snapshot = propertiesCollection
+            val snapshot   = propertiesCollection
                 .whereEqualTo("ownerId", ownerId)
                 .get()
                 .await()
-
-            val properties = snapshot.documents.mapNotNull { doc ->
-                parseProperty(doc)
-            }.sortedByDescending { it.createdAt?.seconds ?: 0L }
-
+            val properties = snapshot.documents
+                .mapNotNull { doc -> parseProperty(doc) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
             Resource.Success(properties)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch owner properties")
         }
     }
 
-    // ✅ FIX: getPropertyById mein bhi manual parse
     suspend fun getPropertyById(propertyId: String): Resource<Property> {
         return try {
-            val doc = propertiesCollection.document(propertyId).get().await()
+            val doc      = propertiesCollection.document(propertyId).get().await()
             val property = parseProperty(doc)
                 ?: return Resource.Error("Property not found")
             Resource.Success(property)

@@ -37,7 +37,7 @@ data class Property(
     val pt1DocumentUrl: String = "",
     val amenities: List<String> = emptyList(),
 
-    // ✅ NEW: Drawable image name field (Firestore se aayega)
+    // ✅ Drawable image name field (Firestore se aayega)
     val drawableImageName: String = "",
 
     val petsAllowed: Boolean = false,
@@ -53,12 +53,12 @@ data class Property(
 
     val adminNote: String = "",
 
-    // ✅ Firestore mein "isAvailable" field hai, isliye yahan mapping zaruri hai
+    // ✅ Firestore mein "isAvailable" field hai
     @get:PropertyName("isAvailable")
     @set:PropertyName("isAvailable")
     var available: Boolean = true,
 
-    // ✅ Firestore mein "isFeatured" field hai, isliye yahan mapping zaruri hai
+    // ✅ Firestore mein "isFeatured" field hai
     @get:PropertyName("isFeatured")
     @set:PropertyName("isFeatured")
     var featured: Boolean = false,
@@ -72,7 +72,7 @@ data class Property(
     // Firestore serialization ke liye empty constructor
     constructor() : this(propertyId = "")
 
-    // --- UI Helpers (Marked @Exclude so Firestore doesn't try to save them) ---
+    // --- UI Helpers (@Exclude so Firestore doesn't try to save them) ---
 
     @get:Exclude
     val coverImageUrl: String get() = imageUrls.firstOrNull() ?: ""
@@ -80,34 +80,39 @@ data class Property(
     @get:Exclude
     val formattedPrice: String get() = "PKR ${"%,.0f".format(pricePerNight)}"
 
+    // ✅ isAvailable — 'available' backing field ka clean getter
     @get:Exclude
     val isAvailable: Boolean get() = available
 
+    // ✅ isFeatured — 'featured' backing field ka clean getter
+    //    HomeViewModel mein `it.isFeatured` yahi use karta hai
+    @get:Exclude
+    val isFeatured: Boolean get() = featured
+
     val hasPt1Document: Boolean get() = pt1DocumentUrl.isNotBlank()
 
-    // ✅ NEW: Auto drawable resolve — agar drawableImageName empty ho
-    // toh city aur propertyType se guess karo
+    // ✅ Auto drawable resolve — agar drawableImageName empty ho
+    //    toh city aur propertyType se guess karo
     val resolvedDrawableName: String
-
         get() {
             if (drawableImageName.isNotEmpty()) return drawableImageName
-            // City + Type se match karo
             val c = city.lowercase().trim()
             val t = propertyType.lowercase().trim()
             return when {
-                c.contains("lahore")     && t == "apartment"  -> "apartment_lahore"
-                c.contains("rawalpindi") && t == "apartment"  -> "apartment_rawalpindi"
-                c.contains("karachi")    && t == "house"      -> "house_karachi"
-                c.contains("kaghan")                          -> "house_kaghanvalley"
-                c.contains("hunza")                           -> "hunza_farmhouse"
-                c.contains("naran")                           -> "naran_farmhouse"
-                c.contains("skardu")                          -> "skardu"
-                c.contains("swat")       && t == "villa"      -> "swat_villa"
-                c.contains("murree")     || c.contains("murri") -> "vila_murree"
-                c.contains("islamabad")  && t == "room"       -> "room_islamabad"
-                c.contains("sialkot")    && t == "room"       -> "room_sialkot"
-                c.contains("faisalabad") && t == "studio"     -> "studio_faisalabad"
-                else                                          -> ""
+                c.contains("lahore")       && t == "apartment" -> "apartment_lahore"
+                c.contains("rawalpindi")   && t == "apartment" -> "apartment_rawalpindi"
+                c.contains("karachi")      && t == "house"     -> "house_karachi"
+                c.contains("kaghan")                           -> "house_kaghanvalley"
+                c.contains("hunza")                            -> "hunza_farmhouse"
+                c.contains("naran")                            -> "naran_farmhouse"
+                c.contains("skardu")                           -> "skardu"
+                c.contains("swat")         && t == "villa"     -> "swat_villa"
+                c.contains("murree")
+                        || c.contains("murri")                     -> "vila_murree"
+                c.contains("islamabad")    && t == "room"      -> "room_islamabad"
+                c.contains("sialkot")      && t == "room"      -> "room_sialkot"
+                c.contains("faisalabad")   && t == "studio"    -> "studio_faisalabad"
+                else                                           -> ""
             }
         }
 

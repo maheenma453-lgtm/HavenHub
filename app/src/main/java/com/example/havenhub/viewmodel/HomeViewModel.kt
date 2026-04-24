@@ -8,12 +8,15 @@ import com.example.havenhub.repository.BookingRepository
 import com.example.havenhub.repository.PaymentRepository
 import com.example.havenhub.repository.PropertyRepository
 import com.example.havenhub.utils.Resource
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class HomeUiState(
@@ -39,6 +42,48 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    // ✅ userId aur userRole — HomeScreen inhe collect karega
+    private val _userId   = MutableStateFlow("")
+    val userId: StateFlow<String> = _userId.asStateFlow()
+
+    private val _userRole = MutableStateFlow("")
+    val userRole: StateFlow<String> = _userRole.asStateFlow()
+
+    init {
+        loadUserInfo()
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Firebase se userId aur userRole fetch karo
+    // ─────────────────────────────────────────────────────────────
+    private fun loadUserInfo() {
+        viewModelScope.launch {
+            try {
+                val firebaseUser = FirebaseAuth.getInstance().currentUser
+                if (firebaseUser == null) {
+                    _userId.value   = ""
+                    _userRole.value = "tenant" // guest = tenant view
+                    return@launch
+                }
+
+                _userId.value = firebaseUser.uid
+
+                // Firestore se role fetch karo
+                val doc = FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(firebaseUser.uid)
+                    .get()
+                    .await()
+
+                _userRole.value = doc.getString("role") ?: "tenant"
+
+            } catch (e: Exception) {
+                _userId.value   = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                _userRole.value = "tenant"
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // TENANT: Saari approved properties load karo
     // ─────────────────────────────────────────────────────────────
@@ -46,8 +91,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-
-                // Featured properties
                 val featuredResult = propertyRepository.getFeaturedProperties()
                 val featured: List<Property> = when (featuredResult) {
                     is Resource.Success -> featuredResult.data
@@ -55,7 +98,6 @@ class HomeViewModel @Inject constructor(
                     Resource.Loading    -> emptyList()
                 }
 
-                // Nearby = saari approved
                 val nearbyResult = propertyRepository.getNearbyProperties()
                 val nearby: List<Property> = when (nearbyResult) {
                     is Resource.Success -> nearbyResult.data
@@ -63,10 +105,8 @@ class HomeViewModel @Inject constructor(
                     Resource.Loading    -> emptyList()
                 }
 
-                // Merge — deduplicate by propertyId
                 val combined = (featured + nearby).distinctBy { it.propertyId }
 
-                // Agar dono empty hain — getAllProperties fallback
                 val finalAll     : List<Property>
                 val finalFeatured: List<Property>
                 val finalNearby  : List<Property>
@@ -116,7 +156,6 @@ class HomeViewModel @Inject constructor(
     fun loadLandlordStats(landlordId: String) {
         viewModelScope.launch {
             try {
-                // Landlord ki apni properties
                 val propertiesResult = propertyRepository.getMyProperties(landlordId)
                 val properties: List<Property> = when (propertiesResult) {
                     is Resource.Success -> propertiesResult.data
@@ -128,12 +167,10 @@ class HomeViewModel @Inject constructor(
                     properties.map { it.averageRating }.average().toFloat()
                 else 0f
 
-                // Bookings
                 val bookings     = bookingRepository.getLandlordBookings(landlordId)
                 val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
                 val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
-                // Revenue
                 val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
                 val revenue: Double = when (paymentsResult) {
                     is Resource.Success -> paymentsResult.data.sumOf { it.amount }
@@ -153,7 +190,7 @@ class HomeViewModel @Inject constructor(
                 }
 
             } catch (e: Exception) {
-                // Silent fail — stats na aayein toh crash mat karo
+                // Silent fail
             }
         }
     }
