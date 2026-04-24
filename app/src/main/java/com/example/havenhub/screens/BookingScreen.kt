@@ -112,6 +112,7 @@ fun BookingScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("Complete Booking", fontWeight = FontWeight.Bold) },
@@ -131,7 +132,7 @@ fun BookingScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(top = paddingValues.calculateTopPadding())
                 .background(Color(0xFFF5F7FA))
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
@@ -241,7 +242,7 @@ fun BookingScreen(
                         }
                     }
 
-                    // ── Nights & Guests ──
+                    // ── Stay Details (Updated with better visibility) ──
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -250,45 +251,27 @@ fun BookingScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Stay Details", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Number of Nights", fontSize = 14.sp, color = Color(0xFF0D1B3E))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = { if (nights > 1) nights-- },
-                                        modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF5F7FA))
-                                    ) { Icon(Icons.Default.Remove, null, modifier = Modifier.size(16.dp)) }
-                                    Text("$nights", fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp), color = Color(0xFF0D1B3E))
-                                    IconButton(
-                                        onClick = { nights++ },
-                                        modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF5F7FA))
-                                    ) { Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp)) }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Number of Guests", fontSize = 14.sp, color = Color(0xFF0D1B3E))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = { if (guests > 1) guests-- },
-                                        modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF5F7FA))
-                                    ) { Icon(Icons.Default.Remove, null, modifier = Modifier.size(16.dp)) }
-                                    Text("$guests", fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp), color = Color(0xFF0D1B3E))
-                                    IconButton(
-                                        onClick = { if (guests < property.maxGuests) guests++ },
-                                        modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF5F7FA))
-                                    ) { Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp)) }
-                                }
-                            }
-                            Text("Max ${property.maxGuests} guests allowed", fontSize = 12.sp, color = Color(0xFF8899AA), modifier = Modifier.padding(top = 4.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Nights Selector
+                            CounterRow(
+                                label = "Number of Nights",
+                                count = nights,
+                                onDecrement = { if (nights > 1) nights-- },
+                                onIncrement = { nights++ }
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Guests Selector
+                            CounterRow(
+                                label = "Number of Guests",
+                                count = guests,
+                                onDecrement = { if (guests > 1) guests-- },
+                                onIncrement = { if (guests < property.maxGuests) guests++ }
+                            )
+
+                            Text("Max ${property.maxGuests} guests allowed", fontSize = 12.sp, color = Color(0xFF8899AA), modifier = Modifier.padding(top = 8.dp))
                         }
                     }
 
@@ -354,7 +337,9 @@ fun BookingScreen(
                         }
                     }
 
-                    // ── Confirm Button ──
+                    // ── Confirm Button (Updated Colors) ──
+                    val isFormComplete = checkInDate.isNotEmpty() && checkOutDate.isNotEmpty()
+
                     Button(
                         onClick = {
                             val booking = Booking(
@@ -379,14 +364,19 @@ fun BookingScreen(
                             viewModel.createBooking(booking)
                         },
                         modifier = Modifier.fillMaxWidth().height(54.dp),
-                        enabled = !uiState.isLoading && checkInDate.isNotEmpty() && checkOutDate.isNotEmpty(),
+                        enabled = !uiState.isLoading && isFormComplete,
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1B3E))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF0D1B3E),
+                            contentColor = Color.White,
+                            disabledContainerColor = Color(0xFFBDC3C7), // Proper grey when disabled
+                            disabledContentColor = Color.White.copy(alpha = 0.6f)
+                        )
                     ) {
                         if (uiState.isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                         } else {
-                            Text("Confirm Booking", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Confirm Booking", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -402,18 +392,70 @@ fun BookingScreen(
     }
 }
 
+/**
+ * Custom Counter Row for better visibility of +/- buttons
+ */
+@Composable
+private fun CounterRow(
+    label: String,
+    count: Int,
+    onDecrement: () -> Unit,
+    onIncrement: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 14.sp, color = Color(0xFF0D1B3E))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Minus Button - Grey Background, Dark Icon
+            IconButton(
+                onClick = onDecrement,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFE0E6ED))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Remove,
+                    contentDescription = null,
+                    tint = Color(0xFF0D1B3E),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            Text(
+                text = "$count",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = Color(0xFF0D1B3E)
+            )
+
+            // Plus Button - Dark Blue Background, White Icon
+            IconButton(
+                onClick = onIncrement,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0D1B3E))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PriceRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontSize = 13.sp, color = Color.White.copy(0.8f))
         Text(value, fontSize = 13.sp, color = Color.White)
-    }
-}
-
-@Composable
-private fun SummaryRow(label: String, value: String, bold: Boolean = false) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 14.sp, color = TextSecondary)
-        Text(value, fontSize = 14.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, color = if (bold) Color(0xFF0D1B3E) else TextPrimary)
     }
 }
