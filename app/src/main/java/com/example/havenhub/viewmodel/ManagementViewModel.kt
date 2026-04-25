@@ -42,61 +42,57 @@ class ManagementViewModel @Inject constructor(
         loadAllBookings()
     }
 
-    // ✅ Line 49 Fixed: Removed '?: emptyList()' because data is not nullable
     fun loadAllUsers() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             when (val result = adminRepository.getAllUsers()) {
-                is Resource.Success -> {
-                    _uiState.update { it.copy(users = result.data, isLoading = false) }
-                }
-                is Resource.Error -> {
-                    _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
-                }
-                is Resource.Loading -> {
-                    _uiState.update { it.copy(isLoading = true) }
-                }
+                is Resource.Success -> _uiState.update { it.copy(users = result.data, isLoading = false) }
+                is Resource.Error   -> _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
+                is Resource.Loading -> _uiState.update { it.copy(isLoading = true) }
             }
         }
     }
 
-    // ✅ Line 71 Fixed: Direct assignment of result.data
     fun loadAllProperties() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             when (val result = adminRepository.getAllProperties()) {
-                is Resource.Success -> {
-                    _uiState.update { it.copy(properties = result.data, isLoading = false) }
-                }
-                is Resource.Error -> {
-                    _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
-                }
-                is Resource.Loading -> {
-                    _uiState.update { it.copy(isLoading = true) }
-                }
+                is Resource.Success -> _uiState.update { it.copy(properties = result.data, isLoading = false) }
+                is Resource.Error   -> _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
+                is Resource.Loading -> _uiState.update { it.copy(isLoading = true) }
             }
         }
     }
 
-    // ✅ Line 86 Fixed: Standardized with your Resource sealed class
     fun loadAllBookings() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             when (val result = adminRepository.getAllBookings()) {
-                is Resource.Success -> {
-                    _uiState.update { it.copy(bookings = result.data, isLoading = false) }
-                }
-                is Resource.Error -> {
-                    _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
-                }
-                is Resource.Loading -> {
-                    _uiState.update { it.copy(isLoading = true) }
-                }
+                is Resource.Success -> _uiState.update { it.copy(bookings = result.data, isLoading = false) }
+                is Resource.Error   -> _uiState.update { it.copy(errorMessage = result.message, isLoading = false) }
+                is Resource.Loading -> _uiState.update { it.copy(isLoading = true) }
             }
         }
     }
 
-    // --- Actions (Ban/Unban/Cancel) ---
+    // --- Property Actions ---
+
+    fun approveProperty(propertyId: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true) }
+        handleActionResult(adminRepository.approveProperty(propertyId)) { loadAllProperties() }
+    }
+
+    fun removeProperty(propertyId: String, reason: String = "Removed by admin") = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true) }
+        handleActionResult(adminRepository.rejectProperty(propertyId, reason)) { loadAllProperties() }
+    }
+
+    fun deleteProperty(propertyId: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true) }
+        handleActionResult(adminRepository.deleteProperty(propertyId)) { loadAllProperties() }
+    }
+
+    // --- User Actions ---
 
     fun banUser(userId: String) = viewModelScope.launch {
         _uiState.update { it.copy(isLoading = true) }
@@ -108,15 +104,14 @@ class ManagementViewModel @Inject constructor(
         handleActionResult(adminRepository.unbanUser(userId)) { loadAllUsers() }
     }
 
-    fun removeProperty(propertyId: String, reason: String = "Removed by admin") = viewModelScope.launch {
-        _uiState.update { it.copy(isLoading = true) }
-        handleActionResult(adminRepository.rejectProperty(propertyId, reason)) { loadAllProperties() }
-    }
+    // --- Booking Actions ---
 
     fun cancelBooking(bookingId: String) = viewModelScope.launch {
         _uiState.update { it.copy(isLoading = true) }
         handleActionResult(adminRepository.cancelBooking(bookingId)) { loadAllBookings() }
     }
+
+    // --- Helper ---
 
     private fun handleActionResult(result: Resource<Unit>, onSuccess: () -> Unit) {
         _uiState.update { state ->
@@ -125,7 +120,7 @@ class ManagementViewModel @Inject constructor(
                     onSuccess()
                     state.copy(isLoading = false, actionSuccess = true)
                 }
-                is Resource.Error -> state.copy(isLoading = false, errorMessage = result.message)
+                is Resource.Error   -> state.copy(isLoading = false, errorMessage = result.message)
                 is Resource.Loading -> state.copy(isLoading = true)
             }
         }
