@@ -66,7 +66,7 @@ data class Property(
     @ServerTimestamp
     val createdAt: Timestamp? = null,
 
-    val updatedAt: Long? = null
+    val updatedAt: Timestamp? = null
 
 ) {
     // Firestore serialization ke liye empty constructor

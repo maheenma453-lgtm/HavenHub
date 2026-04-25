@@ -78,7 +78,7 @@ class FirebaseDataManager @Inject constructor(
                 available         = doc.getBoolean("isAvailable")      ?: true,
                 featured          = doc.getBoolean("isFeatured")       ?: false,
                 createdAt         = doc.getTimestamp("createdAt"),
-                updatedAt         = extractUpdatedAt(doc)
+                updatedAt         = doc.getTimestamp("updatedAt")
             )
         } catch (e: Exception) {
             null
