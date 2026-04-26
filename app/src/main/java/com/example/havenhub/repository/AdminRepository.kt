@@ -24,9 +24,10 @@ class AdminRepository @Inject constructor(
     private val paymentsCollection   = firestore.collection("payments")
 
     // -------------------------------------------------------------------------
-    // Helper: Long / Date / Timestamp — all three safely converted to Timestamp
+    // Helper: Convert Long / Date / Timestamp safely to Firestore Timestamp.
+    // Firestore sometimes stores timestamps as Long (epoch ms) instead of
+    // Timestamp objects, so we handle all three cases here.
     // -------------------------------------------------------------------------
-
     private fun Any?.toTimestampOrNull(): Timestamp? = when (this) {
         is Timestamp -> this
         is Long      -> Timestamp(Date(this))
@@ -35,14 +36,19 @@ class AdminRepository @Inject constructor(
     }
 
     // -------------------------------------------------------------------------
-    // Helper: safely parse a Firestore document into a User object
-    // Fixes the nested preferences.updatedAt Long -> Timestamp crash
+    // Helper: Safely parse a Firestore document map into a User object.
+    //
+    // KEY FIX: Firestore stores the field as "banned" (not "isBanned").
+    // We also read "active" instead of "isActive" to match Firestore schema.
+    // Using manual parsing instead of toObject() avoids crashes when nested
+    // fields like preferences.updatedAt are stored as Long instead of Timestamp.
     // -------------------------------------------------------------------------
-
     private fun parseUserSafely(
         data: Map<String, Any?>,
         fallbackUserId: String = ""
     ): User {
+
+        // Parse nested preferences map safely
         @Suppress("UNCHECKED_CAST")
         val prefsMap = data["preferences"] as? Map<String, Any?> ?: emptyMap()
 
@@ -72,8 +78,15 @@ class AdminRepository @Inject constructor(
             role                = data["role"] as? String ?: "TENANT",
             verificationStatus  = data["verificationStatus"] as? String ?: "PENDING",
             isVerified          = data["isVerified"] as? Boolean ?: false,
-            isActive            = data["isActive"] as? Boolean ?: true,
-            isBanned            = data["isBanned"] as? Boolean ?: false,
+
+            // FIX: Firestore field is "active", not "isActive"
+            isActive            = data["active"] as? Boolean ?: true,
+
+            // FIX: Firestore field is "banned", not "isBanned"
+            // Previously this was reading "isBanned" which never matched the
+            // actual Firestore field, so isBanned was always false in the app.
+            isBanned            = data["banned"] as? Boolean ?: false,
+
             nationalId          = data["nationalId"] as? String ?: "",
             idFrontUrl          = data["idFrontUrl"] as? String ?: "",
             idBackUrl           = data["idBackUrl"] as? String ?: "",
@@ -87,15 +100,14 @@ class AdminRepository @Inject constructor(
     }
 
     // -------------------------------------------------------------------------
-    // Helper: safely parse a Firestore document into a Property object
-    // Fixes the updatedAt Long -> Timestamp crash in getAllProperties()
+    // Helper: Safely parse a Firestore document map into a Property object.
+    // Uses manual parsing to fix updatedAt Long → Timestamp crash that occurs
+    // when toObject() is used directly on documents with mixed timestamp types.
     // -------------------------------------------------------------------------
-
     private fun parsePropertySafely(
         data: Map<String, Any?>,
         fallbackPropertyId: String = ""
     ): Property {
-        // Use toObject() for most fields, then manually fix updatedAt
         return Property(
             propertyId       = data["propertyId"] as? String ?: fallbackPropertyId,
             ownerId          = data["ownerId"] as? String ?: "",
@@ -131,7 +143,7 @@ class AdminRepository @Inject constructor(
             available        = data["isAvailable"] as? Boolean ?: true,
             featured         = data["isFeatured"] as? Boolean ?: false,
             createdAt        = data["createdAt"].toTimestampOrNull(),
-            updatedAt        = data["updatedAt"].toTimestampOrNull()   // ✅ fixed
+            updatedAt        = data["updatedAt"].toTimestampOrNull()
         )
     }
 
@@ -139,17 +151,20 @@ class AdminRepository @Inject constructor(
     // USERS
     // =========================================================================
 
+    // Fetch all users from Firestore.
+    // Uses manual parseUserSafely() instead of toObjects() to avoid crashes
+    // caused by nested timestamp fields stored as Long.
     suspend fun getAllUsers(): Resource<List<User>> {
         return try {
             val snapshot = usersCollection.get().await()
 
-            // Manual parse instead of toObjects() — fixes nested updatedAt crash
             val users = snapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 try {
                     parseUserSafely(data, fallbackUserId = doc.id)
                 } catch (e: Exception) {
-                    null // one corrupt document should not crash the whole list
+                    // Skip corrupt documents instead of crashing the whole list
+                    null
                 }
             }
 
@@ -159,10 +174,13 @@ class AdminRepository @Inject constructor(
         }
     }
 
+    // Ban a user by setting the "banned" field to true in Firestore.
+    // FIX: Field name corrected from "isBanned" → "banned" to match
+    // the actual Firestore schema visible in Firebase Console.
     suspend fun banUser(userId: String): Resource<Unit> {
         return try {
             usersCollection.document(userId)
-                .update("isBanned", true)
+                .update("banned", true)   // FIX: was "isBanned", Firestore field is "banned"
                 .await()
             Resource.Success(Unit)
         } catch (e: Exception) {
@@ -170,10 +188,13 @@ class AdminRepository @Inject constructor(
         }
     }
 
+    // Unban a user by setting the "banned" field back to false in Firestore.
+    // FIX: Field name corrected from "isBanned" → "banned" to match
+    // the actual Firestore schema visible in Firebase Console.
     suspend fun unbanUser(userId: String): Resource<Unit> {
         return try {
             usersCollection.document(userId)
-                .update("isBanned", false)
+                .update("banned", false)  // FIX: was "isBanned", Firestore field is "banned"
                 .await()
             Resource.Success(Unit)
         } catch (e: Exception) {
@@ -185,17 +206,19 @@ class AdminRepository @Inject constructor(
     // PROPERTIES
     // =========================================================================
 
+    // Fetch all properties from Firestore.
+    // Uses manual parsePropertySafely() to handle Long timestamps safely.
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
             val snapshot = propertiesCollection.get().await()
 
-            // Manual parse instead of toObjects() — fixes updatedAt Long crash
             val properties = snapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 try {
                     parsePropertySafely(data, fallbackPropertyId = doc.id)
                 } catch (e: Exception) {
-                    null // one corrupt document should not crash the whole list
+                    // Skip corrupt documents instead of crashing the whole list
+                    null
                 }
             }
 
@@ -205,6 +228,7 @@ class AdminRepository @Inject constructor(
         }
     }
 
+    // Approve a property listing — sets status to "APPROVED" with optional admin note.
     suspend fun approveProperty(propertyId: String, adminNote: String = ""): Resource<Unit> {
         return try {
             propertiesCollection.document(propertyId)
@@ -222,6 +246,7 @@ class AdminRepository @Inject constructor(
         }
     }
 
+    // Reject a property listing — sets status to "REJECTED" with a rejection reason.
     suspend fun rejectProperty(propertyId: String, reason: String): Resource<Unit> {
         return try {
             propertiesCollection.document(propertyId)
@@ -239,6 +264,7 @@ class AdminRepository @Inject constructor(
         }
     }
 
+    // Permanently delete a property document from Firestore.
     suspend fun deleteProperty(propertyId: String): Resource<Unit> {
         return try {
             propertiesCollection.document(propertyId)
@@ -254,6 +280,7 @@ class AdminRepository @Inject constructor(
     // BOOKINGS
     // =========================================================================
 
+    // Fetch all bookings from Firestore.
     suspend fun getAllBookings(): Resource<List<Booking>> {
         return try {
             val snapshot = bookingsCollection.get().await()
@@ -263,6 +290,7 @@ class AdminRepository @Inject constructor(
         }
     }
 
+    // Confirm a pending booking — sets status to "CONFIRMED".
     suspend fun confirmBooking(bookingId: String): Resource<Unit> {
         return try {
             bookingsCollection.document(bookingId)
@@ -274,6 +302,7 @@ class AdminRepository @Inject constructor(
         }
     }
 
+    // Cancel a booking — sets status to "CANCELLED" and records cancellation metadata.
     suspend fun cancelBooking(bookingId: String): Resource<Unit> {
         return try {
             bookingsCollection.document(bookingId)
@@ -295,6 +324,7 @@ class AdminRepository @Inject constructor(
     // PAYMENTS
     // =========================================================================
 
+    // Fetch all payment records from Firestore.
     suspend fun getAllPayments(): Resource<List<Payment>> {
         return try {
             val snapshot = paymentsCollection.get().await()
