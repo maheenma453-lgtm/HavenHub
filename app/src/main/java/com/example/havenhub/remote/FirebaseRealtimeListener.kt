@@ -76,15 +76,10 @@ class FirebaseRealtimeListener @Inject constructor(
 
     // ── Booking Listeners ───────────────────────────────────────────────────
 
-    // ✅ FIXED: Iska naam 'getBookingsFlow' kar diya taake Repository se match kare
-    // Is query mein 'whereIn' use kiya hai taake user agar tenant ho ya landlord, dono cases mein data milay
     fun getBookingsFlow(userId: String): Flow<List<Booking>> = callbackFlow {
         val ref = firestore
             .collection("bookings")
-            .whereIn("tenantId", listOf(userId)) // Basic check for tenant
-            // Note: Agar aapko Landlord aur Tenant dono check karne hain real-time mein,
-            // to Firestore query limits ki wajah se aapko 2 queries ya different structure chahiye hoga.
-            // Filhal repository ki requirement ke mutabiq ye name match kar diya gaya hai.
+            .whereIn("tenantId", listOf(userId))
             .orderBy("createdAt", Query.Direction.DESCENDING)
 
         val registration: ListenerRegistration = ref.addSnapshotListener { snapshot, error ->
@@ -116,4 +111,62 @@ class FirebaseRealtimeListener @Inject constructor(
 
         awaitClose { registration.remove() }
     }
+
+    // ── ✅ NEW: Admin — All Bookings Real-time ──────────────────────────────
+    // Admin ko saare bookings chahiye bina kisi filter ke
+
+    fun listenToAllBookings(): Flow<List<Booking>> = callbackFlow {
+        val ref = firestore
+            .collection("bookings")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+
+        val registration: ListenerRegistration = ref.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            val bookings = try {
+                snapshot?.toObjects(Booking::class.java) ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            trySend(bookings)
+        }
+
+        awaitClose { registration.remove() }
+    }
+
+    // ── ✅ NEW: Admin — Recent Activities Real-time ─────────────────────────
+    // Notifications collection ko hi activities ki tarah use karenge (targetRole = "admin")
+    // Naya log karne ke liye NotificationRepository mein add karna hoga
+
+    fun listenToRecentActivities(): Flow<List<Notification>> = callbackFlow {
+        val ref = firestore
+            .collection("notifications")
+            .whereEqualTo("targetRole", "admin")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(15)
+
+        val registration: ListenerRegistration = ref.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            val activities = snapshot?.toObjects(Notification::class.java) ?: emptyList()
+            trySend(activities)
+        }
+
+        awaitClose { registration.remove() }
+    }
 }
+
+
+
+
+
+
+
+
+
+
+
