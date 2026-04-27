@@ -7,6 +7,7 @@ import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.repository.AuthRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,16 +16,16 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ProfileUiState(
-    val isLoading: Boolean = false,
-    val user: User? = null,
-    val errorMessage: String? = null,
+    val isLoading    : Boolean = false,
+    val user         : User?   = null,
+    val errorMessage : String? = null,
     val actionSuccess: Boolean = false
 )
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val dataManager: FirebaseDataManager
+    private val dataManager   : FirebaseDataManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -34,30 +35,45 @@ class ProfileViewModel @Inject constructor(
         loadProfile()
     }
 
-    // Load Profile
+    // ─────────────────────────────────────────────────────────────────────────
+    // FIX: Firebase auth async hoti hai — currentUser init ke waqt null ho
+    // sakta hai. Isliye retry loop lagaya: 5 baar tak 500ms wait karo.
+    // Agar uid mil jaye toh immediately Firestore se user load karo.
+    // ─────────────────────────────────────────────────────────────────────────
     fun loadProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val uid = authRepository.currentUser?.uid
-            if (uid != null) {
-                when (val result = dataManager.getUser(uid)) {
-                    is Resource.Success -> _uiState.update {
-                        it.copy(isLoading = false, user = result.data)
-                    }
-                    is Resource.Error -> _uiState.update {
-                        it.copy(isLoading = false, errorMessage = result.message)
-                    }
-                    Resource.Loading -> Unit
-                }
-            } else {
+
+            // Retry up to 5 times (total ~2.5s) waiting for Firebase auth to settle
+            var uid: String? = null
+            repeat(5) { attempt ->
+                uid = authRepository.currentUser?.uid
+                if (uid != null) return@repeat
+                delay(500L)
+            }
+
+            if (uid == null) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = "User not found")
+                    it.copy(isLoading = false, errorMessage = "Session expired. Please log in again.")
                 }
+                return@launch
+            }
+
+            when (val result = dataManager.getUser(uid!!)) {
+                is Resource.Success -> _uiState.update {
+                    it.copy(isLoading = false, user = result.data)
+                }
+                is Resource.Error   -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                Resource.Loading    -> Unit
             }
         }
     }
 
-    // Update Profile
+    // ─────────────────────────────────────────────────────────────────────────
+    // updateProfile — partial Firestore update (only changed fields)
+    // ─────────────────────────────────────────────────────────────────────────
     fun updateProfile(
         fullName   : String,
         phoneNumber: String,
@@ -72,27 +88,24 @@ class ProfileViewModel @Inject constructor(
                 "location"    to mapOf("city" to city)
             )
             when (val result = dataManager.updateUserFields(uid, fields)) {
-                is Resource.Success -> {
-                    _uiState.update {
-                        it.copy(
-                            isLoading     = false,
-                            actionSuccess = true,
-                            user          = it.user?.copy(
-                                fullName    = fullName,
-                                phoneNumber = phoneNumber
-                            )
+                is Resource.Success -> _uiState.update {
+                    it.copy(
+                        isLoading     = false,
+                        actionSuccess = true,
+                        user          = it.user?.copy(
+                            fullName    = fullName,
+                            phoneNumber = phoneNumber
                         )
-                    }
+                    )
                 }
-                is Resource.Error -> _uiState.update {
+                is Resource.Error   -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
                 }
-                Resource.Loading -> Unit
+                Resource.Loading    -> Unit
             }
         }
     }
 
-    // Clear Messages
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
     }

@@ -11,10 +11,10 @@ data class User(
     val phoneNumber: String = "",
     val profileImageUrl: String = "",
 
-    // ✅ FIX: String rakho — Firestore enum deserialize nahi kar sakta
-    val role: String = "TENANT",
+    // ✅ FIX: default "tenant" lowercase — Firestore se jo bhi aaye
+    // (LANDLORD, Landlord, landlord) sab normalize honge
+    val role: String = "tenant",
 
-    // ✅ FIX: yeh bhi String
     val verificationStatus: String = "PENDING",
 
     val isVerified: Boolean = false,
@@ -37,10 +37,8 @@ data class User(
     val updatedAt: Timestamp? = null
 
 ) {
-    /** Firebase requires a no-arg constructor for deserialization. */
     constructor() : this(userId = "")
 
-    /** Display-friendly initials derived from fullName. */
     val initials: String
         get() = fullName
             .trim()
@@ -49,28 +47,28 @@ data class User(
             .take(2)
             .joinToString("") { it.first().uppercaseChar().toString() }
 
-    // ✅ String se compare karo directly
-    val isLandlord: Boolean get() = role == "LANDLORD"
-    val isAdmin: Boolean    get() = role == "ADMIN"
-    val isTenant: Boolean   get() = role == "TENANT"
+    // ✅ FIX: lowercase().trim() se compare karo — "LANDLORD", "Landlord",
+    // "landlord " sab handle ho jaayenge
+    val normalizedRole: String get() = role.lowercase().trim()
 
-    // ✅ Jahan enum zaruri ho wahan yeh use karo
+    val isLandlord: Boolean get() = normalizedRole == "landlord"
+    val isAdmin: Boolean    get() = normalizedRole == "admin"
+    val isTenant: Boolean   get() = normalizedRole == "tenant"
+
     val userRole: UserRole
         get() = try {
-            UserRole.valueOf(role)
+            UserRole.valueOf(role.uppercase().trim())
         } catch (e: Exception) {
             UserRole.TENANT
         }
 
     val verificationStatusEnum: VerificationStatus
         get() = try {
-            VerificationStatus.valueOf(verificationStatus)
+            VerificationStatus.valueOf(verificationStatus.uppercase().trim())
         } catch (e: Exception) {
             VerificationStatus.PENDING
         }
 }
-
-// ── Enums ─────────────────────────────────────────────────────────────────────
 
 enum class UserRole {
     TENANT,
