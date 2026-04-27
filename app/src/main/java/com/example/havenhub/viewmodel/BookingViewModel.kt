@@ -39,11 +39,18 @@ class BookingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BookingUiState())
     val uiState: StateFlow<BookingUiState> = _uiState.asStateFlow()
 
-    // ─────────────────────────────────────────────────────────
-    //  Load all bookings (by role)
-    // ─────────────────────────────────────────────────────────
+    // ✅ Cache karo taake cancel ke baad auto-refresh ho sake
+    private var cachedUserId : String = ""
+    private var cachedRole   : String = "tenant"
 
+    // ─────────────────────────────────────────────────────────
+    // Load all bookings (by role)
+    // ─────────────────────────────────────────────────────────
     fun loadBookings(userId: String, role: String) {
+        // Cache save karo
+        cachedUserId = userId
+        cachedRole   = role
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
@@ -60,9 +67,8 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────
-    //  Load single booking by ID
+    // Load single booking by ID
     // ─────────────────────────────────────────────────────────
-
     fun loadBookingById(bookingId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -79,9 +85,8 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────
-    //  Create booking
+    // Create booking
     // ─────────────────────────────────────────────────────────
-
     fun createBooking(booking: Booking) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, actionSuccess = false, errorMessage = null) }
@@ -102,9 +107,8 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────
-    //  Update booking status (admin)
+    // Update booking status (admin / landlord)
     // ─────────────────────────────────────────────────────────
-
     fun updateStatusByAdmin(bookingId: String, newStatus: BookingStatus) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -121,43 +125,67 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────
-    //  Cancel booking (tenant)
+    // Cancel booking — tenant sirf PENDING cancel kar sakta hai
+    // SRS BR-3
     // ─────────────────────────────────────────────────────────
-
     fun cancelBooking(bookingId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
+                // ── Step 1: Firestore update ──────────────────
                 firestore.collection("bookings")
                     .document(bookingId)
                     .update(
                         mapOf(
-                            "bookingStatus" to BookingStatus.CANCELLED.name,
-                            "cancelledAt"   to FieldValue.serverTimestamp()
+                            "status"      to BookingStatus.CANCELLED.name,
+                            "cancelledAt" to FieldValue.serverTimestamp()
                         )
                     )
                     .await()
 
-                _uiState.update {
-                    it.copy(isLoading = false, actionSuccess = true)
+                // ── Step 2: Local list turant update (optimistic) ──
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading     = false,
+                        actionSuccess = true,
+                        bookings      = state.bookings.map { booking ->
+                            if (booking.bookingId == bookingId)
+                                booking.copy(status = BookingStatus.CANCELLED.name)
+                            else booking
+                        }
+                    )
                 }
+
+                // ── Step 3: Fresh list Firestore se dobara load ──
+                // Taake koi bhi stale data na rahe
+                if (cachedUserId.isNotEmpty()) {
+                    val fresh = when (cachedRole.lowercase()) {
+                        "admin"    -> repository.getAllBookingsForAdmin()
+                        "landlord" -> repository.getLandlordBookings(cachedUserId)
+                        else       -> repository.getTenantBookings(cachedUserId)
+                    }
+                    _uiState.update { it.copy(bookings = fresh) }
+                }
+
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = "Booking cancel failed: ${e.localizedMessage}")
+                    it.copy(
+                        isLoading    = false,
+                        errorMessage = "Cancel failed: ${e.localizedMessage}"
+                    )
                 }
             }
         }
     }
 
     // ─────────────────────────────────────────────────────────
-    //  Send message (landlord ↔ tenant)
+    // Send message (landlord ↔ tenant)
     // ─────────────────────────────────────────────────────────
-
     fun sendMessage(
-        toUserId      : String,
-        message       : String,
-        bookingId     : String,
-        propertyTitle : String
+        toUserId     : String,
+        message      : String,
+        bookingId    : String,
+        propertyTitle: String
     ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSendingMessage = true, errorMessage = null) }
@@ -175,15 +203,10 @@ class BookingViewModel @Inject constructor(
                     "timestamp"     to FieldValue.serverTimestamp()
                 )
 
-                firestore.collection("messages")
-                    .add(msgData)
-                    .await()
+                firestore.collection("messages").add(msgData).await()
 
                 _uiState.update {
-                    it.copy(
-                        isSendingMessage = false,
-                        successMessage   = "Message sent successfully"
-                    )
+                    it.copy(isSendingMessage = false, successMessage = "Message sent successfully")
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -197,9 +220,8 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────
-    //  Clear messages / reset flags
+    // Clear messages / reset flags
     // ─────────────────────────────────────────────────────────
-
     fun clearMessages() {
         _uiState.update {
             it.copy(
