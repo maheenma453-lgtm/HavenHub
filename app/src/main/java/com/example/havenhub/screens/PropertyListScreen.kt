@@ -58,7 +58,7 @@ fun PropertyListScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(top = paddingValues.calculateTopPadding())
                 .background(Color(0xFFF5F7FA))
         ) {
             if (uiState.isLoading) {

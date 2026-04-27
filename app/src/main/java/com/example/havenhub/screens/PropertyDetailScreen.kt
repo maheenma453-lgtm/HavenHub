@@ -85,7 +85,7 @@ fun PropertyDetailScreen(
 
                 LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 120.dp)
+                    contentPadding = PaddingValues(bottom = 70.dp)
                 ) {
 
                     // ════════════════════════════════════════
@@ -491,11 +491,11 @@ fun PropertyDetailScreen(
                     color           = White
                 ) {
                     Row(
-                        modifier              = Modifier
+                        modifier = Modifier
                             .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(bottom = 6.dp), // 👈 important
+                        horizontalArrangement = Arrangement.spacedBy(16.dp), // 👈 spacing fix
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         // Price column — compact
