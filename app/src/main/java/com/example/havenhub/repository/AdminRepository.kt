@@ -23,10 +23,6 @@ class AdminRepository @Inject constructor(
     private val bookingsCollection   = firestore.collection("bookings")
     private val paymentsCollection   = firestore.collection("payments")
 
-    // -------------------------------------------------------------------------
-    // Helper: Long / Date / Timestamp — all three safely converted to Timestamp
-    // -------------------------------------------------------------------------
-
     private fun Any?.toTimestampOrNull(): Timestamp? = when (this) {
         is Timestamp -> this
         is Long      -> Timestamp(Date(this))
@@ -34,15 +30,11 @@ class AdminRepository @Inject constructor(
         else         -> null
     }
 
-    // -------------------------------------------------------------------------
-    // Helper: safely parse a Firestore document into a User object
-    // Fixes the nested preferences.updatedAt Long -> Timestamp crash
-    // -------------------------------------------------------------------------
-
     private fun parseUserSafely(
         data: Map<String, Any?>,
         fallbackUserId: String = ""
     ): User {
+
         @Suppress("UNCHECKED_CAST")
         val prefsMap = data["preferences"] as? Map<String, Any?> ?: emptyMap()
 
@@ -71,9 +63,14 @@ class AdminRepository @Inject constructor(
             profileImageUrl     = data["profileImageUrl"] as? String ?: "",
             role                = data["role"] as? String ?: "TENANT",
             verificationStatus  = data["verificationStatus"] as? String ?: "PENDING",
-            isVerified          = data["isVerified"] as? Boolean ?: false,
-            isActive            = data["isActive"] as? Boolean ?: true,
-            isBanned            = data["isBanned"] as? Boolean ?: false,
+            // ✅ FIX: isVerified field na ho toh verificationStatus se check karo
+            isVerified = (data["isVerified"] as? Boolean)
+                ?: (data["verificationStatus"] as? String)
+                    ?.uppercase()
+                    ?.let { it == "VERIFIED" || it == "APPROVED" }
+                ?: false,
+            isActive            = data["active"] as? Boolean ?: true,
+            isBanned            = data["banned"] as? Boolean ?: false,
             nationalId          = data["nationalId"] as? String ?: "",
             idFrontUrl          = data["idFrontUrl"] as? String ?: "",
             idBackUrl           = data["idBackUrl"] as? String ?: "",
@@ -86,52 +83,46 @@ class AdminRepository @Inject constructor(
         )
     }
 
-    // -------------------------------------------------------------------------
-    // Helper: safely parse a Firestore document into a Property object
-    // Fixes the updatedAt Long -> Timestamp crash in getAllProperties()
-    // -------------------------------------------------------------------------
-
     private fun parsePropertySafely(
         data: Map<String, Any?>,
         fallbackPropertyId: String = ""
     ): Property {
-        // Use toObject() for most fields, then manually fix updatedAt
         return Property(
-            propertyId       = data["propertyId"] as? String ?: fallbackPropertyId,
-            ownerId          = data["ownerId"] as? String ?: "",
-            ownerName        = data["ownerName"] as? String ?: "",
-            title            = data["title"] as? String ?: "",
-            description      = data["description"] as? String ?: "",
-            propertyType     = data["propertyType"] as? String ?: "APARTMENT",
-            status           = data["status"] as? String ?: "PENDING",
-            address          = data["address"] as? String ?: "",
-            city             = data["city"] as? String ?: "",
-            pricePerNight    = (data["pricePerNight"] as? Number)?.toDouble() ?: 0.0,
-            pricePerWeek     = (data["pricePerWeek"] as? Number)?.toDouble(),
-            pricePerMonth    = (data["pricePerMonth"] as? Number)?.toDouble(),
-            securityDeposit  = (data["securityDeposit"] as? Number)?.toDouble() ?: 0.0,
-            bedrooms         = (data["bedrooms"] as? Number)?.toInt() ?: 1,
-            bathrooms        = (data["bathrooms"] as? Number)?.toInt() ?: 1,
-            maxGuests        = (data["maxGuests"] as? Number)?.toInt() ?: 2,
-            areaSqFt         = (data["areaSqFt"] as? Number)?.toDouble(),
-            floor            = (data["floor"] as? Number)?.toInt(),
-            imageUrls        = (data["imageUrls"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-            pt1DocumentUrl   = data["pt1DocumentUrl"] as? String ?: "",
-            amenities        = (data["amenities"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            propertyId        = data["propertyId"] as? String ?: fallbackPropertyId,
+            ownerId           = data["ownerId"] as? String ?: "",
+            ownerName         = data["ownerName"] as? String ?: "",
+            title             = data["title"] as? String ?: "",
+            description       = data["description"] as? String ?: "",
+            propertyType      = data["propertyType"] as? String ?: "APARTMENT",
+            status            = data["status"] as? String ?: "PENDING",
+            address           = data["address"] as? String ?: "",
+            city              = data["city"] as? String ?: "",
+            pricePerNight     = (data["pricePerNight"] as? Number)?.toDouble() ?: 0.0,
+            pricePerWeek      = (data["pricePerWeek"] as? Number)?.toDouble(),
+            pricePerMonth     = (data["pricePerMonth"] as? Number)?.toDouble(),
+            securityDeposit   = (data["securityDeposit"] as? Number)?.toDouble() ?: 0.0,
+            bedrooms          = (data["bedrooms"] as? Number)?.toInt() ?: 1,
+            bathrooms         = (data["bathrooms"] as? Number)?.toInt() ?: 1,
+            maxGuests         = (data["maxGuests"] as? Number)?.toInt() ?: 2,
+            areaSqFt          = (data["areaSqFt"] as? Number)?.toDouble(),
+            floor             = (data["floor"] as? Number)?.toInt(),
+            imageUrls         = (data["imageUrls"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            pt1DocumentUrl    = data["pt1DocumentUrl"] as? String ?: "",
+            amenities         = (data["amenities"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
             drawableImageName = data["drawableImageName"] as? String ?: "",
-            petsAllowed      = data["petsAllowed"] as? Boolean ?: false,
-            smokingAllowed   = data["smokingAllowed"] as? Boolean ?: false,
-            partiesAllowed   = data["partiesAllowed"] as? Boolean ?: false,
-            checkInTime      = data["checkInTime"] as? String ?: "14:00",
-            checkOutTime     = data["checkOutTime"] as? String ?: "11:00",
-            minNights        = (data["minNights"] as? Number)?.toInt() ?: 1,
-            averageRating    = (data["averageRating"] as? Number)?.toFloat() ?: 0f,
-            reviewCount      = (data["reviewCount"] as? Number)?.toInt() ?: 0,
-            adminNote        = data["adminNote"] as? String ?: "",
-            available        = data["isAvailable"] as? Boolean ?: true,
-            featured         = data["isFeatured"] as? Boolean ?: false,
-            createdAt        = data["createdAt"].toTimestampOrNull(),
-            updatedAt        = data["updatedAt"].toTimestampOrNull()   // ✅ fixed
+            petsAllowed       = data["petsAllowed"] as? Boolean ?: false,
+            smokingAllowed    = data["smokingAllowed"] as? Boolean ?: false,
+            partiesAllowed    = data["partiesAllowed"] as? Boolean ?: false,
+            checkInTime       = data["checkInTime"] as? String ?: "14:00",
+            checkOutTime      = data["checkOutTime"] as? String ?: "11:00",
+            minNights         = (data["minNights"] as? Number)?.toInt() ?: 1,
+            averageRating     = (data["averageRating"] as? Number)?.toFloat() ?: 0f,
+            reviewCount       = (data["reviewCount"] as? Number)?.toInt() ?: 0,
+            adminNote         = data["adminNote"] as? String ?: "",
+            available         = data["isAvailable"] as? Boolean ?: true,
+            featured          = data["isFeatured"] as? Boolean ?: false,
+            createdAt         = data["createdAt"].toTimestampOrNull(),
+            updatedAt         = data["updatedAt"].toTimestampOrNull()
         )
     }
 
@@ -142,42 +133,57 @@ class AdminRepository @Inject constructor(
     suspend fun getAllUsers(): Resource<List<User>> {
         return try {
             val snapshot = usersCollection.get().await()
-
-            // Manual parse instead of toObjects() — fixes nested updatedAt crash
             val users = snapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 try {
                     parseUserSafely(data, fallbackUserId = doc.id)
                 } catch (e: Exception) {
-                    null // one corrupt document should not crash the whole list
+                    null
                 }
             }
-
             Resource.Success(users)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch users")
         }
     }
 
-    suspend fun banUser(userId: String): Resource<Unit> {
-        return try {
-            usersCollection.document(userId)
-                .update("isBanned", true)
-                .await()
-            Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to ban user")
-        }
-    }
-
+    // ✅ FIX: Approve user — isVerified=true, verificationStatus=APPROVED, banned=false, active=true
     suspend fun unbanUser(userId: String): Resource<Unit> {
         return try {
             usersCollection.document(userId)
-                .update("isBanned", false)
+                .update(
+                    mapOf(
+                        "banned"             to false,
+                        "isVerified"         to true,
+                        "verificationStatus" to "APPROVED",
+                        "active"             to true,
+                        "updatedAt"          to Timestamp.now()
+                    )
+                )
                 .await()
             Resource.Success(Unit)
         } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to unban user")
+            Resource.Error(e.localizedMessage ?: "Failed to approve user")
+        }
+    }
+
+    // ✅ FIX: Reject user — isVerified=false, verificationStatus=REJECTED, banned=true, active=false
+    suspend fun banUser(userId: String): Resource<Unit> {
+        return try {
+            usersCollection.document(userId)
+                .update(
+                    mapOf(
+                        "banned"             to true,
+                        "isVerified"         to false,
+                        "verificationStatus" to "REJECTED",
+                        "active"             to false,
+                        "updatedAt"          to Timestamp.now()
+                    )
+                )
+                .await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to reject user")
         }
     }
 
@@ -188,17 +194,14 @@ class AdminRepository @Inject constructor(
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
             val snapshot = propertiesCollection.get().await()
-
-            // Manual parse instead of toObjects() — fixes updatedAt Long crash
             val properties = snapshot.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 try {
                     parsePropertySafely(data, fallbackPropertyId = doc.id)
                 } catch (e: Exception) {
-                    null // one corrupt document should not crash the whole list
+                    null
                 }
             }
-
             Resource.Success(properties)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch properties")

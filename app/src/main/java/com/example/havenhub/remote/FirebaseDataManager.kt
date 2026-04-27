@@ -1,5 +1,6 @@
 package com.example.havenhub.remote
 
+import android.util.Log
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.Property
 import com.example.havenhub.data.Review
@@ -24,7 +25,6 @@ class FirebaseDataManager @Inject constructor(
     private val notificationsCollection = firestore.collection("notifications")
 
     // ── Helper — updatedAt ko safely Long mein convert karo ──────────────────
-
     private fun extractUpdatedAt(doc: com.google.firebase.firestore.DocumentSnapshot): Long? {
         return when (val raw = doc.get("updatedAt")) {
             is Long      -> raw
@@ -34,9 +34,6 @@ class FirebaseDataManager @Inject constructor(
     }
 
     // ── Helper — DocumentSnapshot se manually Property banao ─────────────────
-    // toObject() fail hota hai jab koi bhi field missing/mismatch ho
-    // Yeh function har field ko safely handle karta hai
-
     private fun parseProperty(doc: com.google.firebase.firestore.DocumentSnapshot): Property? {
         return try {
             Property(
@@ -73,8 +70,6 @@ class FirebaseDataManager @Inject constructor(
                 averageRating     = (doc.getDouble("averageRating")    ?: 0.0).toFloat(),
                 reviewCount       = (doc.getLong("reviewCount")        ?: 0L).toInt(),
                 adminNote         = doc.getString("adminNote")         ?: "",
-                // ✅ FIX: Constructor mein 'available' aur 'featured' hain
-                //         'isAvailable' aur 'isFeatured' sirf @Exclude getters hain
                 available         = doc.getBoolean("isAvailable")      ?: true,
                 featured          = doc.getBoolean("isFeatured")       ?: false,
                 createdAt         = doc.getTimestamp("createdAt"),
@@ -96,20 +91,75 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // getUser — FIX: Pehle Auth UID se document dhundho (normal case).
+    // Agar document empty aaye (manually added users jinka doc ID alag hai),
+    // toh "userId" field se query karo — yeh fallback manually added users
+    // jaise landlord_001, tenant_001 ke liye kaam karta hai.
+    //
+    // Problem: Firestore mein doc ID = "landlord_001" lekin
+    //          Auth UID = "L26zDiaueIVyoSYGJV4cm4Rx0992"
+    //          Aur userId field mein Auth UID stored hai.
+    // Solution: Direct doc fetch fail ho toh whereEqualTo("userId", uid) se dhundho.
+    // ─────────────────────────────────────────────────────────────────────────
     suspend fun getUser(uid: String): Resource<User> {
         return try {
-            val snapshot = usersCollection.document(uid).get().await()
-            val user     = snapshot.toObject(User::class.java)
-                ?: return Resource.Error("User not found")
-            Resource.Success(user)
+            // Step 1: Pehle direct UID se try karo (normal registered users)
+            val directSnapshot = usersCollection.document(uid).get().await()
+
+            if (directSnapshot.exists()) {
+                val user = directSnapshot.toObject(User::class.java)
+                if (user != null) {
+                    Log.d("HAVEN_DATA", "getUser: found by doc ID = $uid")
+                    return Resource.Success(user)
+                }
+            }
+
+            // Step 2: Fallback — userId field se query karo
+            // (manually added users jinka doc ID Auth UID se alag hai)
+            Log.d("HAVEN_DATA", "getUser: doc not found by ID, querying by userId field = $uid")
+            val querySnapshot = usersCollection
+                .whereEqualTo("userId", uid)
+                .limit(1)
+                .get()
+                .await()
+
+            if (!querySnapshot.isEmpty) {
+                val user = querySnapshot.documents.first().toObject(User::class.java)
+                if (user != null) {
+                    Log.d("HAVEN_DATA", "getUser: found by userId field query")
+                    return Resource.Success(user)
+                }
+            }
+
+            Log.d("HAVEN_DATA", "getUser: user not found for uid = $uid")
+            Resource.Error("User not found")
+
         } catch (e: Exception) {
+            Log.e("HAVEN_DATA", "getUser error: ${e.localizedMessage}")
             Resource.Error(e.localizedMessage ?: "Failed to fetch user")
         }
     }
 
     suspend fun updateUserFields(uid: String, fields: Map<String, Any>): Resource<Unit> {
         return try {
-            usersCollection.document(uid).update(fields).await()
+            // FIX: Update bhi same logic — pehle direct, phir query se doc ID lo
+            val directSnapshot = usersCollection.document(uid).get().await()
+
+            val docId = if (directSnapshot.exists()) {
+                uid
+            } else {
+                // Manually added user — userId field se doc ID dhundho
+                val querySnapshot = usersCollection
+                    .whereEqualTo("userId", uid)
+                    .limit(1)
+                    .get()
+                    .await()
+                querySnapshot.documents.firstOrNull()?.id
+                    ?: return Resource.Error("User document not found for update")
+            }
+
+            usersCollection.document(docId).update(fields).await()
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to update user")

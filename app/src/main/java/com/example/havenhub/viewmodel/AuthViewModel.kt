@@ -7,6 +7,7 @@ import com.example.havenhub.repository.AuthRepository
 import com.example.havenhub.utils.Resource
 import com.example.havenhub.utils.ValidationUtils
 import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -22,7 +23,8 @@ data class AuthUiState(
     val successMessage      : String?       = null,
     val isPasswordResetSent : Boolean       = false,
     val selectedRole        : String        = "",
-    val userRole            : String        = ""
+    val userRole            : String        = "",
+    val isVerified          : Boolean       = false
 )
 
 @HiltViewModel
@@ -51,49 +53,71 @@ class AuthViewModel @Inject constructor(
     private val _passwordError            = MutableStateFlow<String?>(null)
     val passwordError: StateFlow<String?> = _passwordError.asStateFlow()
 
-    private val _nameError             = MutableStateFlow<String?>(null)
-    val nameError: StateFlow<String?>  = _nameError.asStateFlow()
+    private val _nameError            = MutableStateFlow<String?>(null)
+    val nameError: StateFlow<String?> = _nameError.asStateFlow()
 
-    init { checkAuthState() }
+    // ─────────────────────────────────────────────────────────────────────────
+    // FIX: checkAuthState — pehle wala code currentUser directly read karta tha
+    // jo Firebase initialize hone se pehle null hota tha.
+    //
+    // Ab addAuthStateListener use karo — yeh Firebase ready hone ke BAAD
+    // callback deta hai, chahe user logged in ho ya nahi.
+    // Listener ka result aane ke baad role + verified fetch karo.
+    // ─────────────────────────────────────────────────────────────────────────
+    init {
+        checkAuthState()
+    }
 
-    // ── Field Updates ────────────────────────────────────────────
-    fun onEmailChange(value: String)           { _email.value = value;    _emailError.value = null }
-    fun onPasswordChange(value: String)        { _password.value = value; _passwordError.value = null }
-    fun onConfirmPasswordChange(value: String) { _confirmPassword.value = value }
-    fun onFullNameChange(value: String)        { _fullName.value = value; _nameError.value = null }
-    fun onRoleSelected(role: String)           { _uiState.update { it.copy(selectedRole = role) } }
-
-    // ── Auth Check on App Start ───────────────────────────────────
     private fun checkAuthState() {
-        val firebaseUser = authRepository.currentUser
-        Log.d("HAVEN_AUTH", "checkAuthState: uid = ${firebaseUser?.uid}")
+        _uiState.update { it.copy(isLoading = true) }
 
-        if (firebaseUser != null) {
-            viewModelScope.launch {
-                _uiState.update { it.copy(isLoading = true) }
-                Log.d("HAVEN_AUTH", "Fetching role for uid = ${firebaseUser.uid}")
+        FirebaseAuth.getInstance().addAuthStateListener { firebaseAuth ->
+            val firebaseUser = firebaseAuth.currentUser
+            Log.d("HAVEN_AUTH", "AuthStateListener fired: uid = ${firebaseUser?.uid}")
 
-                val role = authRepository.getUserRole(firebaseUser.uid)
-                Log.d("HAVEN_AUTH", "Role fetched = '$role'")
+            if (firebaseUser != null) {
+                // User logged in hai — Firestore se role + verified fetch karo
+                viewModelScope.launch {
+                    val uid = firebaseUser.uid
+                    Log.d("HAVEN_AUTH", "Fetching role + verified for uid = $uid")
 
+                    val role       = authRepository.getUserRole(uid)
+                    val isVerified = authRepository.getUserVerified(uid)
+
+                    Log.d("HAVEN_AUTH", "role = '$role'  isVerified = $isVerified")
+
+                    _uiState.update {
+                        it.copy(
+                            isLoading   = false,
+                            isLoggedIn  = true,
+                            currentUser = firebaseUser,
+                            userRole    = role,
+                            isVerified  = isVerified
+                        )
+                    }
+                }
+            } else {
+                // Koi user logged in nahi
+                Log.d("HAVEN_AUTH", "AuthStateListener: no user logged in")
                 _uiState.update {
                     it.copy(
                         isLoading   = false,
-                        currentUser = firebaseUser,
-                        isLoggedIn  = true,
-                        userRole    = role
+                        isLoggedIn  = false,
+                        currentUser = null,
+                        userRole    = "",
+                        isVerified  = false
                     )
                 }
-                Log.d("HAVEN_AUTH", "DONE — isLoggedIn=true userRole='$role'")
             }
-        } else {
-            Log.d("HAVEN_AUTH", "No user logged in")
         }
     }
 
-    // ── Sign In ───────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // signIn
+    // ─────────────────────────────────────────────────────────────────────────
     fun signIn() {
         if (!validateSignInForm()) return
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
@@ -104,18 +128,19 @@ class AuthViewModel @Inject constructor(
 
             when (result) {
                 is Resource.Success -> {
-                    val uid = result.data?.uid ?: ""
-                    Log.d("HAVEN_AUTH", "signIn success uid = $uid")
+                    val uid        = result.data?.uid ?: ""
+                    val role       = authRepository.getUserRole(uid)
+                    val isVerified = authRepository.getUserVerified(uid)
 
-                    val role = authRepository.getUserRole(uid)
-                    Log.d("HAVEN_AUTH", "signIn role = '$role'")
+                    Log.d("HAVEN_AUTH", "signIn success uid=$uid role='$role' isVerified=$isVerified")
 
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
                             isLoggedIn  = true,
                             currentUser = result.data,
-                            userRole    = role
+                            userRole    = role,
+                            isVerified  = isVerified
                         )
                     }
                 }
@@ -130,9 +155,12 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Sign Up ───────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // signUp
+    // ─────────────────────────────────────────────────────────────────────────
     fun signUp() {
         if (!validateSignUpForm()) return
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
@@ -150,7 +178,8 @@ class AuthViewModel @Inject constructor(
                             isLoading      = false,
                             isLoggedIn     = true,
                             currentUser    = result.data,
-                            userRole       = _uiState.value.selectedRole,
+                            userRole       = _uiState.value.selectedRole.lowercase().trim(),
+                            isVerified     = false,
                             successMessage = "Account created successfully!"
                         )
                     }
@@ -163,7 +192,9 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Sign Out ──────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // signOut
+    // ─────────────────────────────────────────────────────────────────────────
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
@@ -173,7 +204,9 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Forgot Password ───────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // sendPasswordResetEmail
+    // ─────────────────────────────────────────────────────────────────────────
     fun sendPasswordResetEmail() {
         val emailVal = _email.value.trim()
         if (!ValidationUtils.isValidEmail(emailVal)) {
@@ -199,7 +232,9 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Change Password ───────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // changePassword
+    // ─────────────────────────────────────────────────────────────────────────
     fun changePassword(currentPassword: String, newPassword: String) {
         if (newPassword.length < 6) {
             _uiState.update { it.copy(errorMessage = "New password must be at least 6 characters") }
@@ -208,24 +243,15 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val user = authRepository.currentUser
-                    ?: throw Exception("No user logged in")
+                val user  = authRepository.currentUser ?: throw Exception("No user logged in")
+                val email = user.email ?: throw Exception("User email not found")
 
-                val email = user.email
-                    ?: throw Exception("User email not found")
-
-                // Re-authenticate karo pehle (Firebase security requirement)
                 val credential = EmailAuthProvider.getCredential(email, currentPassword)
                 user.reauthenticate(credential).await()
-
-                // Ab password update karo
                 user.updatePassword(newPassword).await()
 
                 _uiState.update {
-                    it.copy(
-                        isLoading      = false,
-                        successMessage = "Password updated successfully!"
-                    )
+                    it.copy(isLoading = false, successMessage = "Password updated successfully!")
                 }
             } catch (e: Exception) {
                 val errorMsg = when {
@@ -239,21 +265,28 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Google Sign In ────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // signInWithGoogle
+    // ─────────────────────────────────────────────────────────────────────────
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
             val result = authRepository.signInWithGoogle(idToken)
+
             when (result) {
                 is Resource.Success -> {
-                    val uid  = result.data?.uid ?: ""
-                    val role = authRepository.getUserRole(uid)
+                    val uid        = result.data?.uid ?: ""
+                    val role       = authRepository.getUserRole(uid)
+                    val isVerified = authRepository.getUserVerified(uid)
+
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
                             isLoggedIn  = true,
                             currentUser = result.data,
-                            userRole    = role
+                            userRole    = role,
+                            isVerified  = isVerified
                         )
                     }
                 }
@@ -265,7 +298,9 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Delete Account ────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // deleteAccount
+    // ─────────────────────────────────────────────────────────────────────────
     fun deleteAccount() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -279,14 +314,27 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Validation ────────────────────────────────────────────────
+    // ── Field helpers ─────────────────────────────────────────────────────────
+    fun onEmailChange(value: String)           { _email.value = value;    _emailError.value = null }
+    fun onPasswordChange(value: String)        { _password.value = value; _passwordError.value = null }
+    fun onConfirmPasswordChange(value: String) { _confirmPassword.value = value }
+    fun onFullNameChange(value: String)        { _fullName.value = value; _nameError.value = null }
+    fun onRoleSelected(role: String)           { _uiState.update { it.copy(selectedRole = role) } }
+
+    fun clearError()   = _uiState.update { it.copy(errorMessage = null) }
+    fun clearSuccess() = _uiState.update { it.copy(successMessage = null) }
+    fun isUserSignedIn(): Boolean = authRepository.isUserSignedIn()
+
+    // ── Validation ────────────────────────────────────────────────────────────
     private fun validateSignInForm(): Boolean {
         var isValid = true
         if (!ValidationUtils.isValidEmail(_email.value.trim())) {
-            _emailError.value = "Please enter a valid email address"; isValid = false
+            _emailError.value = "Please enter a valid email address"
+            isValid = false
         }
         if (_password.value.length < 6) {
-            _passwordError.value = "Password must be at least 6 characters"; isValid = false
+            _passwordError.value = "Password must be at least 6 characters"
+            isValid = false
         }
         return isValid
     }
@@ -294,16 +342,20 @@ class AuthViewModel @Inject constructor(
     private fun validateSignUpForm(): Boolean {
         var isValid = true
         if (_fullName.value.trim().length < 2) {
-            _nameError.value = "Please enter your full name"; isValid = false
+            _nameError.value = "Please enter your full name"
+            isValid = false
         }
         if (!ValidationUtils.isValidEmail(_email.value.trim())) {
-            _emailError.value = "Please enter a valid email address"; isValid = false
+            _emailError.value = "Please enter a valid email address"
+            isValid = false
         }
         if (_password.value.length < 6) {
-            _passwordError.value = "Password must be at least 6 characters"; isValid = false
+            _passwordError.value = "Password must be at least 6 characters"
+            isValid = false
         }
         if (_password.value != _confirmPassword.value) {
-            _passwordError.value = "Passwords do not match"; isValid = false
+            _passwordError.value = "Passwords do not match"
+            isValid = false
         }
         if (_uiState.value.selectedRole.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "Please select a role to continue") }
@@ -311,8 +363,4 @@ class AuthViewModel @Inject constructor(
         }
         return isValid
     }
-
-    fun clearError()   = _uiState.update { it.copy(errorMessage = null) }
-    fun clearSuccess() = _uiState.update { it.copy(successMessage = null) }
-    fun isUserSignedIn(): Boolean = authRepository.isUserSignedIn()
 }

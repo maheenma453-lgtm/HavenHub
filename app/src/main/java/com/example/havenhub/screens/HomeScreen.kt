@@ -48,7 +48,9 @@ fun HomeScreen(
 ) {
     val uiState   by viewModel.uiState.collectAsState()
     val authState by authViewModel.uiState.collectAsState()
-    val userRole  = authState.userRole
+
+    // ✅ FIX: lowercase().trim() — case mismatch ("Landlord" vs "landlord") handled
+    val userRole  = authState.userRole.lowercase().trim()
     val userId    = authState.currentUser?.uid ?: ""
 
     LaunchedEffect(userId, userRole) {

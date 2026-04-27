@@ -31,28 +31,33 @@ import com.example.havenhub.viewmodel.ProfileViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
-    navController: NavController,
+    navController   : NavController,
     profileViewModel: ProfileViewModel = hiltViewModel(),
-    authViewModel: AuthViewModel = hiltViewModel()
+    authViewModel   : AuthViewModel    = hiltViewModel()
 ) {
-    val uiState by profileViewModel.uiState.collectAsState()
+    val uiState     by profileViewModel.uiState.collectAsState()
     val authUiState by authViewModel.uiState.collectAsState()
 
-    // Auth Redirect Logic
     LaunchedEffect(authUiState.isLoggedIn) {
         if (!authUiState.isLoggedIn && !authUiState.isLoading) {
-            navController.navigate(Screen.SignIn.route) {
-                popUpTo(0)
-            }
+            navController.navigate(Screen.SignIn.route) { popUpTo(0) }
         }
     }
 
-    // Role Logic
-    val userRole = uiState.user?.role?.lowercase() ?: "user"
-    val isAdmin = userRole == "admin"
-    val isLandlord = userRole == "landlord"
+    // ✅ FIX: PRIORITY ORDER — pehle ProfileViewModel ka user check karo
+    // uiState.user?.normalizedRole — yeh User.kt ki normalizedRole property use
+    // karta hai jo always lowercase.trim() return karti hai
+    // Agar user abhi load ho raha hai toh AuthViewModel ka userRole use karo
+    // (jo AuthRepository mein already lowercase.trim() hai)
+    val userRole = when {
+        uiState.user != null -> uiState.user!!.normalizedRole
+        authUiState.userRole.isNotEmpty() -> authUiState.userRole.lowercase().trim()
+        else -> "tenant"
+    }
 
-    val roleText = userRole.replaceFirstChar { it.uppercase() }
+    val isAdmin    = userRole == "admin"
+    val isLandlord = userRole == "landlord"
+    val roleText   = userRole.replaceFirstChar { it.uppercase() }
 
     Scaffold(
         topBar = {
@@ -61,9 +66,9 @@ fun ProfileScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint               = Color.White
                         )
                     }
                 },
@@ -73,7 +78,7 @@ fun ProfileScreen(
     ) { padding ->
 
         Column(
-            modifier = Modifier
+            modifier            = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .background(Color(0xFFF2F4F7))
@@ -81,152 +86,171 @@ fun ProfileScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // SECTION 1: Header (Avatar & Name)
+            // ── Header ───────────────────────────────────────────────────────
             Column(
-                modifier = Modifier
+                modifier            = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFFE4E8EF))
                     .padding(vertical = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(
-                    modifier = Modifier
+                    modifier         = Modifier
                         .size(90.dp)
                         .clip(CircleShape)
                         .background(PrimaryBlue),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = uiState.user?.initials ?: "?",
-                        fontSize = 34.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    if (uiState.isLoading) {
+                        CircularProgressIndicator(
+                            color       = Color.White,
+                            modifier    = Modifier.size(32.dp),
+                            strokeWidth = 3.dp
+                        )
+                    } else {
+                        Text(
+                            text       = uiState.user?.initials ?: "?",
+                            fontSize   = 34.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = Color.White
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))
 
                 Text(
-                    text = uiState.user?.fullName ?: "Loading...",
-                    fontSize = 20.sp,
+                    text       = if (uiState.isLoading) "Loading..." else uiState.user?.fullName ?: "—",
+                    fontSize   = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = PrimaryBlue
+                    color      = PrimaryBlue
                 )
 
                 Text(
-                    text = uiState.user?.email ?: "",
+                    text     = uiState.user?.email ?: "",
                     fontSize = 13.sp,
-                    color = Color.Gray
+                    color    = Color.Gray
                 )
 
                 Spacer(Modifier.height(12.dp))
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = if (isAdmin) Color(0xFFFFD700) else Color(0xFFCDD4DF) // Admin ko gold badge
+                    color = if (isAdmin) Color(0xFFFFD700) else Color(0xFFCDD4DF)
                 ) {
                     Text(
-                        text = roleText,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 7.dp),
-                        fontSize = 13.sp,
-                        color = PrimaryBlue,
+                        text       = roleText,
+                        modifier   = Modifier.padding(horizontal = 24.dp, vertical = 7.dp),
+                        fontSize   = 13.sp,
+                        color      = PrimaryBlue,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // SECTION 2: Stats Row
+            // ── Stats Row ────────────────────────────────────────────────────
             Row(
-                modifier = Modifier
+                modifier              = Modifier
                     .fillMaxWidth()
                     .background(Color.White)
                     .padding(vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment     = Alignment.CenterVertically
             ) {
-                // Agar Admin hai toh platform stats ya simple placeholders
-                ProfileStat(value = if(isAdmin) "N/A" else "0", label = "Reviews")
+                ProfileStat(
+                    value = when {
+                        isAdmin    -> "N/A"
+                        isLandlord -> "${uiState.user?.landlordReviewCount ?: 0}"
+                        else       -> "0"
+                    },
+                    label = "Reviews"
+                )
                 VerticalDivider()
-                ProfileStat(value = if(isAdmin) "N/A" else "0.0", label = "Rating")
+                ProfileStat(
+                    value = when {
+                        isAdmin    -> "N/A"
+                        isLandlord -> "%.1f".format(uiState.user?.landlordRating ?: 0f)
+                        else       -> "0.0"
+                    },
+                    label = "Rating"
+                )
                 VerticalDivider()
                 ProfileStat(value = roleText, label = "Role")
             }
 
             Spacer(Modifier.height(8.dp))
 
-            // SECTION 3: Menu Items
+            // ── Menu Items ───────────────────────────────────────────────────
 
-            // --- ADMIN ONLY SECTION ---
             if (isAdmin) {
                 Text(
-                    text = "Administration",
-                    modifier = Modifier.fillMaxWidth().padding(16.dp, 8.dp),
-                    fontSize = 12.sp,
+                    text       = "Administration",
+                    modifier   = Modifier.fillMaxWidth().padding(16.dp, 8.dp),
+                    fontSize   = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Gray
+                    color      = Color.Gray
                 )
                 ProfileMenuItem(
-                    icon = Icons.Default.Dashboard,
-                    label = "Admin Dashboard",
+                    icon    = Icons.Default.Dashboard,
+                    label   = "Admin Dashboard",
                     onClick = { navController.navigate("admin_dashboard") }
                 )
                 ProfileMenuItem(
-                    icon = Icons.Default.VerifiedUser,
-                    label = "Verification Requests",
+                    icon    = Icons.Default.VerifiedUser,
+                    label   = "Verification Requests",
                     onClick = { navController.navigate("verify_users") }
                 )
                 ProfileMenuItem(
-                    icon = Icons.Default.People,
-                    label = "Manage Users",
+                    icon    = Icons.Default.People,
+                    label   = "Manage Users",
                     onClick = { navController.navigate("manage_users") }
                 )
             }
 
-            // --- COMMON & ROLE SPECIFIC ---
             Text(
-                text = "Account Settings",
-                modifier = Modifier.fillMaxWidth().padding(16.dp, 8.dp),
-                fontSize = 12.sp,
+                text       = "Account Settings",
+                modifier   = Modifier.fillMaxWidth().padding(16.dp, 8.dp),
+                fontSize   = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.Gray
+                color      = Color.Gray
             )
 
             if (!isAdmin) {
                 ProfileMenuItem(
-                    icon = Icons.Default.BookOnline,
-                    label = "My Bookings",
+                    icon    = Icons.Default.BookOnline,
+                    label   = "My Bookings",
                     onClick = { navController.navigate(Screen.MyBookings.route) }
                 )
             }
 
             if (isLandlord) {
                 ProfileMenuItem(
-                    icon = Icons.Default.Home,
-                    label = "My Properties",
+                    icon    = Icons.Default.Home,
+                    label   = "My Properties",
                     onClick = { navController.navigate(Screen.MyProperties.route) }
                 )
             }
 
             ProfileMenuItem(
-                icon = Icons.Default.Settings,
-                label = "Settings",
+                icon    = Icons.Default.Settings,
+                label   = "Settings",
                 onClick = { navController.navigate(Screen.Settings.route) }
             )
 
             ProfileMenuItem(
-                icon = Icons.AutoMirrored.Filled.HelpOutline,
-                label = "Help & Support",
+                icon    = Icons.AutoMirrored.Filled.HelpOutline,
+                label   = "Help & Support",
                 onClick = { navController.navigate(Screen.HelpAndSupport.route) }
             )
 
             Spacer(Modifier.height(24.dp))
 
-            // SECTION 4: Logout
+            // ── Logout ───────────────────────────────────────────────────────
             Button(
-                onClick = { authViewModel.signOut() },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                onClick  = { authViewModel.signOut() },
+                colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(10.dp)
+                shape    = RoundedCornerShape(10.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = Color.White)
                 Spacer(Modifier.width(8.dp))
@@ -254,13 +278,13 @@ private fun VerticalDivider() {
 @Composable
 private fun ProfileMenuItem(icon: ImageVector, label: String, onClick: () -> Unit) {
     Surface(
-        onClick = onClick,
+        onClick  = onClick,
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White
+        color    = Color.White
     ) {
         Column {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+                modifier          = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(imageVector = icon, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(22.dp))

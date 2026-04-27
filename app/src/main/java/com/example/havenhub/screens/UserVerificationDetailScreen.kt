@@ -23,12 +23,10 @@ fun UserVerificationDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // User dhundne ka logic
     val user = remember(uiState.pendingUsers, userId) {
         uiState.pendingUsers.find { it.userId == userId }
     }
 
-    // Success hone par wapas bhejo
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             navController.popBackStack()
@@ -58,30 +56,57 @@ fun UserVerificationDetailScreen(
         }
     ) { pad ->
         Box(modifier = Modifier.fillMaxSize().padding(pad)) {
-            if (user == null) {
-                Text("User not found", modifier = Modifier.align(Alignment.Center))
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Text("User Details", fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
-                                HorizontalDivider(thickness = 0.5.dp)
 
-                                UserDetailRow("Name", user.fullName)
-                                UserDetailRow("Email", user.email)
+            when {
+                // ✅ FIX 1: Jab tak data load ho raha hai — spinner dikhao
+                uiState.isLoading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
 
-                                // ✅ FIX: displayName() hata kar direct logic use kiya
-                                val roleDisplay = user.role.lowercase().replaceFirstChar { it.uppercase() }
-                                UserDetailRow("Role", roleDisplay)
+                // ✅ FIX 2: Load ho gaya but user nahi mila
+                user == null -> {
+                    Text(
+                        "User not found",
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
 
-                                UserDetailRow("Status", if (user.isVerified) "Verified" else "Pending")
+                // ✅ FIX 3: User mil gaya — details dikhao
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        item {
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Text(
+                                        "User Details",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    HorizontalDivider(thickness = 0.5.dp)
+
+                                    UserDetailRow("Name", user.fullName)
+                                    UserDetailRow("Email", user.email)
+
+                                    val roleDisplay = user.role
+                                        .lowercase()
+                                        .replaceFirstChar { it.uppercase() }
+                                    UserDetailRow("Role", roleDisplay)
+
+                                    UserDetailRow(
+                                        "Status",
+                                        if (user.isVerified) "Verified" else "Pending"
+                                    )
+                                }
                             }
                         }
                     }
@@ -98,23 +123,39 @@ private fun UserDetailRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            value,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
 
 @Composable
-private fun UserBottomActionBar(onReject: () -> Unit, onApprove: () -> Unit, isLoading: Boolean) {
+private fun UserBottomActionBar(
+    onReject: () -> Unit,
+    onApprove: () -> Unit,
+    isLoading: Boolean
+) {
     Surface(tonalElevation = 2.dp, shadowElevation = 4.dp) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             OutlinedButton(
                 onClick = onReject,
                 modifier = Modifier.weight(1f),
                 enabled = !isLoading,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
             ) {
                 Text("Reject")
             }
@@ -124,7 +165,11 @@ private fun UserBottomActionBar(onReject: () -> Unit, onApprove: () -> Unit, isL
                 enabled = !isLoading
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
                 } else {
                     Text("Approve")
                 }

@@ -79,10 +79,12 @@ fun PropertyDetailScreen(
             }
 
             property != null -> {
-                val isTenant   = currentUserRole.uppercase() == "TENANT"
-                val isLandlord = currentUserRole.uppercase() == "LANDLORD"
+                // ✅ FIX: Role fetch hone tak wait karo — empty role pe buttons mat hide karo
+                val isTenant   = currentUserRole.equals("tenant", ignoreCase = true)
+                val isLandlord = currentUserRole.equals("landlord", ignoreCase = true)
+                val isAdmin    = currentUserRole.equals("admin", ignoreCase = true)
                 val isOwner    = property.ownerId == currentUserId
-
+                val roleLoaded = currentUserRole.isNotEmpty()
                 LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 70.dp)
@@ -511,7 +513,7 @@ fun PropertyDetailScreen(
                         }
 
                         // Message — tenant only, icon-only style
-                        if (isTenant && property.ownerId.isNotEmpty() && !isOwner) {
+                        if (roleLoaded && isTenant && property.ownerId.isNotEmpty() && !isOwner)  {
                             OutlinedButton(
                                 onClick        = {
                                     navController.navigate(
@@ -539,7 +541,7 @@ fun PropertyDetailScreen(
                         }
 
                         // Book Now — tenant only
-                        if (isTenant && !isOwner) {
+                        if (roleLoaded && isTenant && !isOwner) {
                             Button(
                                 onClick        = { navController.navigate(Screen.Booking.createRoute(propertyId)) },
                                 modifier       = Modifier.height(38.dp),
@@ -556,7 +558,7 @@ fun PropertyDetailScreen(
                         }
 
                         // Edit — landlord + owner only
-                        if (isLandlord && isOwner) {
+                        if (roleLoaded && isLandlord && isOwner) {
                             Button(
                                 onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
                                 modifier       = Modifier.height(38.dp),

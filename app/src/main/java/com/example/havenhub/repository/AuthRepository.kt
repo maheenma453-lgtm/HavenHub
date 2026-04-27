@@ -20,20 +20,39 @@ class AuthRepository @Inject constructor(
     val currentUserId : String?       get() = authManager.currentUserId
     fun isUserSignedIn(): Boolean = authManager.isUserSignedIn()
 
+    // ✅ FIX: role.lowercase().trim() — "LANDLORD", "Landlord", "landlord "
+    // sab ek jaisa return hoga. Safe default: "tenant"
     suspend fun getUserRole(uid: String): String {
         return try {
             val result = dataManager.getUser(uid)
-            if (result is Resource.Success) result.data.role.lowercase()
+            if (result is Resource.Success)
+                result.data.role.lowercase().trim().ifEmpty { "tenant" }
             else "tenant"
         } catch (e: Exception) { "tenant" }
     }
 
+    suspend fun getUserVerified(uid: String): Boolean {
+        return try {
+            val result = dataManager.getUser(uid)
+            if (result is Resource.Success) {
+                val user = result.data
+                user.isVerified ||
+                        user.verificationStatus.uppercase().trim() == "VERIFIED" ||
+                        user.verificationStatus.uppercase().trim() == "APPROVED"
+            } else false
+        } catch (e: Exception) { false }
+    }
+
+    // ✅ FIX: role ab ALWAYS lowercase save hoga Firestore mein
+    // Pehle manually add kiye users "LANDLORD" uppercase mein hain —
+    // getUserRole() unhe bhi lowercase kar ke return karta hai
     suspend fun registerUser(
         email    : String,
         password : String,
         fullName : String,
         role     : String
     ): Resource<FirebaseUser> {
+
         val authResult = authManager.registerWithEmail(email, password)
         if (authResult is Resource.Error) return authResult
 
@@ -43,7 +62,7 @@ class AuthRepository @Inject constructor(
             userId     = firebaseUser.uid,
             email      = email,
             fullName   = fullName,
-            role       = role.uppercase(),
+            role       = role.lowercase().trim(),   // ✅ lowercase save
             isVerified = false
         )
 
@@ -59,32 +78,57 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun signIn(email: String, password: String): Resource<FirebaseUser> {
-        val authResult = authManager.signInWithEmail(email, password)
-        if (authResult is Resource.Success) {
-            val tokenResult = messagingManager.getDeviceToken()
-            if (tokenResult is Resource.Success) {
-                messagingManager.saveDeviceToken(authResult.data.uid, tokenResult.data)
-            }
-        }
-        return authResult
-    }
 
-    suspend fun signInWithGoogle(idToken: String): Resource<FirebaseUser> {
-        val authResult = authManager.signInWithGoogle(idToken)
+        val authResult = authManager.signInWithEmail(email, password)
         if (authResult is Resource.Error) return authResult
 
         val firebaseUser = (authResult as Resource.Success).data
 
+        val userResult = dataManager.getUser(firebaseUser.uid)
+
+        if (userResult is Resource.Success) {
+            if (userResult.data.isBanned) {
+                authManager.signOut()
+                return Resource.Error(
+                    "Your account has been suspended. Please contact support for assistance."
+                )
+            }
+        }
+
+        val tokenResult = messagingManager.getDeviceToken()
+        if (tokenResult is Resource.Success) {
+            messagingManager.saveDeviceToken(firebaseUser.uid, tokenResult.data)
+        }
+
+        return Resource.Success(firebaseUser)
+    }
+
+    suspend fun signInWithGoogle(idToken: String): Resource<FirebaseUser> {
+
+        val authResult = authManager.signInWithGoogle(idToken)
+        if (authResult is Resource.Error) return authResult
+
+        val firebaseUser = (authResult as Resource.Success).data
         val existingUser = dataManager.getUser(firebaseUser.uid)
+
         if (existingUser is Resource.Error) {
             val user = User(
                 userId          = firebaseUser.uid,
                 email           = firebaseUser.email ?: "",
                 fullName        = firebaseUser.displayName ?: "",
-                role            = "TENANT",
+                role            = "tenant",         // ✅ lowercase
+                isVerified      = false,
                 profileImageUrl = firebaseUser.photoUrl?.toString() ?: ""
             )
             dataManager.saveUser(user)
+
+        } else if (existingUser is Resource.Success) {
+            if (existingUser.data.isBanned) {
+                authManager.signOut()
+                return Resource.Error(
+                    "Your account has been suspended. Please contact support for assistance."
+                )
+            }
         }
 
         val tokenResult = messagingManager.getDeviceToken()
@@ -105,19 +149,13 @@ class AuthRepository @Inject constructor(
     suspend fun sendPasswordResetEmail(email: String): Resource<Unit> =
         authManager.sendPasswordResetEmail(email)
 
-    // ✅ NEW: Delete account — Firestore data + FCM token + Firebase Auth
     suspend fun deleteAccount(): Resource<Unit> {
         return try {
             val uid = authManager.currentUserId
                 ?: return Resource.Error("No user logged in")
 
-            // 1. FCM token clear karo
             messagingManager.clearDeviceToken(uid)
-
-            // 2. Firestore user document delete karo
             dataManager.deleteUser(uid)
-
-            // 3. Firebase Auth account delete karo
             authManager.deleteAccount()
 
         } catch (e: Exception) {
