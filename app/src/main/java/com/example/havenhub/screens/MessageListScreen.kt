@@ -22,8 +22,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
-import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.MessagingViewModel
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.*
@@ -33,45 +33,80 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun MessageListScreen(
     navController : NavController,
-    viewModel     : MessagingViewModel = hiltViewModel(),
-    authViewModel : AuthViewModel      = hiltViewModel()
+    viewModel     : MessagingViewModel = hiltViewModel()
 ) {
-    val uiState     by viewModel.uiState.collectAsState()
-    val authUiState by authViewModel.uiState.collectAsState()
-    val currentUid  = authUiState.currentUser?.uid ?: ""
+    val uiState    by viewModel.uiState.collectAsState()
+    val currentUid  = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    // ✅ Other users ke naam store karo — uid -> name map
-    val userNames = remember { mutableStateMapOf<String, String>() }
+    var userRole  by remember { mutableStateOf("") }
+    val userNames  = remember { mutableStateMapOf<String, String>() }
 
     LaunchedEffect(currentUid) {
         if (currentUid.isNotEmpty()) {
+            try {
+                val directDoc = FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(currentUid)
+                    .get()
+                    .await()
+
+                if (directDoc.exists()) {
+                    // ✅ .trim() — trailing space se bachao
+                    userRole = directDoc.getString("role")?.trim() ?: ""
+                } else {
+                    val query = FirebaseFirestore.getInstance()
+                        .collection("users")
+                        .whereEqualTo("userId", currentUid)
+                        .limit(1)
+                        .get()
+                        .await()
+                    // ✅ .trim() — trailing space se bachao
+                    userRole = query.documents.firstOrNull()
+                        ?.getString("role")?.trim() ?: ""
+                }
+            } catch (_: Exception) {
+                userRole = ""
+            }
+
             viewModel.loadConversations(currentUid)
         }
     }
 
-    // ✅ Jab bhi conversations update hon — har otherUserId ka naam Firestore se fetch karo
     LaunchedEffect(uiState.conversations) {
         uiState.conversations.forEach { convo ->
             val participants = (convo["participants"] as? List<*>) ?: emptyList<Any>()
             val otherUserId  = participants
-                .firstOrNull { it != currentUid }
+                .firstOrNull { it.toString() != currentUid }
                 ?.toString() ?: ""
 
-            // Sirf fetch karo agar pehle se map mein nahi hai
             if (otherUserId.isNotEmpty() && !userNames.containsKey(otherUserId)) {
                 try {
-                    val doc = FirebaseFirestore.getInstance()
+                    val directDoc = FirebaseFirestore.getInstance()
                         .collection("users")
                         .document(otherUserId)
                         .get()
                         .await()
-                    // ✅ "name" ya "fullName" — jo bhi aapke User model mein hai
-                    val name = doc.getString("name")
-                        ?: doc.getString("fullName")
-                        ?: doc.getString("displayName")
-                        ?: "User"
+
+                    val name = if (directDoc.exists()) {
+                        directDoc.getString("name")
+                            ?: directDoc.getString("fullName")
+                            ?: directDoc.getString("displayName")
+                            ?: "User"
+                    } else {
+                        val query = FirebaseFirestore.getInstance()
+                            .collection("users")
+                            .whereEqualTo("userId", otherUserId)
+                            .limit(1)
+                            .get()
+                            .await()
+                        val doc = query.documents.firstOrNull()
+                        doc?.getString("name")
+                            ?: doc?.getString("fullName")
+                            ?: doc?.getString("displayName")
+                            ?: "User"
+                    }
                     userNames[otherUserId] = name
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     userNames[otherUserId] = "User"
                 }
             }
@@ -113,7 +148,7 @@ fun MessageListScreen(
                 }
 
                 uiState.conversations.isEmpty() -> {
-                    EmptyMessagesState()
+                    EmptyMessagesState(userRole = userRole)
                 }
 
                 else -> {
@@ -122,7 +157,7 @@ fun MessageListScreen(
                             val participants = (convo["participants"] as? List<*>)
                                 ?: emptyList<Any>()
                             val otherUserId  = participants
-                                .firstOrNull { it != currentUid }
+                                .firstOrNull { it.toString() != currentUid }
                                 ?.toString() ?: ""
                             val lastMessage  = (convo["lastMessage"] as? String) ?: ""
                             val timestamp    = (convo["lastMessageTimestamp"] as? Long) ?: 0L
@@ -131,7 +166,6 @@ fun MessageListScreen(
                                     .format(Date(timestamp))
                             } else ""
 
-                            // ✅ Naam map se lo — load ho raha ho to "Loading..." dikhao
                             val displayName  = userNames[otherUserId] ?: "Loading..."
                             val avatarLetter = displayName
                                 .firstOrNull { it.isLetter() }
@@ -140,12 +174,15 @@ fun MessageListScreen(
                             ConversationItem(
                                 avatarInitial = avatarLetter,
                                 name          = displayName,
-                                lastMessage   = lastMessage.ifEmpty { "Start a conversation" },
+                                lastMessage   = lastMessage.ifEmpty { "Tap to open chat" },
                                 timestamp     = timeStr,
                                 unreadCount   = 0,
                                 onClick       = {
                                     navController.navigate(
-                                        Screen.Chat.createRoute(otherUserId)
+                                        Screen.Chat.createRoute(
+                                            userId    = otherUserId,
+                                            ownerName = displayName
+                                        )
                                     )
                                 }
                             )
@@ -163,14 +200,8 @@ fun MessageListScreen(
     }
 }
 
-// ── Helper: await() extension for Tasks ──────────────────────────────────────
-//private suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T {
-//    return kotlinx.coroutines.tasks.await(this)
-
-
-// ── Empty State ───────────────────────────────────────────────────────────────
 @Composable
-private fun EmptyMessagesState() {
+private fun EmptyMessagesState(userRole: String) {
     Column(
         modifier            = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
@@ -186,14 +217,16 @@ private fun EmptyMessagesState() {
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text     = "Start a conversation with a landlord",
+            text     = if (userRole == "landlord")
+                "Tenants will appear here when they message you"
+            else
+                "Start a conversation with a landlord",
             fontSize = 13.sp,
             color    = TextSecondary
         )
     }
 }
 
-// ── Conversation Row ──────────────────────────────────────────────────────────
 @Composable
 private fun ConversationItem(
     avatarInitial : String,
@@ -210,7 +243,6 @@ private fun ConversationItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // ── Avatar ──
         Box(
             modifier         = Modifier
                 .size(52.dp)
@@ -228,7 +260,6 @@ private fun ConversationItem(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // ── Name + Last Message ──
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text       = name,
@@ -246,7 +277,6 @@ private fun ConversationItem(
             )
         }
 
-        // ── Timestamp + Badge ──
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text     = timestamp,

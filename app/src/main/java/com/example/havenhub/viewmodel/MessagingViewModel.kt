@@ -59,15 +59,10 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    // ✅ FIX: propertyId ke saath consistent chatId banao
+    // ✅ FIXED: Always simple chatId — propertyId ignored
     fun loadChat(otherUserId: String, propertyId: String = "") {
         if (currentUserId.isEmpty() || otherUserId.isEmpty()) return
-
-        val chatId = if (propertyId.isNotEmpty() && propertyId != "none")
-            Message.buildConversationId(currentUserId, otherUserId, propertyId)
-        else
-            messagingRepository.generateChatId(currentUserId, otherUserId)
-
+        val chatId = messagingRepository.generateChatId(currentUserId, otherUserId)
         listenToMessages(chatId)
     }
 
@@ -102,7 +97,7 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    // ✅ FIX: propertyId parameter add kiya — same conversationId guarantee
+    // ✅ FIXED: Always simple chatId — propertyId ignored
     fun sendMessage(
         receiverId  : String,
         content     : String,
@@ -119,11 +114,8 @@ class MessagingViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(sendSuccess = false) }
 
-            // ✅ FIX: same formula jaise loadChat mein
-            val chatId = if (propertyId.isNotEmpty() && propertyId != "none")
-                Message.buildConversationId(currentUserId, receiverId, propertyId)
-            else
-                messagingRepository.generateChatId(currentUserId, receiverId)
+            // ✅ ALWAYS simple chatId — propertyId ignore karo
+            val chatId = messagingRepository.generateChatId(currentUserId, receiverId)
 
             messagingRepository.createOrGetConversation(currentUserId, receiverId)
 

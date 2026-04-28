@@ -20,15 +20,14 @@ class AuthRepository @Inject constructor(
     val currentUserId : String?       get() = authManager.currentUserId
     fun isUserSignedIn(): Boolean = authManager.isUserSignedIn()
 
-    // ✅ FIX: role.lowercase().trim() — "LANDLORD", "Landlord", "landlord "
-    // sab ek jaisa return hoga. Safe default: "tenant"
+    // ✅ FIX: UPPERCASE return karo — Firestore rules 'LANDLORD' expect karti hain
     suspend fun getUserRole(uid: String): String {
         return try {
             val result = dataManager.getUser(uid)
             if (result is Resource.Success)
-                result.data.role.lowercase().trim().ifEmpty { "tenant" }
-            else "tenant"
-        } catch (e: Exception) { "tenant" }
+                result.data.role.uppercase().trim().ifEmpty { "TENANT" }
+            else "TENANT"
+        } catch (e: Exception) { "TENANT" }
     }
 
     suspend fun getUserVerified(uid: String): Boolean {
@@ -43,9 +42,7 @@ class AuthRepository @Inject constructor(
         } catch (e: Exception) { false }
     }
 
-    // ✅ FIX: role ab ALWAYS lowercase save hoga Firestore mein
-    // Pehle manually add kiye users "LANDLORD" uppercase mein hain —
-    // getUserRole() unhe bhi lowercase kar ke return karta hai
+    // ✅ FIX: role ab ALWAYS UPPERCASE save hoga Firestore mein
     suspend fun registerUser(
         email    : String,
         password : String,
@@ -62,7 +59,7 @@ class AuthRepository @Inject constructor(
             userId     = firebaseUser.uid,
             email      = email,
             fullName   = fullName,
-            role       = role.lowercase().trim(),   // ✅ lowercase save
+            role       = role.uppercase().trim(),   // ✅ UPPERCASE save
             isVerified = false
         )
 
@@ -116,7 +113,7 @@ class AuthRepository @Inject constructor(
                 userId          = firebaseUser.uid,
                 email           = firebaseUser.email ?: "",
                 fullName        = firebaseUser.displayName ?: "",
-                role            = "tenant",         // ✅ lowercase
+                role            = "TENANT",         // ✅ UPPERCASE
                 isVerified      = false,
                 profileImageUrl = firebaseUser.photoUrl?.toString() ?: ""
             )

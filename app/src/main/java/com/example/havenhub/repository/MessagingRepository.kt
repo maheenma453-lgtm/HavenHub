@@ -1,7 +1,9 @@
 package com.example.havenhub.repository
 
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.example.havenhub.data.Message
 import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.utils.Resource
@@ -23,7 +25,6 @@ class MessagingRepository @Inject constructor(
         private const val MESSAGES_COLLECTION      = "messages"
     }
 
-    // ✅ Conversations real-time listen
     fun getConversationsRealtime(userId: String): Flow<Resource<List<Map<String, Any>>>> = callbackFlow {
         val listener = firestore
             .collection(CONVERSATIONS_COLLECTION)
@@ -34,13 +35,14 @@ class MessagingRepository @Inject constructor(
                     trySend(Resource.Error(error.message ?: "Failed to load conversations"))
                     return@addSnapshotListener
                 }
-                val convos = snapshot?.documents?.map { it.data ?: emptyMap() } ?: emptyList()
+                val convos = snapshot?.documents?.mapNotNull { doc ->
+                    doc.data?.toMutableMap()?.also { it["id"] = doc.id }
+                } ?: emptyList()
                 trySend(Resource.Success(convos))
             }
         awaitClose { listener.remove() }
     }
 
-    // ✅ Messages real-time listen
     fun getMessagesRealtime(chatId: String): Flow<Resource<List<Message>>> = callbackFlow {
         val listener = firestore
             .collection(CONVERSATIONS_COLLECTION)
@@ -60,18 +62,20 @@ class MessagingRepository @Inject constructor(
         awaitClose { listener.remove() }
     }
 
-    // ✅ Message bhejo
     suspend fun sendMessage(
         conversationId : String,
         senderId       : String,
         receiverId     : String,
         content        : String,
-        // ✅ FIX: default value Message.TYPE_TEXT = "text" — Firestore mein "text" store hoga
         messageType    : String  = Message.TYPE_TEXT,
         mediaUrl       : String? = null,
         mediaFileName  : String? = null
     ): Resource<Message> {
         return try {
+            // ✅ Step 1: Message se PEHLE conversation ensure karo
+            ensureConversation(conversationId, senderId, receiverId)
+
+            // ✅ Step 2: Message save karo
             val messageRef = firestore
                 .collection(CONVERSATIONS_COLLECTION)
                 .document(conversationId)
@@ -92,14 +96,58 @@ class MessagingRepository @Inject constructor(
             )
 
             messageRef.set(message).await()
-            updateConversationLastMessage(conversationId, message)
+
+            // ✅ Step 3: Last message update karo
+            updateLastMessage(conversationId, message, senderId, receiverId)
+
             Resource.Success(message)
         } catch (e: Exception) {
             Resource.Error(e.message ?: "Failed to send message")
         }
     }
 
-    // ✅ Messages read mark karo
+    // ✅ KEY FIX: set() + merge() — atomic operation
+    // Na race condition, na duplicate doc
+    private suspend fun ensureConversation(
+        conversationId : String,
+        userId1        : String,
+        userId2        : String
+    ) {
+        firestore
+            .collection(CONVERSATIONS_COLLECTION)
+            .document(conversationId)
+            .set(
+                mapOf(
+                    "id"           to conversationId,
+                    "participants" to listOf(userId1, userId2), // ✅ DONO hamesha
+                    "createdAt"    to FieldValue.serverTimestamp()
+                ),
+                SetOptions.merge() // ✅ Exist kare toh sirf missing fields add karo
+            ).await()
+    }
+
+    // ✅ Last message update — participants hamesha overwrite hoti hain
+    private suspend fun updateLastMessage(
+        conversationId : String,
+        message        : Message,
+        senderId       : String,
+        receiverId     : String
+    ) {
+        firestore
+            .collection(CONVERSATIONS_COLLECTION)
+            .document(conversationId)
+            .set(
+                mapOf(
+                    "id"                   to conversationId,
+                    "participants"         to listOf(senderId, receiverId), // ✅ CRITICAL
+                    "lastMessage"          to message.preview,
+                    "lastMessageTimestamp" to message.timestamp,
+                    "lastMessageSenderId"  to message.senderId
+                ),
+                SetOptions.merge()
+            ).await()
+    }
+
     suspend fun markMessagesAsRead(chatId: String, currentUserId: String) {
         try {
             val unreadMessages = firestore
@@ -116,12 +164,9 @@ class MessagingRepository @Inject constructor(
                 batch.update(doc.reference, "isRead", true)
             }
             batch.commit().await()
-        } catch (e: Exception) {
-            // Silent fail
-        }
+        } catch (_: Exception) { }
     }
 
-    // ✅ Conversation delete karo
     suspend fun deleteConversation(chatId: String) {
         try {
             val messages = firestore
@@ -132,9 +177,7 @@ class MessagingRepository @Inject constructor(
                 .await()
 
             val batch = firestore.batch()
-            messages.documents.forEach { doc ->
-                batch.delete(doc.reference)
-            }
+            messages.documents.forEach { doc -> batch.delete(doc.reference) }
             batch.commit().await()
 
             firestore
@@ -147,70 +190,17 @@ class MessagingRepository @Inject constructor(
         }
     }
 
-    // ✅ Unread count
     suspend fun getUnreadMessagesCount(userId: String): Int = 0
 
-    // ✅ FIX: generateChatId — userId1 aur userId2 sorted join karo
-    // Message.buildConversationId se alag hai kyunki woh propertyId bhi leta hai
-    // Yahan simple 1-on-1 chat ke liye use ho raha hai
+    // ✅ Simple 2-user chatId — consistent everywhere
     fun generateChatId(userId1: String, userId2: String): String {
         return listOf(userId1, userId2).sorted().joinToString("_")
     }
 
-    // ✅ Conversation banao ya fetch karo
+    // ✅ Public wrapper — ViewModel se call hoti hai
     suspend fun createOrGetConversation(userId1: String, userId2: String): String {
         val conversationId = generateChatId(userId1, userId2)
-        return try {
-            val conversationRef = firestore
-                .collection(CONVERSATIONS_COLLECTION)
-                .document(conversationId)
-
-            val snapshot = conversationRef.get().await()
-
-            if (!snapshot.exists()) {
-                val conversationData = hashMapOf(
-                    "id"                   to conversationId,
-                    "participants"         to listOf(userId1, userId2),
-                    "lastMessage"          to "",
-                    "lastMessageTimestamp" to System.currentTimeMillis(),
-                    "createdAt"            to System.currentTimeMillis()
-                )
-                conversationRef.set(conversationData).await()
-            }
-            conversationId
-        } catch (e: Exception) {
-            throw Exception("Failed to create conversation: ${e.message}")
-        }
-    }
-
-    // ✅ Helper: Last message update karo
-    private suspend fun updateConversationLastMessage(conversationId: String, message: Message) {
-        try {
-            firestore
-                .collection(CONVERSATIONS_COLLECTION)
-                .document(conversationId)
-                .update(
-                    mapOf(
-                        "lastMessage"          to message.preview,
-                        "lastMessageTimestamp" to message.timestamp,
-                        "lastMessageSenderId"  to message.senderId
-                    )
-                ).await()
-        } catch (e: Exception) {
-            // ✅ FIX: Document exist nahi karta to set() se banao
-            val conversationData = hashMapOf(
-                "id"                   to conversationId,
-                "participants"         to listOf(message.senderId, message.receiverId),
-                "lastMessage"          to message.preview,
-                "lastMessageTimestamp" to message.timestamp,
-                "lastMessageSenderId"  to message.senderId,
-                "createdAt"            to System.currentTimeMillis()
-            )
-            firestore
-                .collection(CONVERSATIONS_COLLECTION)
-                .document(conversationId)
-                .set(conversationData)
-                .await()
-        }
+        ensureConversation(conversationId, userId1, userId2)
+        return conversationId
     }
 }

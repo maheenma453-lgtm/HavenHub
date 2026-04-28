@@ -17,10 +17,6 @@ import com.example.havenhub.screens.*
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Route groups — used to decide which bottom nav bar to show
-// ─────────────────────────────────────────────────────────────────────────────
-
 private val authRoutes = listOf(
     Screen.Splash.route,
     Screen.Onboarding.route,
@@ -57,12 +53,12 @@ fun HavenHubNavGraph(
     val isAuthRoute  = currentRoute in authRoutes
     val isAdminRoute = adminRoutes.any { currentRoute == it } ||
             currentRoute?.startsWith("property_verification_detail") == true ||
-            currentRoute?.startsWith("user_verification_detail") == true
+            currentRoute?.startsWith("user_verification_detail")     == true
 
     Scaffold(
         bottomBar = {
             when {
-                isAuthRoute  -> { /* No bottom bar on auth screens */ }
+                isAuthRoute  -> { /* No bottom bar */ }
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
                 else         -> BottomNavBar(
                     navController      = navController,
@@ -111,34 +107,23 @@ fun HavenHubNavGraph(
 
             composable(Screen.AddProperty.route) {
                 val role       = uiState.userRole
-                val isVerified = uiState.isVerified   // read verified status from AuthViewModel
-
+                val isVerified = uiState.isVerified
                 when {
                     uiState.isLoading -> {
-                        // Wait for auth state to load before making routing decisions
                         Box(Modifier.fillMaxSize(), Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
-
                     role != "landlord" -> {
-                        // Only landlords can add properties — redirect everyone else back
                         LaunchedEffect(Unit) { navController.popBackStack() }
                     }
-
                     !isVerified -> {
-                        // GUARD: Landlord is not verified yet — show blocked screen
-                        // They must wait for admin to verify them before listing properties
                         UnverifiedAccessScreen(
                             message = "Your account needs to be verified by admin before you can add properties.",
                             onBack  = { navController.popBackStack() }
                         )
                     }
-
-                    else -> {
-                        // Verified landlord — allow full access to Add Property
-                        AddPropertyScreen(navController)
-                    }
+                    else -> AddPropertyScreen(navController)
                 }
             }
 
@@ -183,32 +168,23 @@ fun HavenHubNavGraph(
                 })
             ) { back ->
                 val role       = uiState.userRole
-                val isVerified = uiState.isVerified   // read verified status from AuthViewModel
-
+                val isVerified = uiState.isVerified
                 when {
                     uiState.isLoading -> {
-                        // Wait for auth state before routing
                         Box(Modifier.fillMaxSize(), Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
-
                     role != "tenant" -> {
-                        // Only tenants can book — redirect landlords / admins back
                         LaunchedEffect(Unit) { navController.popBackStack() }
                     }
-
                     !isVerified -> {
-                        // GUARD: Tenant is not verified yet — show blocked screen
-                        // They must wait for admin to verify them before booking
                         UnverifiedAccessScreen(
                             message = "Your account needs to be verified by admin before you can book properties.",
                             onBack  = { navController.popBackStack() }
                         )
                     }
-
                     else -> {
-                        // Verified tenant — allow full booking flow
                         BookingScreen(
                             navController = navController,
                             propertyId    = back.arguments?.getString(Screen.Booking.ARG_PROPERTY_ID) ?: ""
@@ -343,7 +319,7 @@ fun HavenHubNavGraph(
                     },
                     navArgument(Screen.Chat.ARG_OWNER_NAME) {
                         type         = NavType.StringType
-                        defaultValue = "Owner"
+                        defaultValue = "User"
                     },
                     navArgument(Screen.Chat.ARG_PROPERTY_ID) {
                         type         = NavType.StringType
@@ -351,13 +327,18 @@ fun HavenHubNavGraph(
                     }
                 )
             ) { back ->
-                val rawOwnerName  = back.arguments?.getString(Screen.Chat.ARG_OWNER_NAME) ?: "Owner"
-                val rawPropertyId = back.arguments?.getString(Screen.Chat.ARG_PROPERTY_ID) ?: ""
+                val rawOwnerName  = back.arguments?.getString(Screen.Chat.ARG_OWNER_NAME)  ?: "User"
+                val rawPropertyId = back.arguments?.getString(Screen.Chat.ARG_PROPERTY_ID) ?: "none"
+
+                // ✅ URL decode — android.net.Uri.encode ka reverse
+                val decodedOwnerName = try {
+                    android.net.Uri.decode(rawOwnerName)
+                } catch (_: Exception) { rawOwnerName }
 
                 ChatScreen(
                     navController = navController,
                     userId        = back.arguments?.getString(Screen.Chat.ARG_USER_ID) ?: "",
-                    ownerName     = rawOwnerName,
+                    ownerName     = decodedOwnerName,
                     propertyId    = if (rawPropertyId == "none") "" else rawPropertyId,
                     currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
                 )

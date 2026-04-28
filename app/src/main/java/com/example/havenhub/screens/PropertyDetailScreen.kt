@@ -34,7 +34,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
-// ── Design Tokens ─────────────────────────────────────────────────
 private val Navy      = Color(0xFF0D1B3E)
 private val NavyLight = Color(0xFF1A2F5E)
 private val Gold      = Color(0xFFD4AF37)
@@ -58,12 +57,13 @@ fun PropertyDetailScreen(
     var currentUserRole by remember { mutableStateOf("") }
     val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
+    // ✅ .trim() — trailing space se bachao
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
             try {
                 val doc = FirebaseFirestore.getInstance()
                     .collection("users").document(currentUserId).get().await()
-                currentUserRole = doc.getString("role") ?: ""
+                currentUserRole = doc.getString("role")?.trim() ?: ""
             } catch (e: Exception) { currentUserRole = "" }
         }
     }
@@ -79,20 +79,18 @@ fun PropertyDetailScreen(
             }
 
             property != null -> {
-                // ✅ FIX: Role fetch hone tak wait karo — empty role pe buttons mat hide karo
                 val isTenant   = currentUserRole.equals("tenant", ignoreCase = true)
                 val isLandlord = currentUserRole.equals("landlord", ignoreCase = true)
                 val isAdmin    = currentUserRole.equals("admin", ignoreCase = true)
                 val isOwner    = property.ownerId == currentUserId
                 val roleLoaded = currentUserRole.isNotEmpty()
+
                 LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 70.dp)
                 ) {
 
-                    // ════════════════════════════════════════
                     // 1. HERO IMAGE
-                    // ════════════════════════════════════════
                     item {
                         Box(Modifier.fillMaxWidth().height(300.dp)) {
                             Image(
@@ -116,7 +114,6 @@ fun PropertyDetailScreen(
                                     )
                                 )
                             )
-                            // Back button
                             Box(
                                 modifier = Modifier
                                     .statusBarsPadding()
@@ -131,7 +128,6 @@ fun PropertyDetailScreen(
                             ) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = White, modifier = Modifier.size(20.dp))
                             }
-                            // Availability pill
                             Box(
                                 modifier = Modifier
                                     .statusBarsPadding()
@@ -150,7 +146,6 @@ fun PropertyDetailScreen(
                                     )
                                 }
                             }
-                            // Type + title + location at bottom
                             Column(
                                 Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(18.dp)
                             ) {
@@ -172,9 +167,7 @@ fun PropertyDetailScreen(
                         }
                     }
 
-                    // ════════════════════════════════════════
                     // 2. PRICE + RATING
-                    // ════════════════════════════════════════
                     item {
                         Row(
                             modifier              = Modifier.fillMaxWidth().background(White)
@@ -203,9 +196,7 @@ fun PropertyDetailScreen(
                         HorizontalDivider(color = BgLight, thickness = 6.dp)
                     }
 
-                    // ════════════════════════════════════════
                     // 3. QUICK STATS
-                    // ════════════════════════════════════════
                     item {
                         Row(
                             modifier              = Modifier.fillMaxWidth().background(White).padding(vertical = 4.dp),
@@ -222,9 +213,7 @@ fun PropertyDetailScreen(
                         HorizontalDivider(color = BgLight, thickness = 6.dp)
                     }
 
-                    // ════════════════════════════════════════
                     // 4. OWNER
-                    // ════════════════════════════════════════
                     item {
                         Row(
                             modifier          = Modifier.fillMaxWidth().background(White)
@@ -260,9 +249,7 @@ fun PropertyDetailScreen(
                         HorizontalDivider(color = BgLight, thickness = 6.dp)
                     }
 
-                    // ════════════════════════════════════════
                     // 5. DESCRIPTION
-                    // ════════════════════════════════════════
                     item {
                         Column(
                             Modifier.fillMaxWidth().background(White)
@@ -278,9 +265,7 @@ fun PropertyDetailScreen(
                         HorizontalDivider(color = BgLight, thickness = 6.dp)
                     }
 
-                    // ════════════════════════════════════════
-                    // 6. AMENITIES — 2-col grid
-                    // ════════════════════════════════════════
+                    // 6. AMENITIES
                     if (property.amenities.isNotEmpty()) {
                         item {
                             Column(
@@ -316,9 +301,7 @@ fun PropertyDetailScreen(
                         }
                     }
 
-                    // ════════════════════════════════════════
-                    // 7. HOUSE RULES — visual cards
-                    // ════════════════════════════════════════
+                    // 7. HOUSE RULES
                     item {
                         Column(
                             Modifier.fillMaxWidth().background(White)
@@ -326,8 +309,6 @@ fun PropertyDetailScreen(
                         ) {
                             SectionTitle("House Rules")
                             Spacer(Modifier.height(14.dp))
-
-                            // Check-in / Check-out cards side by side
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 TimeCard(
                                     modifier = Modifier.weight(1f),
@@ -346,10 +327,7 @@ fun PropertyDetailScreen(
                                     valColor = Color(0xFFB8860B)
                                 )
                             }
-
                             Spacer(Modifier.height(10.dp))
-
-                            // Min nights row
                             Row(
                                 modifier          = Modifier.fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp)).background(BgLight)
@@ -364,10 +342,7 @@ fun PropertyDetailScreen(
                                     fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Navy
                                 )
                             }
-
                             Spacer(Modifier.height(10.dp))
-
-                            // Policy chips — 3 in a row
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 PolicyChip(Modifier.weight(1f), "🐾", "Pets",    property.petsAllowed)
                                 PolicyChip(Modifier.weight(1f), "🚬", "Smoking", property.smokingAllowed)
@@ -377,9 +352,7 @@ fun PropertyDetailScreen(
                         HorizontalDivider(color = BgLight, thickness = 6.dp)
                     }
 
-                    // ════════════════════════════════════════
                     // 8. LOCATION
-                    // ════════════════════════════════════════
                     item {
                         Column(
                             Modifier.fillMaxWidth().background(White)
@@ -409,9 +382,7 @@ fun PropertyDetailScreen(
                         HorizontalDivider(color = BgLight, thickness = 6.dp)
                     }
 
-                    // ════════════════════════════════════════
                     // 9. REVIEWS
-                    // ════════════════════════════════════════
                     item {
                         Column(
                             Modifier.fillMaxWidth().background(White)
@@ -428,7 +399,6 @@ fun PropertyDetailScreen(
                                 }
                             }
                             Spacer(Modifier.height(12.dp))
-
                             Row(
                                 modifier = Modifier.fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
@@ -436,7 +406,6 @@ fun PropertyDetailScreen(
                                     .padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Big score
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier            = Modifier.width(78.dp)
@@ -454,10 +423,7 @@ fun PropertyDetailScreen(
                                     Spacer(Modifier.height(3.dp))
                                     Text("${property.reviewCount} reviews", fontSize = 10.sp, color = White.copy(0.55f))
                                 }
-
                                 Spacer(Modifier.width(14.dp))
-
-                                // Rating bars
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                                     listOf(
                                         "Cleanliness" to 0.92f,
@@ -482,11 +448,9 @@ fun PropertyDetailScreen(
                             }
                         }
                     }
-                } // LazyColumn end
+                }
 
-                // ════════════════════════════════════════════
-                // STICKY BOTTOM BAR — compact
-                // ════════════════════════════════════════════
+                // STICKY BOTTOM BAR
                 Surface(
                     modifier        = Modifier.align(Alignment.BottomCenter),
                     shadowElevation = 12.dp,
@@ -496,11 +460,10 @@ fun PropertyDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .padding(bottom = 6.dp), // 👈 important
-                        horizontalArrangement = Arrangement.spacedBy(16.dp), // 👈 spacing fix
+                            .padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
-                        // Price column — compact
                         Column(Modifier.weight(1f)) {
                             Text("Per night", fontSize = 9.sp, color = Muted)
                             Text(
@@ -512,15 +475,15 @@ fun PropertyDetailScreen(
                             )
                         }
 
-                        // Message — tenant only, icon-only style
-                        if (roleLoaded && isTenant && property.ownerId.isNotEmpty() && !isOwner)  {
+                        // ✅ Message button — tenant only
+                        if (roleLoaded && isTenant && property.ownerId.isNotEmpty() && !isOwner) {
                             OutlinedButton(
                                 onClick        = {
                                     navController.navigate(
                                         Screen.Chat.createRoute(
-                                            userId     = property.ownerId,
-                                            ownerName  = property.ownerName.ifEmpty { "Owner" },
-                                            propertyId = propertyId
+                                            userId    = property.ownerId,
+                                            ownerName = property.ownerName.ifEmpty { "Owner" }
+                                            // ✅ propertyId pass nahi — simple chatId guarantee
                                         )
                                     )
                                 },
@@ -660,8 +623,6 @@ private fun PolicyChip(modifier: Modifier, emoji: String, label: String, allowed
         )
     }
 }
-
-// ── Utility ───────────────────────────────────────────────────────
 
 fun getStatusColor(status: String): Color = when (status.uppercase()) {
     "AVAILABLE"   -> Color(0xFF22C55E)
