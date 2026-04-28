@@ -38,21 +38,19 @@ fun ProfileScreen(
     val uiState     by profileViewModel.uiState.collectAsState()
     val authUiState by authViewModel.uiState.collectAsState()
 
-    LaunchedEffect(authUiState.isLoggedIn) {
-        if (!authUiState.isLoggedIn && !authUiState.isLoading) {
+    // ✅ FIX: isAuthReady check add kiya — pehle isLoggedIn momentarily false
+    // hota tha aur SignIn pe navigate kar deta tha (loop ban jaata tha)
+    // Ab sirf tab navigate karo jab auth READY ho aur user logged OUT ho
+    LaunchedEffect(authUiState.isLoggedIn, authUiState.isAuthReady) {
+        if (authUiState.isAuthReady && !authUiState.isLoggedIn) {
             navController.navigate(Screen.SignIn.route) { popUpTo(0) }
         }
     }
 
-    // ✅ FIX: PRIORITY ORDER — pehle ProfileViewModel ka user check karo
-    // uiState.user?.normalizedRole — yeh User.kt ki normalizedRole property use
-    // karta hai jo always lowercase.trim() return karti hai
-    // Agar user abhi load ho raha hai toh AuthViewModel ka userRole use karo
-    // (jo AuthRepository mein already lowercase.trim() hai)
     val userRole = when {
-        uiState.user != null -> uiState.user!!.normalizedRole
+        uiState.user != null              -> uiState.user!!.normalizedRole
         authUiState.userRole.isNotEmpty() -> authUiState.userRole.lowercase().trim()
-        else -> "tenant"
+        else                              -> "tenant"
     }
 
     val isAdmin    = userRole == "admin"

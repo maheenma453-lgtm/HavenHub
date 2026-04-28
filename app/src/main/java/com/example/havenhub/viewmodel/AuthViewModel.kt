@@ -24,7 +24,8 @@ data class AuthUiState(
     val isPasswordResetSent : Boolean       = false,
     val selectedRole        : String        = "",
     val userRole            : String        = "",
-    val isVerified          : Boolean       = false
+    val isVerified          : Boolean       = false,
+    val isAuthReady         : Boolean       = false   // ✅ YEH ADD HUA
 )
 
 @HiltViewModel
@@ -56,32 +57,22 @@ class AuthViewModel @Inject constructor(
     private val _nameError            = MutableStateFlow<String?>(null)
     val nameError: StateFlow<String?> = _nameError.asStateFlow()
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // FIX: checkAuthState — pehle wala code currentUser directly read karta tha
-    // jo Firebase initialize hone se pehle null hota tha.
-    //
-    // Ab addAuthStateListener use karo — yeh Firebase ready hone ke BAAD
-    // callback deta hai, chahe user logged in ho ya nahi.
-    // Listener ka result aane ke baad role + verified fetch karo.
-    // ─────────────────────────────────────────────────────────────────────────
     init {
         checkAuthState()
     }
 
     private fun checkAuthState() {
-        _uiState.update { it.copy(isLoading = true) }
-
         FirebaseAuth.getInstance().addAuthStateListener { firebaseAuth ->
             val firebaseUser = firebaseAuth.currentUser
             Log.d("HAVEN_AUTH", "AuthStateListener fired: uid = ${firebaseUser?.uid}")
 
             if (firebaseUser != null) {
-                // User logged in hai — Firestore se role + verified fetch karo
                 viewModelScope.launch {
                     val uid = firebaseUser.uid
                     Log.d("HAVEN_AUTH", "Fetching role + verified for uid = $uid")
 
-                    val role       = authRepository.getUserRole(uid)
+                    // ✅ lowercase() — "LANDLORD" → "landlord"
+                    val role       = authRepository.getUserRole(uid).lowercase().trim()
                     val isVerified = authRepository.getUserVerified(uid)
 
                     Log.d("HAVEN_AUTH", "role = '$role'  isVerified = $isVerified")
@@ -89,6 +80,7 @@ class AuthViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
+                            isAuthReady = true,   // ✅ auth ready
                             isLoggedIn  = true,
                             currentUser = firebaseUser,
                             userRole    = role,
@@ -97,11 +89,11 @@ class AuthViewModel @Inject constructor(
                     }
                 }
             } else {
-                // Koi user logged in nahi
                 Log.d("HAVEN_AUTH", "AuthStateListener: no user logged in")
                 _uiState.update {
                     it.copy(
                         isLoading   = false,
+                        isAuthReady = true,   // ✅ auth ready (logged out)
                         isLoggedIn  = false,
                         currentUser = null,
                         userRole    = "",
@@ -112,31 +104,24 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // signIn
-    // ─────────────────────────────────────────────────────────────────────────
     fun signIn() {
         if (!validateSignInForm()) return
-
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
             val result = authRepository.signIn(
                 email    = _email.value.trim(),
                 password = _password.value
             )
-
             when (result) {
                 is Resource.Success -> {
                     val uid        = result.data?.uid ?: ""
-                    val role       = authRepository.getUserRole(uid)
+                    val role       = authRepository.getUserRole(uid).lowercase().trim()
                     val isVerified = authRepository.getUserVerified(uid)
-
                     Log.d("HAVEN_AUTH", "signIn success uid=$uid role='$role' isVerified=$isVerified")
-
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
+                            isAuthReady = true,
                             isLoggedIn  = true,
                             currentUser = result.data,
                             userRole    = role,
@@ -155,27 +140,22 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // signUp
-    // ─────────────────────────────────────────────────────────────────────────
     fun signUp() {
         if (!validateSignUpForm()) return
-
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
             val result = authRepository.registerUser(
                 email    = _email.value.trim(),
                 password = _password.value,
                 fullName = _fullName.value.trim(),
                 role     = _uiState.value.selectedRole
             )
-
             when (result) {
                 is Resource.Success -> {
                     _uiState.update {
                         it.copy(
                             isLoading      = false,
+                            isAuthReady    = true,
                             isLoggedIn     = true,
                             currentUser    = result.data,
                             userRole       = _uiState.value.selectedRole.lowercase().trim(),
@@ -192,9 +172,6 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // signOut
-    // ─────────────────────────────────────────────────────────────────────────
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
@@ -204,9 +181,6 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // sendPasswordResetEmail
-    // ─────────────────────────────────────────────────────────────────────────
     fun sendPasswordResetEmail() {
         val emailVal = _email.value.trim()
         if (!ValidationUtils.isValidEmail(emailVal)) {
@@ -232,9 +206,6 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // changePassword
-    // ─────────────────────────────────────────────────────────────────────────
     fun changePassword(currentPassword: String, newPassword: String) {
         if (newPassword.length < 6) {
             _uiState.update { it.copy(errorMessage = "New password must be at least 6 characters") }
@@ -245,11 +216,9 @@ class AuthViewModel @Inject constructor(
             try {
                 val user  = authRepository.currentUser ?: throw Exception("No user logged in")
                 val email = user.email ?: throw Exception("User email not found")
-
                 val credential = EmailAuthProvider.getCredential(email, currentPassword)
                 user.reauthenticate(credential).await()
                 user.updatePassword(newPassword).await()
-
                 _uiState.update {
                     it.copy(isLoading = false, successMessage = "Password updated successfully!")
                 }
@@ -265,24 +234,19 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // signInWithGoogle
-    // ─────────────────────────────────────────────────────────────────────────
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
             val result = authRepository.signInWithGoogle(idToken)
-
             when (result) {
                 is Resource.Success -> {
                     val uid        = result.data?.uid ?: ""
-                    val role       = authRepository.getUserRole(uid)
+                    val role       = authRepository.getUserRole(uid).lowercase().trim()
                     val isVerified = authRepository.getUserVerified(uid)
-
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
+                            isAuthReady = true,
                             isLoggedIn  = true,
                             currentUser = result.data,
                             userRole    = role,
@@ -298,9 +262,6 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // deleteAccount
-    // ─────────────────────────────────────────────────────────────────────────
     fun deleteAccount() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -314,7 +275,6 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Field helpers ─────────────────────────────────────────────────────────
     fun onEmailChange(value: String)           { _email.value = value;    _emailError.value = null }
     fun onPasswordChange(value: String)        { _password.value = value; _passwordError.value = null }
     fun onConfirmPasswordChange(value: String) { _confirmPassword.value = value }
@@ -325,7 +285,6 @@ class AuthViewModel @Inject constructor(
     fun clearSuccess() = _uiState.update { it.copy(successMessage = null) }
     fun isUserSignedIn(): Boolean = authRepository.isUserSignedIn()
 
-    // ── Validation ────────────────────────────────────────────────────────────
     private fun validateSignInForm(): Boolean {
         var isValid = true
         if (!ValidationUtils.isValidEmail(_email.value.trim())) {

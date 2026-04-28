@@ -105,11 +105,16 @@ fun HavenHubNavGraph(
 // ── Property ──────────────────────────────────────────────────────────────────
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
 
+            // ✅ FIX: isLoading ki jagah isAuthReady check — role fetch hone tak wait karo
+            // Pehle isLoading=false hone pe role="" tha aur "role != landlord" condition
+            // trigger hoti thi jo popBackStack() call kar deta tha — isliye button kaam nahi karta tha
             composable(Screen.AddProperty.route) {
-                val role       = uiState.userRole
-                val isVerified = uiState.isVerified
+                val role        = uiState.userRole
+                val isVerified  = uiState.isVerified
+                val isAuthReady = uiState.isAuthReady
+
                 when {
-                    uiState.isLoading -> {
+                    !isAuthReady -> {
                         Box(Modifier.fillMaxSize(), Alignment.Center) {
                             CircularProgressIndicator()
                         }
@@ -330,7 +335,6 @@ fun HavenHubNavGraph(
                 val rawOwnerName  = back.arguments?.getString(Screen.Chat.ARG_OWNER_NAME)  ?: "User"
                 val rawPropertyId = back.arguments?.getString(Screen.Chat.ARG_PROPERTY_ID) ?: "none"
 
-                // ✅ URL decode — android.net.Uri.encode ka reverse
                 val decodedOwnerName = try {
                     android.net.Uri.decode(rawOwnerName)
                 } catch (_: Exception) { rawOwnerName }
@@ -397,3 +401,21 @@ fun HavenHubNavGraph(
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

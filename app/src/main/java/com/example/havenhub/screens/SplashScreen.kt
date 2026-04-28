@@ -10,6 +10,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -39,7 +40,7 @@ fun SplashScreen(
 ) {
     val uiState        by authViewModel.uiState.collectAsState()
     var phase          by remember { mutableStateOf(false) }
-    var navigationDone by remember { mutableStateOf(false) }
+    var navigationDone by rememberSaveable() { mutableStateOf(false) }
 
     val logoScale    by animateFloatAsState(if (phase) 1f else 0.80f,
         spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow), label = "sc")
