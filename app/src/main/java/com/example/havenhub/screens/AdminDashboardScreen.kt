@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,7 +17,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -32,10 +38,15 @@ import com.example.havenhub.data.NotificationType
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.DashboardViewModel
+import com.example.havenhub.viewmodel.PropertyStatusSlice
+import com.example.havenhub.viewmodel.RevenueChartPoint
+import com.example.havenhub.viewmodel.UserChartPoint
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import kotlin.math.cos
+import kotlin.math.sin
 
-// ─── Activity helpers — Notification type se icon/color derive karo ───────────
+// ─── Activity helpers ──────────────────────────────────────────────────────────
 
 private fun notifIcon(type: String): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED.name,
@@ -77,27 +88,25 @@ private fun timeAgo(timestamp: com.google.firebase.Timestamp?): String {
     if (timestamp == null) return ""
     val diffMs = System.currentTimeMillis() - timestamp.toDate().time
     return when {
-        diffMs < 60_000      -> "Just now"
-        diffMs < 3_600_000   -> "${TimeUnit.MILLISECONDS.toMinutes(diffMs)} min ago"
-        diffMs < 86_400_000  -> "${TimeUnit.MILLISECONDS.toHours(diffMs)} hr ago"
-        else                 -> "${TimeUnit.MILLISECONDS.toDays(diffMs)}d ago"
+        diffMs < 60_000     -> "Just now"
+        diffMs < 3_600_000  -> "${TimeUnit.MILLISECONDS.toMinutes(diffMs)} min ago"
+        diffMs < 86_400_000 -> "${TimeUnit.MILLISECONDS.toHours(diffMs)} hr ago"
+        else                -> "${TimeUnit.MILLISECONDS.toDays(diffMs)}d ago"
     }
 }
-
-// ─── Booking display helper ────────────────────────────────────────────────────
 
 private fun bookingStatusColor(status: String): Color = when (status) {
     BookingStatus.CONFIRMED.name  -> Color(0xFF2ECC71)
     BookingStatus.CANCELLED.name  -> Color(0xFFBA1A1A)
     BookingStatus.COMPLETED.name  -> Color(0xFF4A90D9)
     BookingStatus.CHECKED_IN.name -> Color(0xFF00897B)
-    else                          -> Color(0xFFE67E22)   // PENDING
+    else                          -> Color(0xFFE67E22)
 }
 
 private fun bookingStatusLabel(status: String): String =
     status.lowercase().replaceFirstChar { it.uppercase() }
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+// ─── Main Screen ───────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -201,7 +210,6 @@ fun AdminDashboardScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        // Pending bookings — full width highlight card
                         PendingHighlightCard(pendingCount = stats.pendingBookings) {
                             navController.navigate(Screen.ManageBookings.route)
                         }
@@ -235,7 +243,45 @@ fun AdminDashboardScreen(
                     }
                 }
 
-                // ── Recent Activity (REAL DATA) ───────────────────
+                // ── ✅ NEW: Charts Section ─────────────────────────
+                item {
+                    Spacer(Modifier.height(24.dp))
+                    SectionTitle(
+                        "Analytics Overview",
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    // Users Overview + Revenue Overview — side by side (scrollable row)
+                    // Then Property Status below — full width
+                    Column(
+                        modifier            = Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Row 1: Users Overview + Revenue Overview
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            UsersOverviewChart(
+                                points   = uiState.userChartPoints,
+                                modifier = Modifier.weight(1f)
+                            )
+                            RevenueOverviewChart(
+                                points   = uiState.revenueChartPoints,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // Row 2: Property Status — full width donut
+                        PropertyStatusChart(
+                            slices   = uiState.propertyStatusSlices,
+                            total    = stats.totalProperties,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                // ── Recent Activity ───────────────────────────────
                 item {
                     Spacer(Modifier.height(24.dp))
                     Row(
@@ -251,7 +297,6 @@ fun AdminDashboardScreen(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-
                     Card(
                         modifier  = Modifier
                             .fillMaxWidth()
@@ -261,26 +306,7 @@ fun AdminDashboardScreen(
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         if (uiState.recentActivities.isEmpty()) {
-                            // Empty state
-                            Column(
-                                modifier            = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Notifications,
-                                    null,
-                                    tint     = Color(0xFFCCCCCC),
-                                    modifier = Modifier.size(40.dp)
-                                )
-                                Text(
-                                    "No recent activity",
-                                    color    = Color(0xFFAAAAAA),
-                                    fontSize = 13.sp
-                                )
-                            }
+                            EmptyStateBox(Icons.Default.Notifications, "No recent activity")
                         } else {
                             Column(Modifier.padding(4.dp)) {
                                 uiState.recentActivities.forEachIndexed { idx, notification ->
@@ -298,7 +324,7 @@ fun AdminDashboardScreen(
                     }
                 }
 
-                // ── Recent Bookings (REAL DATA) ───────────────────
+                // ── Recent Bookings ───────────────────────────────
                 item {
                     Spacer(Modifier.height(24.dp))
                     Row(
@@ -314,7 +340,6 @@ fun AdminDashboardScreen(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-
                     Card(
                         modifier  = Modifier
                             .fillMaxWidth()
@@ -324,28 +349,9 @@ fun AdminDashboardScreen(
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         if (uiState.recentBookings.isEmpty()) {
-                            Column(
-                                modifier            = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.CalendarMonth,
-                                    null,
-                                    tint     = Color(0xFFCCCCCC),
-                                    modifier = Modifier.size(40.dp)
-                                )
-                                Text(
-                                    "No bookings yet",
-                                    color    = Color(0xFFAAAAAA),
-                                    fontSize = 13.sp
-                                )
-                            }
+                            EmptyStateBox(Icons.Default.CalendarMonth, "No bookings yet")
                         } else {
                             Column(Modifier.padding(vertical = 8.dp)) {
-                                // Table Header
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -376,6 +382,435 @@ fun AdminDashboardScreen(
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ✅ CHART COMPOSABLES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Users Overview Line Chart ────────────────────────────────────────────────
+
+@Composable
+fun UsersOverviewChart(
+    points  : List<UserChartPoint>,
+    modifier: Modifier = Modifier
+) {
+    val animProgress by animateFloatAsState(
+        targetValue  = if (points.isNotEmpty()) 1f else 0f,
+        animationSpec = tween(durationMillis = 800, easing = EaseOutCubic),
+        label        = "userChart"
+    )
+
+    Card(
+        modifier  = modifier,
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Users Overview",
+                    fontSize   = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color      = Color(0xFF1A1A2E)
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+
+            // Legend
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LegendDot(Color(0xFF4A90D9), "New")
+                LegendDot(Color(0xFF26C6DA), "Active")
+            }
+            Spacer(Modifier.height(8.dp))
+
+            if (points.isEmpty()) {
+                Box(
+                    modifier         = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No data", fontSize = 11.sp, color = Color(0xFFCCCCCC))
+                }
+            } else {
+                // Canvas line chart
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                ) {
+                    drawUsersLineChart(points, animProgress)
+                }
+                Spacer(Modifier.height(4.dp))
+                // X-axis labels
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    points.forEach { pt ->
+                        Text(
+                            pt.label,
+                            fontSize = 8.sp,
+                            color    = Color(0xFFAAAAAA),
+                            modifier = Modifier.weight(1f),
+                            textAlign= TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawUsersLineChart(points: List<UserChartPoint>, progress: Float) {
+    if (points.isEmpty()) return
+
+    val maxVal  = maxOf(points.maxOf { it.newUsers }, points.maxOf { it.activeUsers }, 1)
+    val w       = size.width
+    val h       = size.height
+    val stepX   = w / (points.size - 1).coerceAtLeast(1).toFloat()
+    val padTop  = 8.dp.toPx()
+    val padBot  = 4.dp.toPx()
+    val drawH   = h - padTop - padBot
+
+    fun xOf(i: Int)      = i * stepX
+    fun yOf(v: Int): Float = padTop + drawH * (1f - v.toFloat() / maxVal)
+
+    // Draw filled area + line for newUsers (blue)
+    val newPath = Path()
+    val newFill = Path()
+    points.forEachIndexed { i, pt ->
+        val x = xOf(i)
+        val y = yOf(pt.newUsers)
+        if (i == 0) { newPath.moveTo(x, y); newFill.moveTo(x, h) ; newFill.lineTo(x, y) }
+        else { newPath.lineTo(x, y); newFill.lineTo(x, y) }
+    }
+    newFill.lineTo(xOf(points.lastIndex), h)
+    newFill.close()
+
+    // Clip to animated progress
+    clipRect(right = w * progress) {
+        drawPath(newFill, Brush.verticalGradient(
+            listOf(Color(0xFF4A90D9).copy(alpha = 0.18f), Color.Transparent)
+        ))
+        drawPath(newPath, color = Color(0xFF4A90D9), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+
+    // Draw line for activeUsers (teal)
+    val activePath = Path()
+    points.forEachIndexed { i, pt ->
+        val x = xOf(i)
+        val y = yOf(pt.activeUsers)
+        if (i == 0) activePath.moveTo(x, y) else activePath.lineTo(x, y)
+    }
+    clipRect(right = w * progress) {
+        drawPath(activePath, color = Color(0xFF26C6DA), style = Stroke(
+            width = 2.dp.toPx(),
+            cap   = StrokeCap.Round,
+            join  = StrokeJoin.Round,
+            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 4f))
+        ))
+    }
+
+    // Dots on last visible point
+    val lastIdx = ((points.size - 1) * progress).toInt().coerceIn(0, points.lastIndex)
+    drawCircle(Color(0xFF4A90D9), radius = 4.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].newUsers)))
+    drawCircle(Color.White,       radius = 2.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].newUsers)))
+    drawCircle(Color(0xFF26C6DA), radius = 4.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].activeUsers)))
+    drawCircle(Color.White,       radius = 2.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].activeUsers)))
+}
+
+// ─── Revenue Overview Line Chart ──────────────────────────────────────────────
+
+@Composable
+fun RevenueOverviewChart(
+    points  : List<RevenueChartPoint>,
+    modifier: Modifier = Modifier
+) {
+    val animProgress by animateFloatAsState(
+        targetValue   = if (points.isNotEmpty()) 1f else 0f,
+        animationSpec = tween(durationMillis = 900, easing = EaseOutCubic),
+        label         = "revenueChart"
+    )
+
+    Card(
+        modifier  = modifier,
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Revenue Overview",
+                    fontSize   = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color      = Color(0xFF1A1A2E)
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Row { LegendDot(Color(0xFF2ECC71), "Revenue") }
+            Spacer(Modifier.height(8.dp))
+
+            if (points.isEmpty()) {
+                Box(
+                    modifier         = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No data", fontSize = 11.sp, color = Color(0xFFCCCCCC))
+                }
+            } else {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                ) {
+                    drawRevenueLineChart(points, animProgress)
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    points.forEach { pt ->
+                        Text(
+                            pt.label,
+                            fontSize  = 8.sp,
+                            color     = Color(0xFFAAAAAA),
+                            modifier  = Modifier.weight(1f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawRevenueLineChart(points: List<RevenueChartPoint>, progress: Float) {
+    if (points.isEmpty()) return
+
+    val maxVal = points.maxOf { it.revenue }.coerceAtLeast(1.0)
+    val w      = size.width
+    val h      = size.height
+    val stepX  = w / (points.size - 1).coerceAtLeast(1).toFloat()
+    val padTop = 8.dp.toPx()
+    val padBot = 4.dp.toPx()
+    val drawH  = h - padTop - padBot
+
+    fun xOf(i: Int)      = i * stepX
+    fun yOf(v: Double)   = (padTop + drawH * (1.0 - v / maxVal)).toFloat()
+
+    val linePath = Path()
+    val fillPath = Path()
+    points.forEachIndexed { i, pt ->
+        val x = xOf(i)
+        val y = yOf(pt.revenue)
+        if (i == 0) {
+            linePath.moveTo(x, y)
+            fillPath.moveTo(x, h)
+            fillPath.lineTo(x, y)
+        } else {
+            // Smooth curve using cubic bezier
+            val prevX = xOf(i - 1)
+            val prevY = yOf(points[i - 1].revenue)
+            val cp1X  = prevX + (x - prevX) / 2f
+            linePath.cubicTo(cp1X, prevY, cp1X, y, x, y)
+            fillPath.cubicTo(cp1X, prevY, cp1X, y, x, y)
+        }
+    }
+    fillPath.lineTo(xOf(points.lastIndex), h)
+    fillPath.close()
+
+    clipRect(right = w * progress) {
+        drawPath(fillPath, Brush.verticalGradient(
+            listOf(Color(0xFF2ECC71).copy(alpha = 0.22f), Color.Transparent)
+        ))
+        drawPath(linePath, color = Color(0xFF2ECC71), style = Stroke(
+            width = 2.dp.toPx(),
+            cap   = StrokeCap.Round,
+            join  = StrokeJoin.Round
+        ))
+    }
+
+    // Dot on last animated point
+    val lastIdx = ((points.size - 1) * progress).toInt().coerceIn(0, points.lastIndex)
+    drawCircle(Color(0xFF2ECC71), radius = 4.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].revenue)))
+    drawCircle(Color.White,       radius = 2.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].revenue)))
+}
+
+// ─── Property Status Donut Chart ──────────────────────────────────────────────
+
+@Composable
+fun PropertyStatusChart(
+    slices  : List<PropertyStatusSlice>,
+    total   : Int,
+    modifier: Modifier = Modifier
+) {
+    val animProgress by animateFloatAsState(
+        targetValue   = if (slices.isNotEmpty()) 1f else 0f,
+        animationSpec = tween(durationMillis = 1000, easing = EaseOutCubic),
+        label         = "donutChart"
+    )
+
+    Card(
+        modifier  = modifier,
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Property Status",
+                fontSize   = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color      = Color(0xFF1A1A2E)
+            )
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Donut canvas
+                Box(
+                    modifier         = Modifier.size(130.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawDonutChart(slices, animProgress)
+                    }
+                    // Center label
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "$total",
+                            fontSize   = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = Color(0xFF1A1A2E)
+                        )
+                        Text(
+                            "Total",
+                            fontSize = 10.sp,
+                            color    = Color(0xFF888888)
+                        )
+                    }
+                }
+
+                // Legend — right side
+                Column(
+                    modifier            = Modifier.padding(start = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    slices.forEach { slice ->
+                        val sliceColor = Color(slice.colorHex)
+                        val pct = if (total > 0) (slice.count * 100f / total) else 0f
+                        Row(
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(sliceColor)
+                            )
+                            Column {
+                                Text(
+                                    slice.label,
+                                    fontSize   = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color      = Color(0xFF1A1A2E)
+                                )
+                                Text(
+                                    "${slice.count} (${"%.1f".format(pct)}%)",
+                                    fontSize = 10.sp,
+                                    color    = Color(0xFF888888)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawDonutChart(slices: List<PropertyStatusSlice>, progress: Float) {
+    if (slices.isEmpty()) return
+
+    val total      = slices.sumOf { it.count }.coerceAtLeast(1)
+    val stroke     = 22.dp.toPx()
+    val padding    = stroke / 2f + 4.dp.toPx()
+    val diameter   = size.minDimension - padding * 2
+    val topLeft    = Offset(padding, padding)
+    val arcSize    = Size(diameter, diameter)
+    val gap        = 3f   // degrees gap between slices
+
+    var startAngle = -90f
+
+    slices.forEach { slice ->
+        val sweep      = (slice.count.toFloat() / total) * 360f * progress - gap
+        val color      = Color(slice.colorHex)
+
+        drawArc(
+            color      = color,
+            startAngle = startAngle,
+            sweepAngle = sweep.coerceAtLeast(0f),
+            useCenter  = false,
+            topLeft    = topLeft,
+            size       = arcSize,
+            style      = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+        startAngle += (slice.count.toFloat() / total) * 360f
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPER COMPOSABLES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(label, fontSize = 9.sp, color = Color(0xFF888888))
+    }
+}
+
+@Composable
+private fun EmptyStateBox(icon: ImageVector, text: String) {
+    Column(
+        modifier            = Modifier
+            .fillMaxWidth()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(icon, null, tint = Color(0xFFCCCCCC), modifier = Modifier.size(40.dp))
+        Text(text, color = Color(0xFFAAAAAA), fontSize = 13.sp)
+    }
+}
+
 // ─── Top Bar ──────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -392,27 +827,20 @@ fun AdminTopBar(
             }
         },
         title = {
-            Text(
-                "HavenHub",
-                color      = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize   = 20.sp
-            )
+            Text("HavenHub", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         },
         actions = {
-            BadgedBox(
-                badge = {
-                    if (notifCount > 0) {
-                        Badge(containerColor = AccentGold) {
-                            Text(
-                                if (notifCount > 99) "99+" else "$notifCount",
-                                fontSize = 9.sp,
-                                color    = Color.White
-                            )
-                        }
+            BadgedBox(badge = {
+                if (notifCount > 0) {
+                    Badge(containerColor = AccentGold) {
+                        Text(
+                            if (notifCount > 99) "99+" else "$notifCount",
+                            fontSize = 9.sp,
+                            color    = Color.White
+                        )
                     }
                 }
-            ) {
+            }) {
                 IconButton(onClick = onNotificationClick) {
                     Icon(Icons.Default.Notifications, null, tint = Color.White)
                 }
@@ -464,38 +892,20 @@ fun HeroBanner() {
                 .background(AccentGold.copy(alpha = 0.15f))
         )
         Column {
-            Text(
-                "Welcome back, Admin 👋",
-                fontSize   = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color      = Color.White
-            )
+            Text("Welcome back, Admin 👋", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
             Spacer(Modifier.height(4.dp))
-            Text(
-                "Here's what's happening today.",
-                fontSize = 13.sp,
-                color    = Color.White.copy(alpha = 0.75f)
-            )
+            Text("Here's what's happening today.", fontSize = 13.sp, color = Color.White.copy(alpha = 0.75f))
             Spacer(Modifier.height(12.dp))
             Row(
-                modifier              = Modifier
+                modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color.White.copy(alpha = 0.12f))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(
-                    Icons.Default.CalendarToday,
-                    null,
-                    tint     = AccentGold,
-                    modifier = Modifier.size(13.dp)
-                )
-                Text(
-                    "Super Admin  •  Platform Overview",
-                    fontSize = 11.sp,
-                    color    = Color.White.copy(alpha = 0.9f)
-                )
+                Icon(Icons.Default.CalendarToday, null, tint = AccentGold, modifier = Modifier.size(13.dp))
+                Text("Super Admin  •  Platform Overview", fontSize = 11.sp, color = Color.White.copy(alpha = 0.9f))
             }
         }
     }
@@ -530,14 +940,7 @@ fun ModernStatCard(
                 Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.height(10.dp))
-            Text(
-                value,
-                fontSize   = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color      = Color(0xFF1A1A2E),
-                maxLines   = 1,
-                overflow   = TextOverflow.Ellipsis
-            )
+            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             Text(label, fontSize = 11.sp, color = Color(0xFF888888))
             Spacer(Modifier.height(6.dp))
@@ -564,9 +967,7 @@ fun ModernStatCard(
 @Composable
 fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
     Card(
-        modifier  = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+        modifier  = Modifier.fillMaxWidth().clickable { onClick() },
         shape     = RoundedCornerShape(16.dp),
         colors    = CardDefaults.cardColors(
             containerColor = if (pendingCount > 0) Color(0xFFFFF3E0) else Color(0xFFF1F8F1)
@@ -574,15 +975,12 @@ fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(0.dp),
         border    = BorderStroke(
             1.dp,
-            if (pendingCount > 0) Color(0xFFE67E22).copy(alpha = 0.3f)
-            else Color(0xFF2ECC71).copy(alpha = 0.3f)
+            if (pendingCount > 0) Color(0xFFE67E22).copy(alpha = 0.3f) else Color(0xFF2ECC71).copy(alpha = 0.3f)
         )
     ) {
         Row(
-            modifier          = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
@@ -590,13 +988,8 @@ fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
-                    modifier         = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (pendingCount > 0) Color(0xFFE67E22).copy(alpha = 0.15f)
-                            else Color(0xFF2ECC71).copy(alpha = 0.15f)
-                        ),
+                    modifier         = Modifier.size(36.dp).clip(CircleShape)
+                        .background(if (pendingCount > 0) Color(0xFFE67E22).copy(alpha = 0.15f) else Color(0xFF2ECC71).copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -620,12 +1013,7 @@ fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
                     )
                 }
             }
-            Icon(
-                Icons.Default.ChevronRight,
-                null,
-                tint     = Color(0xFFAAAAAA),
-                modifier = Modifier.size(20.dp)
-            )
+            Icon(Icons.Default.ChevronRight, null, tint = Color(0xFFAAAAAA), modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -633,13 +1021,9 @@ fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
 // ─── Quick Action Chip ────────────────────────────────────────────────────────
 
 @Composable
-fun QuickActionChip(
-    icon   : ImageVector,
-    label  : String,
-    onClick: () -> Unit
-) {
+fun QuickActionChip(icon: ImageVector, label: String, onClick: () -> Unit) {
     Column(
-        modifier            = Modifier
+        modifier = Modifier
             .width(80.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color.White)
@@ -649,147 +1033,69 @@ fun QuickActionChip(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
-            modifier         = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(PrimaryBlue.copy(alpha = 0.1f)),
+            modifier         = Modifier.size(42.dp).clip(CircleShape).background(PrimaryBlue.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, null, tint = PrimaryBlue, modifier = Modifier.size(20.dp))
         }
-        Text(
-            label,
-            fontSize   = 10.sp,
-            fontWeight = FontWeight.Medium,
-            color      = Color(0xFF444444),
-            lineHeight = 13.sp,
-            textAlign  = TextAlign.Center,
-            maxLines   = 2
-        )
+        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color(0xFF444444), lineHeight = 13.sp, textAlign = TextAlign.Center, maxLines = 2)
     }
 }
 
-// ─── Real Activity Row (from Notification) ────────────────────────────────────
+// ─── Real Activity Row ────────────────────────────────────────────────────────
 
 @Composable
 fun RealActivityRow(notification: Notification) {
     val icon  = notifIcon(notification.type)
     val color = notifColor(notification.type)
-
     Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            modifier         = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(color.copy(alpha = 0.15f)),
+            modifier         = Modifier.size(38.dp).clip(CircleShape).background(color.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                notification.title.ifBlank { notification.body },
-                fontSize   = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color      = Color(0xFF1A1A2E),
-                maxLines   = 1,
-                overflow   = TextOverflow.Ellipsis
-            )
+            Text(notification.title.ifBlank { notification.body }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1A1A2E), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (notification.body.isNotBlank() && notification.title.isNotBlank()) {
-                Text(
-                    notification.body,
-                    fontSize = 11.sp,
-                    color    = Color(0xFF888888),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(notification.body, fontSize = 11.sp, color = Color(0xFF888888), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        Text(
-            timeAgo(notification.createdAt),
-            fontSize = 11.sp,
-            color    = Color(0xFFAAAAAA)
-        )
+        Text(timeAgo(notification.createdAt), fontSize = 11.sp, color = Color(0xFFAAAAAA))
     }
 }
 
-// ─── Real Booking Row (from Booking data class) ───────────────────────────────
+// ─── Real Booking Row ─────────────────────────────────────────────────────────
 
 @Composable
 fun RealBookingRow(booking: Booking) {
     val statusColor = bookingStatusColor(booking.status)
     val statusLabel = bookingStatusLabel(booking.status)
-
     Row(
-        modifier          = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Guest avatar + name
-        Row(
-            modifier          = Modifier.weight(1.4f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.weight(1.4f), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier         = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryBlue.copy(alpha = 0.15f)),
+                modifier         = Modifier.size(28.dp).clip(CircleShape).background(PrimaryBlue.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    booking.tenantName.firstOrNull()?.toString() ?: "?",
-                    fontSize   = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color      = PrimaryBlue
-                )
+                Text(booking.tenantName.firstOrNull()?.toString() ?: "?", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
             }
             Spacer(Modifier.width(6.dp))
-            Text(
-                booking.tenantName.ifBlank { "Guest" },
-                fontSize   = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color      = Color(0xFF1A1A2E),
-                maxLines   = 1,
-                overflow   = TextOverflow.Ellipsis
-            )
+            Text(booking.tenantName.ifBlank { "Guest" }, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1A1A2E), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(
-            booking.propertyTitle.ifBlank { "Property" },
-            modifier = Modifier.weight(1.8f),
-            fontSize = 12.sp,
-            color    = Color(0xFF555555),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            "PKR ${"%.0f".format(booking.totalAmount)}",
-            modifier   = Modifier.weight(1.4f),
-            fontSize   = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color      = PrimaryBlue
-        )
+        Text(booking.propertyTitle.ifBlank { "Property" }, modifier = Modifier.weight(1.8f), fontSize = 12.sp, color = Color(0xFF555555), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("PKR ${"%.0f".format(booking.totalAmount)}", modifier = Modifier.weight(1.4f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = PrimaryBlue)
         Box(
-            modifier         = Modifier
-                .weight(1.2f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(statusColor.copy(alpha = 0.12f))
-                .padding(horizontal = 6.dp, vertical = 3.dp),
+            modifier         = Modifier.weight(1.2f).clip(RoundedCornerShape(20.dp)).background(statusColor.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 3.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                statusLabel,
-                fontSize   = 10.sp,
-                color      = statusColor,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(statusLabel, fontSize = 10.sp, color = statusColor, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -798,35 +1104,20 @@ fun RealBookingRow(booking: Booking) {
 
 @Composable
 fun TableHeaderCell(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        modifier   = modifier,
-        fontSize   = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-        color      = Color(0xFF888888)
-    )
+    Text(text, modifier = modifier, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF888888))
 }
 
 // ─── Section Title ────────────────────────────────────────────────────────────
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        modifier   = modifier,
-        fontSize   = 16.sp,
-        fontWeight = FontWeight.Bold,
-        color      = Color(0xFF1A1A2E)
-    )
+    Text(text, modifier = modifier, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E))
 }
 
 // ─── Side Drawer ──────────────────────────────────────────────────────────────
 
 @Composable
-fun AdminDrawerContent(
-    navController: NavController,
-    onClose      : () -> Unit
-) {
+fun AdminDrawerContent(navController: NavController, onClose: () -> Unit) {
     val drawerItems = listOf(
         Triple(Icons.Default.Dashboard,      "Dashboard",         Screen.AdminDashboard.route),
         Triple(Icons.Default.CheckCircle,    "Verify Properties", Screen.VerifyProperties.route),
@@ -839,25 +1130,14 @@ fun AdminDrawerContent(
         Triple(Icons.Default.Notifications,  "Notifications",     Screen.Notifications.route),
         Triple(Icons.Default.Settings,       "Settings",          Screen.Settings.route),
     )
-
-    ModalDrawerSheet(
-        drawerContainerColor = Color.White,
-        modifier             = Modifier.width(280.dp)
-    ) {
+    ModalDrawerSheet(drawerContainerColor = Color.White, modifier = Modifier.width(280.dp)) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = Modifier.fillMaxWidth()
                 .background(Brush.linearGradient(listOf(PrimaryBlue, Color(0xFF1565C0))))
                 .padding(20.dp)
         ) {
             Column {
-                Box(
-                    modifier         = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(AccentGold),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.size(52.dp).clip(CircleShape).background(AccentGold), contentAlignment = Alignment.Center) {
                     Text("A", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 }
                 Spacer(Modifier.height(10.dp))
@@ -865,9 +1145,7 @@ fun AdminDrawerContent(
                 Text("Super Admin", color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp)
             }
         }
-
         Spacer(Modifier.height(8.dp))
-
         drawerItems.forEach { (icon, label, route) ->
             NavigationDrawerItem(
                 icon     = { Icon(icon, null, tint = PrimaryBlue) },
@@ -888,19 +1166,15 @@ fun AdminDrawerContent(
                 )
             )
         }
-
         Spacer(Modifier.weight(1f))
         HorizontalDivider(color = Color(0xFFEEEEEE))
-
         NavigationDrawerItem(
             icon     = { Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color(0xFFBA1A1A)) },
             label    = { Text("Logout", color = Color(0xFFBA1A1A), fontWeight = FontWeight.Medium) },
             selected = false,
             onClick  = { /* handle logout */ },
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            colors   = NavigationDrawerItemDefaults.colors(
-                unselectedContainerColor = Color.Transparent
-            )
+            colors   = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
         )
     }
 }
