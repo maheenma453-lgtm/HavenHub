@@ -1,5 +1,7 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -18,28 +22,44 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.data.PaymentMethod
-import com.example.havenhub.ui.theme.*
+import com.example.havenhub.navigation.Screen
+import com.example.havenhub.viewmodel.BookingViewModel
 import com.example.havenhub.viewmodel.PaymentViewModel
+
+// ── Design tokens ─────────────────────────────────────────────
+private val PNavy  = Color(0xFF0D1B3E)
+private val PGold  = Color(0xFFD4AF37)
+private val PBg    = Color(0xFFF5F7FA)
+private val PMuted = Color(0xFF8899AA)
+private val PWhite = Color(0xFFFFFFFF)
+private val PGreen = Color(0xFF22C55E)
+private val PRed   = Color(0xFFEF4444)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentScreen(
-    navController: NavController,
-    bookingId: String,
-    payerId: String,
-    payeeId: String,
-    payerName: String,
-    payeeName: String,
-    amount: Double,
-    viewModel: PaymentViewModel = hiltViewModel()
+    navController   : NavController,
+    bookingId       : String,
+    payerId         : String,
+    payeeId         : String,
+    payerName       : String,
+    payeeName       : String,
+    amount          : Double,
+    viewModel       : PaymentViewModel  = hiltViewModel(),
+    bookingViewModel: BookingViewModel  = hiltViewModel()   // ✅ add kiya
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Success hone par BookingConfirmation pe navigate karo
+    // ✅ Payment success → PaymentSuccess screen pe jao
+    // confirmPayment() wahan se hoga ya PaymentViewModel already handle karta hai
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
-            navController.navigate("booking_confirmation/$bookingId") {
-                popUpTo("payment/$bookingId") { inclusive = true }
+            navController.navigate(
+                Screen.PaymentSuccess.createRoute(bookingId)
+            ) {
+                popUpTo("payment/$bookingId/$payerId/$payeeId/$payerName/$payeeName/$amount") {
+                    inclusive = true
+                }
             }
             viewModel.clearMessages()
         }
@@ -47,94 +67,174 @@ fun PaymentScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Payment", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Brush.horizontalGradient(listOf(PNavy, Color(0xFF1A2F5E))))
+            ) {
+                Row(
+                    modifier          = Modifier
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = PGold)
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryBlue,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
-                )
-            )
-        }
+                    Column(Modifier.weight(1f)) {
+                        Text("Complete Payment", fontWeight = FontWeight.Bold, color = PWhite, fontSize = 17.sp)
+                        Text("Secure & encrypted", fontSize = 11.sp, color = PWhite.copy(0.55f))
+                    }
+                    // Lock icon
+                    Box(
+                        Modifier.size(36.dp).clip(RoundedCornerShape(10.dp))
+                            .background(PWhite.copy(0.1f)),
+                        Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Lock, null, tint = PGold, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
+            }
+        },
+        containerColor = PBg
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // Order Summary Card
+            // ══════════════════════════════════════════════════
+            // 1. ORDER SUMMARY
+            // ══════════════════════════════════════════════════
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(12.dp),
-                colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+                modifier  = Modifier.fillMaxWidth(),
+                shape     = RoundedCornerShape(16.dp),
+                colors    = CardDefaults.cardColors(containerColor = PNavy),
+                elevation = CardDefaults.cardElevation(4.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("Order Summary", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = PrimaryBlue)
-                    HorizontalDivider(color = BorderGray)
-                    PayRow("Booking ID", "#${bookingId.take(8).uppercase()}")
-                    PayRow("Amount", "PKR ${amount.toInt()}")
-                    HorizontalDivider(color = BorderGray)
-                    PayRow("Total", "PKR ${amount.toInt()}", bold = true, highlight = true)
-                }
-            }
+                Column(Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("💳", fontSize = 18.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Order Summary", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = PWhite)
+                    }
+                    Spacer(Modifier.height(14.dp))
 
-            // Payment Method Selection
-            Text("Payment Method", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
+                    PSummaryRow("Booking ID", "#${bookingId.take(8).uppercase()}")
+                    PSummaryRow("From",       payerName.ifBlank { "Tenant" })
+                    PSummaryRow("To",         payeeName.ifBlank { "Landlord" })
 
-            listOf(
-                PaymentMethod.JAZZCASH,
-                PaymentMethod.EASYPAISA,
-                PaymentMethod.CREDIT_CARD,
-                PaymentMethod.BANK_TRANSFER
-            ).forEach { method ->
-                OutlinedCard(
-                    onClick  = { viewModel.selectPaymentMethod(method) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape    = RoundedCornerShape(10.dp)
-                ) {
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        Modifier.fillMaxWidth().height(1.dp)
+                            .background(Brush.horizontalGradient(listOf(PGold.copy(0.6f), Color.Transparent)))
+                    )
+                    Spacer(Modifier.height(10.dp))
+
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment     = Alignment.CenterVertically
                     ) {
-                        RadioButton(
-                            selected = uiState.selectedMethod == method,
-                            onClick  = { viewModel.selectPaymentMethod(method) }
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Icon(
-                            imageVector = when (method) {
-                                PaymentMethod.CREDIT_CARD,
-                                PaymentMethod.DEBIT_CARD  -> Icons.Default.CreditCard
-                                PaymentMethod.BANK_TRANSFER -> Icons.Default.AccountBalance
-                                else -> Icons.Default.Payment
-                            },
-                            contentDescription = null,
-                            tint     = PrimaryBlue,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(method.displayName(), fontSize = 14.sp, color = TextPrimary)
+                        Column {
+                            Text("Total Amount", fontSize = 12.sp, color = PWhite.copy(0.6f))
+                            Text(
+                                "PKR ${"%,.0f".format(amount)}",
+                                fontSize   = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                color      = PGold
+                            )
+                        }
+                        Box(
+                            Modifier.clip(RoundedCornerShape(8.dp))
+                                .background(PGreen.copy(0.15f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Security, null, tint = PGreen, modifier = Modifier.size(12.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Secured", fontSize = 11.sp, color = PGreen, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            // ══════════════════════════════════════════════════
+            // 2. PAYMENT METHOD SELECTION
+            // ══════════════════════════════════════════════════
+            Text(
+                "Select Payment Method",
+                fontWeight = FontWeight.Bold,
+                fontSize   = 15.sp,
+                color      = PNavy
+            )
 
-            // Pay Button
+            val methods = listOf(
+                Triple(PaymentMethod.JAZZCASH,      "📱", Color(0xFFD50000)),
+                Triple(PaymentMethod.EASYPAISA,     "💚", Color(0xFF2E7D32)),
+                Triple(PaymentMethod.CREDIT_CARD,   "💳", Color(0xFF1565C0)),
+                Triple(PaymentMethod.BANK_TRANSFER, "🏦", Color(0xFF4A148C))
+            )
+
+            methods.forEach { (method, icon, accent) ->
+                val isSelected = uiState.selectedMethod == method
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (isSelected) PNavy.copy(0.07f) else PWhite
+                        )
+                        .clickable { viewModel.selectPaymentMethod(method) }
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Icon box
+                    Box(
+                        Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
+                            .background(accent.copy(0.1f)),
+                        Alignment.Center
+                    ) {
+                        Text(icon, fontSize = 20.sp)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(method.displayName(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = PNavy)
+                        Text(
+                            when (method) {
+                                PaymentMethod.JAZZCASH      -> "Pay via JazzCash mobile account"
+                                PaymentMethod.EASYPAISA     -> "Pay via EasyPaisa mobile account"
+                                PaymentMethod.CREDIT_CARD   -> "Visa / MasterCard / UnionPay"
+                                PaymentMethod.BANK_TRANSFER -> "Direct bank transfer"
+                                else                        -> ""
+                            },
+                            fontSize = 11.sp,
+                            color    = PMuted
+                        )
+                    }
+                    RadioButton(
+                        selected = isSelected,
+                        onClick  = { viewModel.selectPaymentMethod(method) },
+                        colors   = RadioButtonDefaults.colors(selectedColor = PNavy)
+                    )
+                }
+
+                if (method != methods.last().first) {
+                    HorizontalDivider(color = PBg, thickness = 2.dp)
+                }
+            }
+
+            // ══════════════════════════════════════════════════
+            // 3. PAY BUTTON
+            // ══════════════════════════════════════════════════
+            Spacer(Modifier.height(4.dp))
+
             Button(
                 onClick = {
                     uiState.selectedMethod?.let { method ->
@@ -147,43 +247,81 @@ fun PaymentScreen(
                             amount    = amount,
                             method    = method
                         )
-                    } ?: run {
-                        // Method select nahi hua
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape   = RoundedCornerShape(12.dp),
-                enabled = !uiState.isLoading && uiState.selectedMethod != null,
-                colors  = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape    = RoundedCornerShape(14.dp),
+                enabled  = !uiState.isLoading && uiState.selectedMethod != null,
+                colors   = ButtonDefaults.buttonColors(
+                    containerColor         = PNavy,
+                    contentColor           = PWhite,
+                    disabledContainerColor = PMuted.copy(0.3f),
+                    disabledContentColor   = PWhite.copy(0.5f)
+                ),
+                elevation = ButtonDefaults.buttonElevation(4.dp)
             ) {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        modifier    = Modifier.size(20.dp),
-                        color       = Color.White,
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = PWhite, strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
-                    Text("Processing...", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Processing...", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 } else {
-                    Text("Pay PKR ${amount.toInt()}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Payment, null, tint = PGold, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Pay PKR ${"%,.0f".format(amount)}", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            // Error Message
-            uiState.errorMessage?.let { error ->
-                Text(text = error, color = ErrorRed, fontSize = 14.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally))
+            // No method selected hint
+            if (uiState.selectedMethod == null) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Info, null, tint = PMuted, modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Please select a payment method", fontSize = 11.sp, color = PMuted)
+                }
             }
 
-            Text(
-                "Your payment is secured and encrypted.",
-                fontSize = 12.sp,
-                color    = TextSecondary,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            // Error
+            uiState.errorMessage?.let { error ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .background(PRed.copy(0.08f)).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Warning, null, tint = PRed, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(error, color = PRed, fontSize = 13.sp)
+                }
+            }
+
+            // Security note
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Lock, null, tint = PMuted, modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Your payment is secured and encrypted", fontSize = 11.sp, color = PMuted)
+            }
+
+            Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+// ── Helper composables ────────────────────────────────────────
+@Composable
+private fun PSummaryRow(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, fontSize = 12.sp, color = PWhite.copy(0.6f))
+        Text(value, fontSize = 12.sp, color = PWhite, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -195,15 +333,15 @@ fun PayRow(
     highlight: Boolean = false
 ) {
     Row(
-        modifier              = Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label, fontSize = 13.sp, color = TextSecondary)
+        Text(label, fontSize = 13.sp, color = PMuted)
         Text(
-            text       = value,
+            value,
             fontSize   = 13.sp,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            color      = if (highlight) PrimaryBlue else TextPrimary
+            color      = if (highlight) PNavy else PNavy.copy(0.8f)
         )
     }
 }

@@ -342,24 +342,30 @@ fun BookingScreen(
 
                     Button(
                         onClick = {
+                            val sdfParse = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+                            val checkIn  = try { sdfParse.parse(checkInDate)  } catch (e: Exception) { null }
+                            val checkOut = try { sdfParse.parse(checkOutDate) } catch (e: Exception) { null }
+
                             val booking = Booking(
-                                propertyId = propertyId,
-                                propertyTitle = property.title,
-                                landlordId = property.ownerId,
-                                landlordName = property.ownerName,
-                                tenantId = currentUid,
-                                tenantName = currentName,
-                                pricePerNight = property.pricePerNight,
-                                totalAmount = totalAmount,
-                                subtotal = totalAmount,
-                                securityDeposit = property.securityDeposit,
-                                status = BookingStatus.PENDING.name,
-                                paymentStatus = PaymentStatus.PENDING.name,
-                                propertyAddress = "${property.address}, ${property.city}",
+                                propertyId       = propertyId,
+                                propertyTitle    = property.title,
+                                landlordId       = property.ownerId,
+                                landlordName     = property.ownerName,
+                                tenantId         = currentUid,
+                                tenantName       = currentName,
+                                pricePerNight    = property.pricePerNight,
+                                totalAmount      = totalAmount,
+                                subtotal         = totalAmount,
+                                securityDeposit  = property.securityDeposit,
+                                status           = BookingStatus.PENDING.name,
+                                paymentStatus    = PaymentStatus.PENDING.name,
+                                propertyAddress  = "${property.address}, ${property.city}",
                                 propertyCoverUrl = property.coverImageUrl,
-                                totalNights = nights,
-                                guestCount = guests,
-                                paymentMethod = selectedPayment
+                                totalNights      = nights,
+                                guestCount       = guests,
+                                paymentMethod    = selectedPayment,
+                                checkInDate      = checkIn?.let { com.google.firebase.Timestamp(it) },
+                                checkOutDate     = checkOut?.let { com.google.firebase.Timestamp(it) }
                             )
                             viewModel.createBooking(booking)
                         },

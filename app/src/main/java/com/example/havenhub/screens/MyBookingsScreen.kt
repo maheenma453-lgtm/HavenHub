@@ -43,6 +43,7 @@ private val MGreen = Color(0xFF22C55E)
 fun MyBookingsScreen(
     navController: NavController,
     userId       : String,
+    initialTab   : Int              = 0,   // ✅ 0=Pending 1=Confirmed — NavGraph se pass hoga
     viewModel    : BookingViewModel = hiltViewModel(),
     authViewModel: AuthViewModel    = hiltViewModel()
 ) {
@@ -56,12 +57,16 @@ fun MyBookingsScreen(
         )
     }
 
-    val uiState     by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val uiState by viewModel.uiState.collectAsState()
 
-    // ── Cancel confirm dialog state ───────────────────────────────
-    var showCancelDialog  by remember { mutableStateOf(false) }
-    var cancelBookingId   by remember { mutableStateOf("") }
+    // ✅ initialTab se start — payment ke baad Confirmed tab (1) pe seedha jayega
+    var selectedTab by remember { mutableIntStateOf(initialTab) }
+    LaunchedEffect(initialTab) {
+        selectedTab = initialTab
+    }
+
+    var showCancelDialog by remember { mutableStateOf(false) }
+    var cancelBookingId  by remember { mutableStateOf("") }
 
     val tabs     = listOf("Pending", "Confirmed", "Checked In", "Completed", "Cancelled")
     val tabIcons = listOf(
@@ -72,13 +77,13 @@ fun MyBookingsScreen(
         Icons.Default.Cancel
     )
 
-    val filteredBookings = uiState.bookings.filter { booking ->
+    val filteredBookings = uiState.bookings.filter { b ->
         when (selectedTab) {
-            0    -> booking.bookingStatus == BookingStatus.PENDING
-            1    -> booking.bookingStatus == BookingStatus.CONFIRMED
-            2    -> booking.bookingStatus == BookingStatus.CHECKED_IN
-            3    -> booking.bookingStatus == BookingStatus.COMPLETED
-            4    -> booking.bookingStatus == BookingStatus.CANCELLED
+            0    -> b.bookingStatus == BookingStatus.PENDING
+            1    -> b.bookingStatus == BookingStatus.CONFIRMED
+            2    -> b.bookingStatus == BookingStatus.CHECKED_IN
+            3    -> b.bookingStatus == BookingStatus.COMPLETED
+            4    -> b.bookingStatus == BookingStatus.CANCELLED
             else -> true
         }
     }
@@ -97,7 +102,7 @@ fun MyBookingsScreen(
         }
     }
 
-    // ── Cancel confirmation dialog ────────────────────────────────
+    // ── Cancel Dialog ─────────────────────────────────────────────
     if (showCancelDialog) {
         AlertDialog(
             onDismissRequest = { showCancelDialog = false },
@@ -105,34 +110,26 @@ fun MyBookingsScreen(
             shape            = RoundedCornerShape(20.dp),
             icon = {
                 Box(
-                    modifier         = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp))
-                        .background(MRed.copy(0.1f)),
-                    contentAlignment = Alignment.Center
+                    Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(MRed.copy(0.1f)),
+                    Alignment.Center
                 ) {
                     Icon(Icons.Default.Cancel, null, tint = MRed, modifier = Modifier.size(28.dp))
                 }
             },
             title = {
-                Text(
-                    "Cancel Booking?",
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 18.sp,
-                    color      = MNavy
-                )
+                Text("Cancel Booking?", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MNavy)
             },
             text = {
                 Text(
                     "Are you sure you want to cancel this booking?\nThis action cannot be undone.",
-                    fontSize   = 14.sp,
-                    color      = MMuted,
-                    textAlign  = TextAlign.Center,
-                    lineHeight = 22.sp
+                    fontSize = 14.sp, color = MMuted, textAlign = TextAlign.Center, lineHeight = 22.sp
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
                         viewModel.cancelBooking(cancelBookingId)
+                        selectedTab      = 4  // Cancelled tab
                         showCancelDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MRed),
@@ -155,16 +152,13 @@ fun MyBookingsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar       = {
+        topBar = {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
+                Modifier.fillMaxWidth()
                     .background(Brush.horizontalGradient(listOf(MNavy, Color(0xFF1A2F5E))))
             ) {
                 Row(
-                    modifier          = Modifier
-                        .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    Modifier.statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -172,27 +166,18 @@ fun MyBookingsScreen(
                     }
                     Column(Modifier.weight(1f)) {
                         Text("My Bookings", fontWeight = FontWeight.Bold, color = MCard, fontSize = 18.sp)
-                        Text(
-                            "${uiState.bookings.size} total bookings",
-                            color    = MCard.copy(0.6f),
-                            fontSize = 12.sp
-                        )
+                        Text("${uiState.bookings.size} total bookings", color = MCard.copy(0.6f), fontSize = 12.sp)
                     }
                 }
             }
         }
     ) { paddingValues ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MBg)
-                .padding(top = paddingValues.calculateTopPadding())
+            Modifier.fillMaxSize().background(MBg).padding(top = paddingValues.calculateTopPadding())
         ) {
 
             // ── Tab Row ───────────────────────────────────────────
-            Box(
-                modifier = Modifier.fillMaxWidth().background(MCard).padding(vertical = 4.dp)
-            ) {
+            Box(Modifier.fillMaxWidth().background(MCard).padding(vertical = 4.dp)) {
                 ScrollableTabRow(
                     selectedTabIndex = selectedTab,
                     containerColor   = MCard,
@@ -201,10 +186,8 @@ fun MyBookingsScreen(
                     indicator        = { tabPositions ->
                         if (selectedTab < tabPositions.size) {
                             Box(
-                                Modifier
-                                    .tabIndicatorOffset(tabPositions[selectedTab])
-                                    .height(3.dp)
-                                    .padding(horizontal = 16.dp)
+                                Modifier.tabIndicatorOffset(tabPositions[selectedTab])
+                                    .height(3.dp).padding(horizontal = 16.dp)
                                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
                                     .background(MGold)
                             )
@@ -219,21 +202,17 @@ fun MyBookingsScreen(
                             modifier = Modifier.padding(horizontal = 4.dp)
                         ) {
                             Row(
-                                modifier              = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
+                                Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
                                 verticalAlignment     = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
-                                Icon(
-                                    tabIcons[index], null,
-                                    tint     = if (isSelected) MGold else MMuted,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    title,
+                                Icon(tabIcons[index], null,
+                                    tint = if (isSelected) MGold else MMuted,
+                                    modifier = Modifier.size(15.dp))
+                                Text(title,
                                     color      = if (isSelected) MNavy else MMuted,
                                     fontSize   = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
                                 val count = uiState.bookings.count { b ->
                                     when (index) {
                                         0    -> b.bookingStatus == BookingStatus.PENDING
@@ -246,18 +225,14 @@ fun MyBookingsScreen(
                                 }
                                 if (count > 0) {
                                     Box(
-                                        modifier         = Modifier
-                                            .clip(RoundedCornerShape(10.dp))
+                                        Modifier.clip(RoundedCornerShape(10.dp))
                                             .background(if (isSelected) MGold else MMuted.copy(0.15f))
                                             .padding(horizontal = 6.dp, vertical = 2.dp),
-                                        contentAlignment = Alignment.Center
+                                        Alignment.Center
                                     ) {
-                                        Text(
-                                            "$count",
-                                            fontSize   = 10.sp,
+                                        Text("$count", fontSize = 10.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color      = if (isSelected) MNavy else MMuted
-                                        )
+                                            color = if (isSelected) MNavy else MMuted)
                                     }
                                 }
                             }
@@ -273,14 +248,12 @@ fun MyBookingsScreen(
                         CircularProgressIndicator(color = MGold, modifier = Modifier.size(48.dp), strokeWidth = 3.dp)
                     }
                 }
-
                 filteredBookings.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(
-                                modifier         = Modifier.size(100.dp).clip(RoundedCornerShape(28.dp))
-                                    .background(MNavy.copy(0.06f)),
-                                contentAlignment = Alignment.Center
+                                Modifier.size(100.dp).clip(RoundedCornerShape(28.dp)).background(MNavy.copy(0.06f)),
+                                Alignment.Center
                             ) {
                                 Icon(tabIcons[selectedTab], null, tint = MNavy.copy(0.25f), modifier = Modifier.size(46.dp))
                             }
@@ -289,15 +262,12 @@ fun MyBookingsScreen(
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 "Your ${tabs[selectedTab].lowercase()} bookings\nwill appear here",
-                                color      = MMuted,
-                                fontSize   = 13.sp,
-                                textAlign  = TextAlign.Center,
-                                lineHeight = 20.sp
+                                color = MMuted, fontSize = 13.sp,
+                                textAlign = TextAlign.Center, lineHeight = 20.sp
                             )
                         }
                     }
                 }
-
                 else -> {
                     LazyColumn(
                         contentPadding      = PaddingValues(16.dp),
@@ -306,9 +276,7 @@ fun MyBookingsScreen(
                         items(items = filteredBookings, key = { it.bookingId }) { booking ->
                             PremiumBookingCard(
                                 booking  = booking,
-                                onTap    = {
-                                    navController.navigate(Screen.BookingDetails.createRoute(booking.bookingId))
-                                },
+                                onTap    = { navController.navigate(Screen.BookingDetails.createRoute(booking.bookingId)) },
                                 onPayNow = {
                                     navController.navigate(
                                         Screen.Payment.createRoute(
@@ -321,7 +289,6 @@ fun MyBookingsScreen(
                                         )
                                     )
                                 },
-                                // ✅ Cancel — sirf PENDING pe, dialog open karo
                                 onCancel = {
                                     cancelBookingId  = booking.bookingId
                                     showCancelDialog = true
@@ -335,15 +302,13 @@ fun MyBookingsScreen(
     }
 }
 
-// ════════════════════════════════════════════════════════════════
-// BOOKING CARD
-// ════════════════════════════════════════════════════════════════
+// ── Booking Card ──────────────────────────────────────────────
 @Composable
 private fun PremiumBookingCard(
     booking : Booking,
     onTap   : () -> Unit,
     onPayNow: () -> Unit,
-    onCancel: () -> Unit        // ✅ new param
+    onCancel: () -> Unit
 ) {
     val (statusColor, statusText, statusBg) = when (booking.bookingStatus) {
         BookingStatus.PENDING    -> Triple(Color(0xFFF59E0B), "Pending",    Color(0xFFFFF8E1))
@@ -360,67 +325,43 @@ private fun PremiumBookingCard(
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column {
-            // Colored top accent bar
             Box(
-                modifier = Modifier.fillMaxWidth().height(4.dp)
+                Modifier.fillMaxWidth().height(4.dp)
                     .background(Brush.horizontalGradient(listOf(statusColor, statusColor.copy(0.35f))))
             )
-
             Column(Modifier.padding(18.dp)) {
-
-                // Title + status badge
-                Row(
-                    Modifier.fillMaxWidth(),
+                Row(Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    Text(
-                        booking.propertyTitle,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 16.sp,
-                        color      = MNavy,
-                        modifier   = Modifier.weight(1f),
-                        maxLines   = 1
-                    )
+                    verticalAlignment     = Alignment.CenterVertically) {
+                    Text(booking.propertyTitle, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+                        color = MNavy, modifier = Modifier.weight(1f), maxLines = 1)
                     Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier.clip(RoundedCornerShape(10.dp)).background(statusBg)
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
+                    Box(Modifier.clip(RoundedCornerShape(10.dp)).background(statusBg)
+                        .padding(horizontal = 10.dp, vertical = 5.dp)) {
                         Text(statusText, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                     }
                 }
-
                 Spacer(Modifier.height(6.dp))
-
-                // Location
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, null, tint = MGold, modifier = Modifier.size(13.dp))
                     Text(" ${booking.propertyAddress}", color = MMuted, fontSize = 12.sp, maxLines = 1)
                 }
-
                 Spacer(Modifier.height(14.dp))
                 HorizontalDivider(color = Color(0xFFEEF2F7))
                 Spacer(Modifier.height(12.dp))
-
-                // Stats
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    BookingStat(Icons.Default.NightlightRound, "Nights",  "${booking.totalNights}")
-                    BookingStat(Icons.Default.People,          "Guests",  "${booking.guestCount}")
+                    BookingStat(Icons.Default.NightlightRound, "Nights", "${booking.totalNights}")
+                    BookingStat(Icons.Default.People,          "Guests", "${booking.guestCount}")
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Total", color = MMuted, fontSize = 11.sp)
                         Text(booking.formattedTotal, fontWeight = FontWeight.ExtraBold, color = MGold, fontSize = 17.sp)
                     }
                 }
 
-                // ✅ PENDING: Cancel + Pay Now buttons side by side (SRS BR-3)
+                // PENDING — Cancel + Pay Now
                 if (booking.bookingStatus == BookingStatus.PENDING) {
                     Spacer(Modifier.height(14.dp))
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Cancel
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedButton(
                             onClick  = onCancel,
                             modifier = Modifier.weight(1f).height(44.dp),
@@ -432,8 +373,6 @@ private fun PremiumBookingCard(
                             Spacer(Modifier.width(5.dp))
                             Text("Cancel", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
-
-                        // Pay Now
                         Button(
                             onClick  = onPayNow,
                             modifier = Modifier.weight(1f).height(44.dp),
@@ -447,22 +386,18 @@ private fun PremiumBookingCard(
                     }
                 }
 
-                // ✅ CONFIRMED: Show confirmed info only (no actions)
+                // CONFIRMED — info strip only
                 if (booking.bookingStatus == BookingStatus.CONFIRMED) {
                     Spacer(Modifier.height(12.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                             .background(MGreen.copy(0.08f)).padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.CheckCircle, null, tint = MGreen, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Booking confirmed by landlord",
-                            fontSize   = 12.sp,
-                            color      = MGreen,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text("Booking confirmed — payment received", fontSize = 12.sp,
+                            color = MGreen, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -477,10 +412,7 @@ private fun BookingStat(
     value: String
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(
-            Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(MNavy.copy(0.06f)),
-            Alignment.Center
-        ) {
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(MNavy.copy(0.06f)), Alignment.Center) {
             Icon(icon, null, tint = MNavy, modifier = Modifier.size(16.dp))
         }
         Column {

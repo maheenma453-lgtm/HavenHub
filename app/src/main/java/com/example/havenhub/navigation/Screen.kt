@@ -36,7 +36,11 @@ sealed class Screen(val route: String) {
         const val ARG_BOOKING_ID = "bookingId"
         fun createRoute(bookingId: String) = "booking_confirmation/$bookingId"
     }
-    object MyBookings : Screen("my_bookings")
+
+    // ── MyBookings — initialTab add kiya (0=Pending, 1=Confirmed, default=0) ──
+    object MyBookings : Screen("my_bookings?tab={tab}") {
+        fun createRoute(tab: Int = 0) = "my_bookings?tab=$tab"
+    }
     object BookingDetails : Screen("booking_details/{bookingId}") {
         const val ARG_BOOKING_ID = "bookingId"
         fun createRoute(bookingId: String) = "booking_details/$bookingId"
@@ -85,17 +89,15 @@ sealed class Screen(val route: String) {
 
     object MessageList : Screen("message_list")
 
-    // ✅ FIX: ownerName + propertyId add kiye
     object Chat : Screen("chat/{userId}/{ownerName}/{propertyId}") {
-        const val ARG_USER_ID    = "userId"
-        const val ARG_OWNER_NAME = "ownerName"
+        const val ARG_USER_ID     = "userId"
+        const val ARG_OWNER_NAME  = "ownerName"
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(
             userId    : String,
             ownerName : String = "Owner",
             propertyId: String = ""
         ): String {
-            // ✅ Spaces aur special chars encode karo
             val encodedName = android.net.Uri.encode(ownerName.ifEmpty { "Owner" })
             val encodedPid  = android.net.Uri.encode(propertyId.ifEmpty { "none" })
             return "chat/$userId/$encodedName/$encodedPid"

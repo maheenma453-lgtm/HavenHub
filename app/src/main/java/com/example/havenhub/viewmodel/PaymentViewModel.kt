@@ -62,7 +62,6 @@ class PaymentViewModel @Inject constructor(
                     payeeId       = payeeId,
                     payeeName     = payeeName,
                     amount        = amount,
-                    // ✅ Fix: .name use karo
                     paymentMethod = method.name,
                     status        = PaymentStatus.PENDING.name,
                     type          = PaymentType.BOOKING.name
@@ -70,14 +69,24 @@ class PaymentViewModel @Inject constructor(
 
                 when (val result = paymentRepository.savePayment(payment)) {
                     is Resource.Success -> {
-                        // ✅ Booking status CONFIRMED karo
+                        // ✅ 1. Booking status CONFIRMED karo
                         bookingRepository.updateBookingStatus(
                             bookingId,
                             BookingStatus.CONFIRMED
                         )
-                        // ✅ Payment status COMPLETED karo
+
+                        // ✅ 2. Booking document mein paymentStatus = PAID aur paymentId update karo
+                        //       Yeh woh fix hai jo missing tha — ab har booking pay hone ke baad
+                        //       paymentStatus "PAID" show karega chahe koi bhi property ho
+                        bookingRepository.updatePaymentStatusOnBooking(
+                            bookingId     = bookingId,
+                            paymentStatus = PaymentStatus.COMPLETED.name,
+                            paymentId     = result.data ?: ""
+                        )
+
+                        // ✅ 3. Payment record ka status bhi COMPLETED karo
                         paymentRepository.updatePaymentStatus(
-                            result.data,
+                            result.data ?: "",
                             PaymentStatus.COMPLETED.name
                         )
 

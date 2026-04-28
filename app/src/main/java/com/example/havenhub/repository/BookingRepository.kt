@@ -6,20 +6,21 @@ import com.example.havenhub.data.Booking
 import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.NotificationType
 import com.example.havenhub.utils.Resource
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class BookingRepository @Inject constructor(
     private val dataManager      : FirebaseDataManager,
-    private val realtimeListener : FirebaseRealtimeListener
+    private val realtimeListener : FirebaseRealtimeListener,
+    private val firestore        : FirebaseFirestore        // ← add kiya
 ) {
     suspend fun createBooking(booking: Booking): Resource<String> {
-        // ✅ Seedha booking banao — property check BookingScreen pe ho chuka hai
         val pendingBooking = booking.copy(status = BookingStatus.PENDING.name)
         val result = dataManager.createBooking(pendingBooking)
-
         if (result is Resource.Success) {
             sendNotificationToAdmin(
                 pendingBooking.copy(bookingId = result.data ?: "")
@@ -57,6 +58,27 @@ class BookingRepository @Inject constructor(
         newStatus : BookingStatus
     ): Resource<Unit> {
         return dataManager.updateBookingStatus(bookingId, newStatus.name)
+    }
+
+    // ── NEW: payment hone ke baad booking mein paymentStatus + paymentId update karo ──
+    suspend fun updatePaymentStatusOnBooking(
+        bookingId    : String,
+        paymentStatus: String,
+        paymentId    : String
+    ) {
+        try {
+            firestore.collection("bookings")
+                .document(bookingId)
+                .update(
+                    mapOf(
+                        "paymentStatus" to paymentStatus,
+                        "paymentId"     to paymentId
+                    )
+                )
+                .await()
+        } catch (e: Exception) {
+            // silently fail — booking status already updated
+        }
     }
 
     fun getBookingsFlow(userId: String): Flow<List<Booking>> {
