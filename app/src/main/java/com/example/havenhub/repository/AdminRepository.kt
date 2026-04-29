@@ -146,7 +146,20 @@ class AdminRepository @Inject constructor(
             Resource.Error(e.localizedMessage ?: "Failed to fetch users")
         }
     }
-
+    // ✅ Approve user — verificationStatus VERIFIED set karo
+    suspend fun approveUser(userId: String): Resource<Unit> {
+        return try {
+            val fields = mapOf(
+                "verificationStatus" to "VERIFIED",
+                "isVerified"         to true,
+                "updatedAt"          to FieldValue.serverTimestamp()
+            )
+            firestore.collection("users").document(userId).update(fields).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to approve user")
+        }
+    }
     // ✅ Approve user — isVerified=true, verificationStatus=APPROVED, banned=false, active=true
     suspend fun unbanUser(userId: String): Resource<Unit> {
         return try {

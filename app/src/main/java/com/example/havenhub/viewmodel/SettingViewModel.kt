@@ -36,9 +36,8 @@ class SettingsViewModel @Inject constructor(
         loadSettings()
     }
 
-    // Load Settings
     fun loadSettings() {
-        val userId = authRepository.currentUserId ?: return
+        val userId = authRepository.currentUser?.uid ?: return   // ✅ Fixed
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
@@ -62,7 +61,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // Save Full Preferences
     fun savePreferences(preferences: UserPreferences) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -78,9 +76,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // Toggle Dark Mode — local + remote
     fun toggleDarkMode(enabled: Boolean) {
-        val userId = authRepository.currentUserId ?: return
+        val userId = authRepository.currentUser?.uid ?: return   // ✅ Fixed
         viewModelScope.launch {
             settingsRepository.setDarkMode(enabled)
             val fields = mapOf("isDarkMode" to enabled)
@@ -96,15 +93,14 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // Toggle Notifications — local + remote
     fun toggleNotifications(enabled: Boolean) {
-        val userId = authRepository.currentUserId ?: return
+        val userId = authRepository.currentUser?.uid ?: return   // ✅ Fixed
         viewModelScope.launch {
             settingsRepository.setNotificationsEnabled(enabled)
             val current = _uiState.value.userPreferences ?: return@launch
             val updated = if (enabled) current.withDefaultNotifications()
             else current.withAllNotificationsDisabled()
-            val fields  = mapOf(
+            val fields = mapOf(
                 "notifyBookingUpdates" to updated.notifyBookingUpdates,
                 "notifyMessages"       to updated.notifyMessages,
                 "notifyPayments"       to updated.notifyPayments,
@@ -123,9 +119,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // Toggle individual notification channel
     fun updateNotificationChannel(channel: String, enabled: Boolean) {
-        val userId = authRepository.currentUserId ?: return
+        val userId = authRepository.currentUser?.uid ?: return   // ✅ Fixed
         viewModelScope.launch {
             val fields = mapOf(channel to enabled)
             when (val result = settingsRepository.updateUserPreferences(userId, fields)) {
@@ -149,7 +144,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // Clear Messages
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
     }

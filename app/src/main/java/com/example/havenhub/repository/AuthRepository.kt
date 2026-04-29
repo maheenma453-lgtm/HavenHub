@@ -1,162 +1,228 @@
 package com.example.havenhub.repository
 
+import android.util.Log
 import com.example.havenhub.data.User
-import com.example.havenhub.remote.FirebaseAuthManager
-import com.example.havenhub.remote.FirebaseDataManager
-import com.example.havenhub.remote.FirebaseMessagingManager
 import com.example.havenhub.utils.Resource
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AuthRepository @Inject constructor(
-    private val authManager      : FirebaseAuthManager,
-    private val dataManager      : FirebaseDataManager,
-    private val messagingManager : FirebaseMessagingManager
+    private val auth     : FirebaseAuth,
+    private val firestore: FirebaseFirestore
 ) {
+    private val usersCollection = firestore.collection("users")
 
-    val currentUser   : FirebaseUser? get() = authManager.currentUser
-    val currentUserId : String?       get() = authManager.currentUserId
-    fun isUserSignedIn(): Boolean = authManager.isUserSignedIn()
+    val currentUser: FirebaseUser? get() = auth.currentUser
 
-    // ✅ FIX: UPPERCASE return karo — Firestore rules 'LANDLORD' expect karti hain
-    suspend fun getUserRole(uid: String): String {
+    fun isUserSignedIn(): Boolean = auth.currentUser != null
+
+    // ── Sign In ───────────────────────────────────────────────────────────────
+    suspend fun signIn(email: String, password: String): Resource<FirebaseUser?> {
         return try {
-            val result = dataManager.getUser(uid)
-            if (result is Resource.Success)
-                result.data.role.uppercase().trim().ifEmpty { "TENANT" }
-            else "TENANT"
-        } catch (e: Exception) { "TENANT" }
+            val result = auth.signInWithEmailAndPassword(email, password).await()
+            Resource.Success(result.user)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Sign in failed")
+        }
     }
 
-    suspend fun getUserVerified(uid: String): Boolean {
-        return try {
-            val result = dataManager.getUser(uid)
-            if (result is Resource.Success) {
-                val user = result.data
-                user.isVerified ||
-                        user.verificationStatus.uppercase().trim() == "VERIFIED" ||
-                        user.verificationStatus.uppercase().trim() == "APPROVED"
-            } else false
-        } catch (e: Exception) { false }
-    }
-
-    // ✅ FIX: role ab ALWAYS UPPERCASE save hoga Firestore mein
+    // ── Register — CNIC + profile image bhi save hoga ────────────────────────
     suspend fun registerUser(
-        email    : String,
-        password : String,
-        fullName : String,
-        role     : String
-    ): Resource<FirebaseUser> {
+        email          : String,
+        password       : String,
+        fullName       : String,
+        role           : String,
+        profileImageUrl: String = "",
+        cnicNumber     : String = "",
+        cnicImageUrl   : String = ""
+    ): Resource<FirebaseUser?> {
+        return try {
+            val result = auth.createUserWithEmailAndPassword(email, password).await()
+            val user   = result.user ?: return Resource.Error("Registration failed")
 
-        val authResult = authManager.registerWithEmail(email, password)
-        if (authResult is Resource.Error) return authResult
-
-        val firebaseUser = (authResult as Resource.Success).data
-
-        val user = User(
-            userId     = firebaseUser.uid,
-            email      = email,
-            fullName   = fullName,
-            role       = role.uppercase().trim(),   // ✅ UPPERCASE save
-            isVerified = false
-        )
-
-        val saveResult = dataManager.saveUser(user)
-        if (saveResult is Resource.Error) return Resource.Error(saveResult.message)
-
-        val tokenResult = messagingManager.getDeviceToken()
-        if (tokenResult is Resource.Success) {
-            messagingManager.saveDeviceToken(firebaseUser.uid, tokenResult.data)
-        }
-
-        return Resource.Success(firebaseUser)
-    }
-
-    suspend fun signIn(email: String, password: String): Resource<FirebaseUser> {
-
-        val authResult = authManager.signInWithEmail(email, password)
-        if (authResult is Resource.Error) return authResult
-
-        val firebaseUser = (authResult as Resource.Success).data
-
-        val userResult = dataManager.getUser(firebaseUser.uid)
-
-        if (userResult is Resource.Success) {
-            if (userResult.data.isBanned) {
-                authManager.signOut()
-                return Resource.Error(
-                    "Your account has been suspended. Please contact support for assistance."
-                )
-            }
-        }
-
-        val tokenResult = messagingManager.getDeviceToken()
-        if (tokenResult is Resource.Success) {
-            messagingManager.saveDeviceToken(firebaseUser.uid, tokenResult.data)
-        }
-
-        return Resource.Success(firebaseUser)
-    }
-
-    suspend fun signInWithGoogle(idToken: String): Resource<FirebaseUser> {
-
-        val authResult = authManager.signInWithGoogle(idToken)
-        if (authResult is Resource.Error) return authResult
-
-        val firebaseUser = (authResult as Resource.Success).data
-        val existingUser = dataManager.getUser(firebaseUser.uid)
-
-        if (existingUser is Resource.Error) {
-            val user = User(
-                userId          = firebaseUser.uid,
-                email           = firebaseUser.email ?: "",
-                fullName        = firebaseUser.displayName ?: "",
-                role            = "TENANT",         // ✅ UPPERCASE
-                isVerified      = false,
-                profileImageUrl = firebaseUser.photoUrl?.toString() ?: ""
+            val userDoc = mapOf(
+                "userId"             to user.uid,
+                "fullName"           to fullName,
+                "email"              to email,
+                "role"               to role.uppercase(),
+                "profileImageUrl"    to profileImageUrl,
+                "cnicNumber"         to cnicNumber,
+                "cnicImageUrl"       to cnicImageUrl,
+                "verificationStatus" to "PENDING",
+                "isVerified"         to false,
+                "isActive"           to true,
+                "isBanned"           to false,
+                "phoneNumber"        to "",
+                "fcmToken"           to "",
+                "landlordRating"     to 0.0,
+                "landlordReviewCount" to 0,
+                "createdAt"          to FieldValue.serverTimestamp(),
+                "updatedAt"          to FieldValue.serverTimestamp()
             )
-            dataManager.saveUser(user)
 
-        } else if (existingUser is Resource.Success) {
-            if (existingUser.data.isBanned) {
-                authManager.signOut()
-                return Resource.Error(
-                    "Your account has been suspended. Please contact support for assistance."
+            usersCollection.document(user.uid).set(userDoc).await()
+            Log.d("HAVEN_AUTH", "User registered: ${user.uid} role=$role")
+            Resource.Success(user)
+        } catch (e: Exception) {
+            Log.e("HAVEN_AUTH", "registerUser error: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Registration failed")
+        }
+    }
+
+    // ── Google Sign In ────────────────────────────────────────────────────────
+    suspend fun signInWithGoogle(idToken: String): Resource<FirebaseUser?> {
+        return try {
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            val result     = auth.signInWithCredential(credential).await()
+            val user       = result.user ?: return Resource.Error("Google sign in failed")
+
+            // Agar pehli baar login ho toh Firestore mein save karo
+            val doc = usersCollection.document(user.uid).get().await()
+            if (!doc.exists()) {
+                val userDoc = mapOf(
+                    "userId"              to user.uid,
+                    "fullName"            to (user.displayName ?: ""),
+                    "email"               to (user.email ?: ""),
+                    "role"                to "TENANT",
+                    "profileImageUrl"     to (user.photoUrl?.toString() ?: ""),
+                    "cnicNumber"          to "",
+                    "cnicImageUrl"        to "",
+                    "verificationStatus"  to "PENDING",
+                    "isVerified"          to false,
+                    "isActive"            to true,
+                    "isBanned"            to false,
+                    "phoneNumber"         to "",
+                    "fcmToken"            to "",
+                    "landlordRating"      to 0.0,
+                    "landlordReviewCount" to 0,
+                    "createdAt"           to FieldValue.serverTimestamp(),
+                    "updatedAt"           to FieldValue.serverTimestamp()
                 )
+                usersCollection.document(user.uid).set(userDoc).await()
             }
-        }
 
-        val tokenResult = messagingManager.getDeviceToken()
-        if (tokenResult is Resource.Success) {
-            messagingManager.saveDeviceToken(firebaseUser.uid, tokenResult.data)
+            Resource.Success(user)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Google sign in failed")
         }
-
-        return Resource.Success(firebaseUser)
     }
 
+    // ── Sign Out ──────────────────────────────────────────────────────────────
     suspend fun signOut() {
-        authManager.currentUserId?.let { uid ->
-            messagingManager.clearDeviceToken(uid)
-        }
-        authManager.signOut()
+        try { auth.signOut() }
+        catch (e: Exception) { Log.e("HAVEN_AUTH", "signOut error: ${e.localizedMessage}") }
     }
 
-    suspend fun sendPasswordResetEmail(email: String): Resource<Unit> =
-        authManager.sendPasswordResetEmail(email)
+    // ── Password Reset ────────────────────────────────────────────────────────
+    suspend fun sendPasswordResetEmail(email: String): Resource<Unit> {
+        return try {
+            auth.sendPasswordResetEmail(email).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to send reset email")
+        }
+    }
 
+    // ── Delete Account ────────────────────────────────────────────────────────
     suspend fun deleteAccount(): Resource<Unit> {
         return try {
-            val uid = authManager.currentUserId
-                ?: return Resource.Error("No user logged in")
-
-            messagingManager.clearDeviceToken(uid)
-            dataManager.deleteUser(uid)
-            authManager.deleteAccount()
-
+            val user = auth.currentUser ?: return Resource.Error("No user logged in")
+            usersCollection.document(user.uid).delete().await()
+            user.delete().await()
+            Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to delete account")
+        }
+    }
+
+    // ── Get User Role ─────────────────────────────────────────────────────────
+    suspend fun getUserRole(uid: String): String {
+        return try {
+            // Direct UID se pehle try karo
+            val directDoc = usersCollection.document(uid).get().await()
+            if (directDoc.exists()) {
+                return directDoc.getString("role")?.lowercase()?.trim() ?: "tenant"
+            }
+            // Fallback: userId field se query
+            val query = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
+            if (!query.isEmpty) {
+                query.documents.first().getString("role")?.lowercase()?.trim() ?: "tenant"
+            } else {
+                "tenant"
+            }
+        } catch (e: Exception) {
+            Log.e("HAVEN_AUTH", "getUserRole error: ${e.localizedMessage}")
+            "tenant"
+        }
+    }
+
+    // ── Get User Verified Status ──────────────────────────────────────────────
+    suspend fun getUserVerified(uid: String): Boolean {
+        return try {
+            val directDoc = usersCollection.document(uid).get().await()
+            if (directDoc.exists()) {
+                val status = directDoc.getString("verificationStatus")?.uppercase() ?: ""
+                return status == "VERIFIED" || status == "APPROVED" ||
+                        directDoc.getBoolean("isVerified") == true
+            }
+            val query = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
+            if (!query.isEmpty) {
+                val doc    = query.documents.first()
+                val status = doc.getString("verificationStatus")?.uppercase() ?: ""
+                status == "VERIFIED" || status == "APPROVED" ||
+                        doc.getBoolean("isVerified") == true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("HAVEN_AUTH", "getUserVerified error: ${e.localizedMessage}")
+            false
+        }
+    }
+
+    // ── Update User Fields ────────────────────────────────────────────────────
+    suspend fun updateUserFields(uid: String, fields: Map<String, Any>): Resource<Unit> {
+        return try {
+            val directDoc = usersCollection.document(uid).get().await()
+            val docId = if (directDoc.exists()) {
+                uid
+            } else {
+                val query = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
+                query.documents.firstOrNull()?.id
+                    ?: return Resource.Error("User not found")
+            }
+            val updatedFields = fields.toMutableMap()
+            updatedFields["updatedAt"] = FieldValue.serverTimestamp()
+            usersCollection.document(docId).update(updatedFields).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to update user")
+        }
+    }
+
+    // ── Get Full User Object ──────────────────────────────────────────────────
+    suspend fun getUser(uid: String): Resource<User> {
+        return try {
+            val directDoc = usersCollection.document(uid).get().await()
+            if (directDoc.exists()) {
+                val user = directDoc.toObject(User::class.java)
+                if (user != null) return Resource.Success(user)
+            }
+            val query = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
+            if (!query.isEmpty) {
+                val user = query.documents.first().toObject(User::class.java)
+                if (user != null) return Resource.Success(user)
+            }
+            Resource.Error("User not found")
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch user")
         }
     }
 }

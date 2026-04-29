@@ -1,6 +1,9 @@
 package com.example.havenhub.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,34 +19,66 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
     navController: NavController,
-    viewModel    : ProfileViewModel = hiltViewModel()
+    viewModel    : ProfileViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel    = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState     by viewModel.uiState.collectAsState()
+    val authUiState by authViewModel.uiState.collectAsState()
 
-    // Pre-fill fields from loaded user
     var name  by remember(uiState.user) { mutableStateOf(uiState.user?.fullName ?: "") }
     var phone by remember(uiState.user) { mutableStateOf(uiState.user?.phoneNumber ?: "") }
     var city  by remember(uiState.user) { mutableStateOf("") }
-    var bio   by remember { mutableStateOf("") }
 
-    // Success hone par back navigate karo
+    var showRemovePhotoDialog by remember { mutableStateOf(false) }
+
+    val currentProfileUrl = uiState.user?.profileImageUrl ?: ""
+
+    val profileImageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> uri?.let { authViewModel.updateProfileImage(it) } }
+
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             navController.popBackStack()
             viewModel.clearMessages()
         }
+    }
+
+    // ✅ Remove Photo Confirmation Dialog
+    if (showRemovePhotoDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemovePhotoDialog = false },
+            title = { Text("Remove Profile Photo") },
+            text  = { Text("Are you sure you want to remove your profile photo?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    authViewModel.removeProfileImage()
+                    showRemovePhotoDialog = false
+                }) {
+                    Text("Remove", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemovePhotoDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -56,15 +91,13 @@ fun EditProfileScreen(
                     }
                 },
                 actions = {
-                    TextButton(
-                        onClick = {
-                            viewModel.updateProfile(
-                                fullName    = name,
-                                phoneNumber = phone,
-                                city        = city
-                            )
-                        }
-                    ) {
+                    TextButton(onClick = {
+                        viewModel.updateProfile(
+                            fullName    = name,
+                            phoneNumber = phone,
+                            city        = city
+                        )
+                    }) {
                         Text("Save", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 },
@@ -82,80 +115,105 @@ fun EditProfileScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement     = Arrangement.spacedBy(16.dp),
-            horizontalAlignment     = Alignment.CenterHorizontally
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
-            // Avatar
+            // Profile Image
             Box(contentAlignment = Alignment.BottomEnd) {
                 Box(
-                    modifier         = Modifier
-                        .size(90.dp)
+                    modifier = Modifier
+                        .size(100.dp)
                         .clip(CircleShape)
-                        .background(PrimaryBlue),
+                        .background(PrimaryBlue)
+                        .clickable { profileImageLauncher.launch("image/*") },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text       = uiState.user?.initials ?: "?",
-                        fontSize   = 36.sp,
-                        color      = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
+                    when {
+                        authUiState.isLoading -> {
+                            CircularProgressIndicator(
+                                color       = Color.White,
+                                modifier    = Modifier.size(28.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                        currentProfileUrl.isNotEmpty() -> {
+                            AsyncImage(
+                                model              = currentProfileUrl,
+                                contentDescription = null,
+                                modifier           = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape),
+                                contentScale       = ContentScale.Crop
+                            )
+                        }
+                        else -> {
+                            Text(
+                                text       = uiState.user?.initials ?: "?",
+                                fontSize   = 36.sp,
+                                color      = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
                 Box(
-                    modifier         = Modifier
-                        .size(28.dp)
+                    modifier = Modifier
+                        .size(32.dp)
                         .clip(CircleShape)
-                        .background(SurfaceVariantLight),
+                        .background(Color.White)
+                        .clickable { profileImageLauncher.launch("image/*") },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.CameraAlt,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        Icons.Default.CameraAlt, null,
+                        modifier = Modifier.size(18.dp),
                         tint     = PrimaryBlue
                     )
                 }
             }
 
-            Text("Change Photo", fontSize = 13.sp, color = PrimaryBlue)
+            Text("Tap to change photo", fontSize = 12.sp, color = Color.Gray)
+
+            // ✅ Remove Photo Button — sirf tab show hoga jab photo exist kare
+            if (currentProfileUrl.isNotEmpty()) {
+                TextButton(
+                    onClick = { showRemovePhotoDialog = true },
+                    colors  = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                ) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Remove Profile Photo", fontSize = 13.sp)
+                }
+            }
+
+            authUiState.successMessage?.let {
+                Text(it, color = Color(0xFF4CAF50), fontSize = 13.sp)
+            }
+            authUiState.errorMessage?.let {
+                Text(it, color = Color.Red, fontSize = 13.sp)
+            }
 
             Spacer(Modifier.height(4.dp))
 
             ProfileField(
-                label         = "Full Name",
-                value         = name,
-                onValueChange = { name = it },
-                icon          = Icons.Default.Person
+                label = "Full Name", value = name,
+                onValueChange = { name = it }, icon = Icons.Default.Person
             )
             ProfileField(
-                label         = "Email Address",
-                value         = uiState.user?.email ?: "",
-                onValueChange = {},
-                icon          = Icons.Default.Email,
-                readOnly      = true
+                label = "Email Address", value = uiState.user?.email ?: "",
+                onValueChange = {}, icon = Icons.Default.Email, readOnly = true
             )
             ProfileField(
-                label         = "Phone Number",
-                value         = phone,
-                onValueChange = { phone = it },
-                icon          = Icons.Default.Phone
+                label = "Phone Number", value = phone,
+                onValueChange = { phone = it }, icon = Icons.Default.Phone
             )
             ProfileField(
-                label         = "City",
-                value         = city,
-                onValueChange = { city = it },
-                icon          = Icons.Default.LocationOn
-            )
-
-            OutlinedTextField(
-                value         = bio,
-                onValueChange = { bio = it },
-                label         = { Text("Bio (optional)") },
-                modifier      = Modifier.fillMaxWidth().height(110.dp),
-                shape         = RoundedCornerShape(12.dp),
-                placeholder   = { Text("Tell others about yourself...") },
-                maxLines      = 4
+                label = "City", value = city,
+                onValueChange = { city = it }, icon = Icons.Default.LocationOn
             )
 
             Spacer(Modifier.height(8.dp))
@@ -184,9 +242,8 @@ fun EditProfileScreen(
                 }
             }
 
-            // Error Message
-            uiState.errorMessage?.let { error ->
-                Text(text = error, color = ErrorRed, fontSize = 14.sp)
+            uiState.errorMessage?.let {
+                Text(text = it, color = ErrorRed, fontSize = 14.sp)
             }
         }
     }
@@ -204,7 +261,7 @@ fun ProfileField(
         value         = value,
         onValueChange = onValueChange,
         label         = { Text(label) },
-        leadingIcon   = { Icon(icon, contentDescription = null, tint = PrimaryBlue) },
+        leadingIcon   = { Icon(icon, null, tint = PrimaryBlue) },
         modifier      = Modifier.fillMaxWidth(),
         shape         = RoundedCornerShape(12.dp),
         readOnly      = readOnly,

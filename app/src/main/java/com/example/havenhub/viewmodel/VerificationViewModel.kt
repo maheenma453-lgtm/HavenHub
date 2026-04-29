@@ -7,6 +7,7 @@ import com.example.havenhub.data.PropertyStatus
 import com.example.havenhub.data.User
 import com.example.havenhub.data.VerificationStatus
 import com.example.havenhub.repository.AdminRepository
+import com.example.havenhub.repository.AuthRepository
 import com.example.havenhub.repository.NotificationRepository
 import com.example.havenhub.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,8 +25,9 @@ data class VerificationUiState(
 
 @HiltViewModel
 class VerificationViewModel @Inject constructor(
-    private val adminRepository        : AdminRepository,
-    private val notificationRepository : NotificationRepository  // ✅ NEW: Inject karo
+    private val adminRepository       : AdminRepository,
+    private val notificationRepository: NotificationRepository,
+    private val authRepository        : AuthRepository          // ✅ CNIC fetch ke liye
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VerificationUiState())
@@ -40,29 +42,41 @@ class VerificationViewModel @Inject constructor(
             val usersResult      = adminRepository.getAllUsers()
             val propertiesResult = adminRepository.getAllProperties()
 
-            _uiState.update { state ->
-                state.copy(
-                    isLoading = false,
-                    pendingUsers = when (usersResult) {
-                        is Resource.Success -> usersResult.data.filter {
-                            it.verificationStatus == VerificationStatus.PENDING.name ||
-                                    it.verificationStatus == VerificationStatus.UNDER_REVIEW.name
-                        }
-                        else -> emptyList()
-                    },
-                    pendingProperties = when (propertiesResult) {
-                        is Resource.Success -> propertiesResult.data.filter {
-                            it.status == PropertyStatus.PENDING.name ||
-                                    it.status == PropertyStatus.UNDER_REVIEW.name
-                        }
-                        else -> emptyList()
+            // ✅ FIX: Pending users ki full detail (cnicImageUrl samet) Firestore se fetch karo
+            val pendingUsers: List<User> = when (usersResult) {
+                is Resource.Success -> {
+                    val filtered = usersResult.data.filter {
+                        it.verificationStatus.equals(VerificationStatus.PENDING.name, ignoreCase = true) ||
+                                it.verificationStatus.equals(VerificationStatus.UNDER_REVIEW.name, ignoreCase = true)
                     }
+                    // Har user ki complete detail fetch karo taake cnicImageUrl aaye
+                    filtered.map { basicUser ->
+                        val fullResult = authRepository.getUser(basicUser.userId)
+                        if (fullResult is Resource.Success) fullResult.data else basicUser
+                    }
+                }
+                else -> emptyList()
+            }
+
+            val pendingProperties: List<Property> = when (propertiesResult) {
+                is Resource.Success -> propertiesResult.data.filter {
+                    it.status.equals(PropertyStatus.PENDING.name, ignoreCase = true) ||
+                            it.status.equals(PropertyStatus.UNDER_REVIEW.name, ignoreCase = true)
+                }
+                else -> emptyList()
+            }
+
+            _uiState.update {
+                it.copy(
+                    isLoading         = false,
+                    pendingUsers      = pendingUsers,
+                    pendingProperties = pendingProperties
                 )
             }
         }
     }
 
-    // ✅ UPDATED: Approve ke baad landlord ko notification bhejo adminNote ke saath
+    // ✅ Approve property + landlord ko notification
     fun approveProperty(propertyId: String, adminNote: String = "") {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -70,25 +84,22 @@ class VerificationViewModel @Inject constructor(
             val result = adminRepository.approveProperty(propertyId, adminNote)
 
             if (result is Resource.Success) {
-                // ✅ Property ka owner aur title dhundo — notification ke liye
                 val property = _uiState.value.pendingProperties
                     .find { it.propertyId == propertyId }
-
                 if (property != null) {
                     notificationRepository.sendPropertyApprovedNotification(
                         ownerId       = property.ownerId,
                         propertyId    = propertyId,
                         propertyTitle = property.title,
-                        adminNote     = adminNote      // ✅ Admin ka note landlord ko jayega
+                        adminNote     = adminNote
                     )
                 }
             }
-
             handleResult(result)
         }
     }
 
-    // ✅ UPDATED: Reject ke baad landlord ko notification bhejo reason ke saath
+    // ✅ Reject property + landlord ko notification
     fun rejectProperty(propertyId: String, reason: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -96,35 +107,36 @@ class VerificationViewModel @Inject constructor(
             val result = adminRepository.rejectProperty(propertyId, reason)
 
             if (result is Resource.Success) {
-                // ✅ Property ka owner aur title dhundo — notification ke liye
                 val property = _uiState.value.pendingProperties
                     .find { it.propertyId == propertyId }
-
                 if (property != null) {
                     notificationRepository.sendPropertyRejectedNotification(
                         ownerId       = property.ownerId,
                         propertyId    = propertyId,
                         propertyTitle = property.title,
-                        adminNote     = reason         // ✅ Reject reason landlord ko jayega
+                        adminNote     = reason
                     )
                 }
             }
-
             handleResult(result)
         }
     }
 
+    // ✅ Approve user — verificationStatus bhi update karo
     fun approveUser(userId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            handleResult(adminRepository.unbanUser(userId))
+            val result = adminRepository.approveUser(userId)
+            handleResult(result)
         }
     }
 
+    // ✅ Reject/Ban user
     fun rejectUser(userId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            handleResult(adminRepository.banUser(userId))
+            val result = adminRepository.banUser(userId)
+            handleResult(result)
         }
     }
 
@@ -134,10 +146,8 @@ class VerificationViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
                 loadAllPending()
             }
-            is Resource.Error -> {
-                _uiState.update {
-                    it.copy(isLoading = false, errorMessage = result.message)
-                }
+            is Resource.Error -> _uiState.update {
+                it.copy(isLoading = false, errorMessage = result.message)
             }
             is Resource.Loading -> Unit
         }

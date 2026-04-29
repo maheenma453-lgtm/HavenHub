@@ -1,25 +1,32 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.havenhub.viewmodel.VerificationViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserVerificationDetailScreen(
-    userId: String,
+    userId       : String,
     navController: NavController,
-    viewModel: VerificationViewModel = hiltViewModel()
+    viewModel    : VerificationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -42,71 +49,141 @@ fun UserVerificationDetailScreen(
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor    = Color(0xFF0D1B3E),
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
             )
         },
         bottomBar = {
             if (user != null) {
-                UserBottomActionBar(
-                    onReject = { viewModel.rejectUser(userId) },
-                    onApprove = { viewModel.approveUser(userId) },
-                    isLoading = uiState.isLoading
-                )
+                Surface(tonalElevation = 2.dp, shadowElevation = 4.dp) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick  = { viewModel.rejectUser(userId) },
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            enabled  = !uiState.isLoading,
+                            shape    = RoundedCornerShape(12.dp),
+                            colors   = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error)
+                        ) { Text("Reject", fontWeight = FontWeight.SemiBold) }
+
+                        Button(
+                            onClick  = { viewModel.approveUser(userId) },
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            enabled  = !uiState.isLoading,
+                            shape    = RoundedCornerShape(12.dp),
+                            colors   = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF0D1B3E))
+                        ) {
+                            if (uiState.isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp, color = Color.White)
+                            } else {
+                                Text("Approve", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
             }
         }
     ) { pad ->
         Box(modifier = Modifier.fillMaxSize().padding(pad)) {
-
             when {
-                // ✅ FIX 1: Jab tak data load ho raha hai — spinner dikhao
-                uiState.isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                uiState.isLoading && user == null -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
-
-                // ✅ FIX 2: Load ho gaya but user nahi mila
                 user == null -> {
-                    Text(
-                        "User not found",
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    Text("User not found", modifier = Modifier.align(Alignment.Center))
                 }
-
-                // ✅ FIX 3: User mil gaya — details dikhao
                 else -> {
                     LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
+                        modifier            = Modifier.fillMaxSize().padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        // ── User Details Card ────────────────────────────────
                         item {
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Text(
-                                        "User Details",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
+                            Card(
+                                modifier  = Modifier.fillMaxWidth(),
+                                shape     = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(2.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("User Details", fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 16.sp, color = Color(0xFF0D1B3E))
                                     HorizontalDivider(thickness = 0.5.dp)
-
-                                    UserDetailRow("Name", user.fullName)
-                                    UserDetailRow("Email", user.email)
-
-                                    val roleDisplay = user.role
-                                        .lowercase()
-                                        .replaceFirstChar { it.uppercase() }
-                                    UserDetailRow("Role", roleDisplay)
-
-                                    UserDetailRow(
-                                        "Status",
-                                        if (user.isVerified) "Verified" else "Pending"
-                                    )
+                                    UserDetailRow("Name",   user.fullName)
+                                    UserDetailRow("Email",  user.email)
+                                    UserDetailRow("Role",   user.role.lowercase()
+                                        .replaceFirstChar { it.uppercase() })
+                                    UserDetailRow("Status",
+                                        if (user.isVerified) "Verified" else "Pending")
+                                    // ✅ CNIC Number
+                                    if (user.cnicNumber.isNotEmpty()) {
+                                        UserDetailRow("CNIC", user.cnicNumber)
+                                    }
                                 }
+                            }
+                        }
+
+                        // ── CNIC Image Card ──────────────────────────────────
+                        if (user.cnicImageUrl.isNotEmpty()) {
+                            item {
+                                Card(
+                                    modifier  = Modifier.fillMaxWidth(),
+                                    shape     = RoundedCornerShape(16.dp),
+                                    elevation = CardDefaults.cardElevation(2.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Text("CNIC Document", fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 16.sp, color = Color(0xFF0D1B3E))
+                                        HorizontalDivider(thickness = 0.5.dp)
+                                        Text("Verify the CNIC image below:",
+                                            fontSize = 13.sp, color = Color.Gray)
+                                        AsyncImage(
+                                            model              = user.cnicImageUrl,
+                                            contentDescription = "CNIC Image",
+                                            modifier           = Modifier
+                                                .fillMaxWidth()
+                                                .height(220.dp)
+                                                .clip(RoundedCornerShape(12.dp)),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Info Banner ──────────────────────────────────────
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .then(Modifier.run {
+                                        if (user.isVerified)
+                                            background(Color(0xFFE8F5E9))
+                                        else
+                                            background(Color(0xFFFFF8E1))
+                                    })
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    if (user.isVerified)
+                                        "✅ This user is already verified."
+                                    else
+                                        "⏳ Awaiting admin verification. Review CNIC above.",
+                                    fontSize = 13.sp,
+                                    color = if (user.isVerified) Color(0xFF2E7D32) else Color(0xFF8A7040)
+                                )
                             }
                         }
                     }
@@ -119,61 +196,13 @@ fun UserVerificationDetailScreen(
 @Composable
 private fun UserDetailRow(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier              = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment     = Alignment.CenterVertically
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            value,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodyMedium
-        )
-    }
-}
-
-@Composable
-private fun UserBottomActionBar(
-    onReject: () -> Unit,
-    onApprove: () -> Unit,
-    isLoading: Boolean
-) {
-    Surface(tonalElevation = 2.dp, shadowElevation = 4.dp) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            OutlinedButton(
-                onClick = onReject,
-                modifier = Modifier.weight(1f),
-                enabled = !isLoading,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Text("Reject")
-            }
-            Button(
-                onClick = onApprove,
-                modifier = Modifier.weight(1f),
-                enabled = !isLoading
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text("Approve")
-                }
-            }
-        }
+        Text(label, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium)
     }
 }

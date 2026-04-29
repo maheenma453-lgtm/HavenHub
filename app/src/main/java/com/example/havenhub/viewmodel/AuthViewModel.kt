@@ -1,9 +1,11 @@
 package com.example.havenhub.viewmodel
 
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.repository.AuthRepository
+import com.example.havenhub.remote.ImgBBUploadManager
 import com.example.havenhub.utils.Resource
 import com.example.havenhub.utils.ValidationUtils
 import com.google.firebase.auth.EmailAuthProvider
@@ -25,12 +27,13 @@ data class AuthUiState(
     val selectedRole        : String        = "",
     val userRole            : String        = "",
     val isVerified          : Boolean       = false,
-    val isAuthReady         : Boolean       = false   // ✅ YEH ADD HUA
+    val isAuthReady         : Boolean       = false
 )
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository : AuthRepository,
+    private val imgBBManager   : ImgBBUploadManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -48,8 +51,19 @@ class AuthViewModel @Inject constructor(
     private val _fullName           = MutableStateFlow("")
     val fullName: StateFlow<String> = _fullName.asStateFlow()
 
-    private val _emailError               = MutableStateFlow<String?>(null)
-    val emailError: StateFlow<String?>    = _emailError.asStateFlow()
+    // CNIC fields — Tenant aur Landlord dono ke liye
+    private val _cnicNumber           = MutableStateFlow("")
+    val cnicNumber: StateFlow<String> = _cnicNumber.asStateFlow()
+
+    private val _cnicImageUri         = MutableStateFlow<Uri?>(null)
+    val cnicImageUri: StateFlow<Uri?> = _cnicImageUri.asStateFlow()
+
+    // Profile image
+    private val _profileImageUri         = MutableStateFlow<Uri?>(null)
+    val profileImageUri: StateFlow<Uri?> = _profileImageUri.asStateFlow()
+
+    private val _emailError            = MutableStateFlow<String?>(null)
+    val emailError: StateFlow<String?> = _emailError.asStateFlow()
 
     private val _passwordError            = MutableStateFlow<String?>(null)
     val passwordError: StateFlow<String?> = _passwordError.asStateFlow()
@@ -57,30 +71,23 @@ class AuthViewModel @Inject constructor(
     private val _nameError            = MutableStateFlow<String?>(null)
     val nameError: StateFlow<String?> = _nameError.asStateFlow()
 
-    init {
-        checkAuthState()
-    }
+    private val _cnicError            = MutableStateFlow<String?>(null)
+    val cnicError: StateFlow<String?> = _cnicError.asStateFlow()
+
+    init { checkAuthState() }
 
     private fun checkAuthState() {
         FirebaseAuth.getInstance().addAuthStateListener { firebaseAuth ->
             val firebaseUser = firebaseAuth.currentUser
-            Log.d("HAVEN_AUTH", "AuthStateListener fired: uid = ${firebaseUser?.uid}")
-
             if (firebaseUser != null) {
                 viewModelScope.launch {
-                    val uid = firebaseUser.uid
-                    Log.d("HAVEN_AUTH", "Fetching role + verified for uid = $uid")
-
-                    // ✅ lowercase() — "LANDLORD" → "landlord"
+                    val uid        = firebaseUser.uid
                     val role       = authRepository.getUserRole(uid).lowercase().trim()
                     val isVerified = authRepository.getUserVerified(uid)
-
-                    Log.d("HAVEN_AUTH", "role = '$role'  isVerified = $isVerified")
-
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
-                            isAuthReady = true,   // ✅ auth ready
+                            isAuthReady = true,
                             isLoggedIn  = true,
                             currentUser = firebaseUser,
                             userRole    = role,
@@ -89,11 +96,10 @@ class AuthViewModel @Inject constructor(
                     }
                 }
             } else {
-                Log.d("HAVEN_AUTH", "AuthStateListener: no user logged in")
                 _uiState.update {
                     it.copy(
                         isLoading   = false,
-                        isAuthReady = true,   // ✅ auth ready (logged out)
+                        isAuthReady = true,
                         isLoggedIn  = false,
                         currentUser = null,
                         userRole    = "",
@@ -117,7 +123,6 @@ class AuthViewModel @Inject constructor(
                     val uid        = result.data?.uid ?: ""
                     val role       = authRepository.getUserRole(uid).lowercase().trim()
                     val isVerified = authRepository.getUserVerified(uid)
-                    Log.d("HAVEN_AUTH", "signIn success uid=$uid role='$role' isVerified=$isVerified")
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
@@ -129,29 +134,65 @@ class AuthViewModel @Inject constructor(
                         )
                     }
                 }
-                is Resource.Error -> {
-                    Log.d("HAVEN_AUTH", "signIn error = ${result.message}")
-                    _uiState.update {
-                        it.copy(isLoading = false, errorMessage = result.message)
-                    }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
                 }
                 is Resource.Loading -> Unit
             }
         }
     }
 
+    // signUp — Tenant aur Landlord dono ke liye CNIC handle karta hai
     fun signUp() {
         if (!validateSignUpForm()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+            val role       = _uiState.value.selectedRole.lowercase()
+            val isTenant   = role == "tenant"
+            val isLandlord = role == "landlord"
+            val needsCnic  = isTenant || isLandlord
+
+            // Step 1: Profile image upload (optional)
+            var profileImageUrl = ""
+            _profileImageUri.value?.let { uri ->
+                val result = imgBBManager.uploadImage(uri)
+                if (result is Resource.Success) {
+                    profileImageUrl = result.data ?: ""
+                }
+            }
+
+            // Step 2: CNIC image upload (Tenant aur Landlord dono ke liye required)
+            var cnicImageUrl = ""
+            if (needsCnic && _cnicImageUri.value != null) {
+                val result = imgBBManager.uploadImage(_cnicImageUri.value!!)
+                if (result is Resource.Error) {
+                    _uiState.update {
+                        it.copy(isLoading = false, errorMessage = "CNIC image upload failed. Please try again.")
+                    }
+                    return@launch
+                }
+                cnicImageUrl = (result as? Resource.Success)?.data ?: ""
+            }
+
+            // Step 3: Register user in Firebase
             val result = authRepository.registerUser(
-                email    = _email.value.trim(),
-                password = _password.value,
-                fullName = _fullName.value.trim(),
-                role     = _uiState.value.selectedRole
+                email           = _email.value.trim(),
+                password        = _password.value,
+                fullName        = _fullName.value.trim(),
+                role            = _uiState.value.selectedRole,
+                profileImageUrl = profileImageUrl,
+                cnicNumber      = if (needsCnic) _cnicNumber.value.trim() else "",
+                cnicImageUrl    = if (needsCnic) cnicImageUrl else ""
             )
+
             when (result) {
                 is Resource.Success -> {
+                    val successMsg = when {
+                        isLandlord -> "Account created! Admin will verify your CNIC before you can list properties."
+                        isTenant   -> "Account created! Waiting for admin verification."
+                        else       -> "Account created successfully!"
+                    }
                     _uiState.update {
                         it.copy(
                             isLoading      = false,
@@ -160,7 +201,7 @@ class AuthViewModel @Inject constructor(
                             currentUser    = result.data,
                             userRole       = _uiState.value.selectedRole.lowercase().trim(),
                             isVerified     = false,
-                            successMessage = "Account created successfully!"
+                            successMessage = successMsg
                         )
                     }
                 }
@@ -168,6 +209,24 @@ class AuthViewModel @Inject constructor(
                     it.copy(isLoading = false, errorMessage = result.message)
                 }
                 is Resource.Loading -> Unit
+            }
+        }
+    }
+
+    // Remove Profile Image
+    fun removeProfileImage() {
+        val uid = authRepository.currentUser?.uid ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val fields = mapOf("profileImageUrl" to "")
+            when (val result = authRepository.updateUserFields(uid, fields)) {
+                is Resource.Success -> _uiState.update {
+                    it.copy(isLoading = false, successMessage = "Profile photo removed successfully")
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                Resource.Loading -> Unit
             }
         }
     }
@@ -189,14 +248,10 @@ class AuthViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val result = authRepository.sendPasswordResetEmail(emailVal)
-            when (result) {
+            when (val result = authRepository.sendPasswordResetEmail(emailVal)) {
                 is Resource.Success -> _uiState.update {
-                    it.copy(
-                        isLoading           = false,
-                        isPasswordResetSent = true,
-                        successMessage      = "Password reset email sent!"
-                    )
+                    it.copy(isLoading = false, isPasswordResetSent = true,
+                        successMessage = "Password reset email sent!")
                 }
                 is Resource.Error -> _uiState.update {
                     it.copy(isLoading = false, errorMessage = result.message)
@@ -214,22 +269,14 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val user  = authRepository.currentUser ?: throw Exception("No user logged in")
-                val email = user.email ?: throw Exception("User email not found")
+                val user       = authRepository.currentUser ?: throw Exception("No user logged in")
+                val email      = user.email ?: throw Exception("User email not found")
                 val credential = EmailAuthProvider.getCredential(email, currentPassword)
                 user.reauthenticate(credential).await()
                 user.updatePassword(newPassword).await()
-                _uiState.update {
-                    it.copy(isLoading = false, successMessage = "Password updated successfully!")
-                }
+                _uiState.update { it.copy(isLoading = false, successMessage = "Password updated!") }
             } catch (e: Exception) {
-                val errorMsg = when {
-                    e.message?.contains("wrong-password") == true ||
-                            e.message?.contains("invalid-credential") == true ->
-                        "Current password is incorrect"
-                    else -> e.localizedMessage ?: "Failed to update password"
-                }
-                _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
             }
         }
     }
@@ -237,8 +284,7 @@ class AuthViewModel @Inject constructor(
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val result = authRepository.signInWithGoogle(idToken)
-            when (result) {
+            when (val result = authRepository.signInWithGoogle(idToken)) {
                 is Resource.Success -> {
                     val uid        = result.data?.uid ?: ""
                     val role       = authRepository.getUserRole(uid).lowercase().trim()
@@ -275,16 +321,43 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun onEmailChange(value: String)           { _email.value = value;    _emailError.value = null }
-    fun onPasswordChange(value: String)        { _password.value = value; _passwordError.value = null }
+    // Profile image update (edit profile se)
+    fun updateProfileImage(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val result = imgBBManager.uploadImage(uri)
+            when (result) {
+                is Resource.Success -> {
+                    val url = result.data ?: ""
+                    val uid = authRepository.currentUser?.uid ?: return@launch
+                    authRepository.updateUserFields(uid, mapOf("profileImageUrl" to url))
+                    _uiState.update {
+                        it.copy(isLoading = false, successMessage = "Profile image updated!")
+                    }
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isLoading = false, errorMessage = result.message)
+                }
+                is Resource.Loading -> Unit
+            }
+        }
+    }
+
+    // ── Event Handlers ────────────────────────────────────────────────────────
+    fun onEmailChange(value: String)           { _email.value = value;           _emailError.value = null }
+    fun onPasswordChange(value: String)        { _password.value = value;        _passwordError.value = null }
     fun onConfirmPasswordChange(value: String) { _confirmPassword.value = value }
-    fun onFullNameChange(value: String)        { _fullName.value = value; _nameError.value = null }
+    fun onFullNameChange(value: String)        { _fullName.value = value;        _nameError.value = null }
     fun onRoleSelected(role: String)           { _uiState.update { it.copy(selectedRole = role) } }
+    fun onCnicNumberChange(value: String)      { _cnicNumber.value = value;      _cnicError.value = null }
+    fun onCnicImageSelected(uri: Uri?)         { _cnicImageUri.value = uri }
+    fun onProfileImageSelected(uri: Uri?)      { _profileImageUri.value = uri }
 
     fun clearError()   = _uiState.update { it.copy(errorMessage = null) }
     fun clearSuccess() = _uiState.update { it.copy(successMessage = null) }
     fun isUserSignedIn(): Boolean = authRepository.isUserSignedIn()
 
+    // ── Validation ────────────────────────────────────────────────────────────
     private fun validateSignInForm(): Boolean {
         var isValid = true
         if (!ValidationUtils.isValidEmail(_email.value.trim())) {
@@ -300,6 +373,7 @@ class AuthViewModel @Inject constructor(
 
     private fun validateSignUpForm(): Boolean {
         var isValid = true
+
         if (_fullName.value.trim().length < 2) {
             _nameError.value = "Please enter your full name"
             isValid = false
@@ -320,6 +394,25 @@ class AuthViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = "Please select a role to continue") }
             isValid = false
         }
+
+        val role       = _uiState.value.selectedRole.lowercase()
+        val isTenant   = role == "tenant"
+        val isLandlord = role == "landlord"
+        val needsCnic  = isTenant || isLandlord
+
+        // CNIC validation — Tenant aur Landlord dono ke liye
+        if (needsCnic) {
+            if (_cnicNumber.value.trim().isEmpty()) {
+                _cnicError.value = "CNIC number is required"
+                isValid = false
+            }
+            if (_cnicImageUri.value == null) {
+                _uiState.update { it.copy(errorMessage = "Please upload your CNIC image") }
+                isValid = false
+            }
+        }
+
         return isValid
     }
 }
+
