@@ -3,6 +3,7 @@ package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Booking
+import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.Property
 import com.example.havenhub.data.User
 import com.example.havenhub.repository.AdminRepository
@@ -16,12 +17,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ManagementUiState(
-    val isLoading: Boolean = false,
-    val users: List<User> = emptyList(),
-    val properties: List<Property> = emptyList(),
-    val bookings: List<Booking> = emptyList(),
-    val actionSuccess: Boolean = false,
-    val errorMessage: String? = null
+    val isLoading    : Boolean        = false,
+    val users        : List<User>     = emptyList(),
+    val properties   : List<Property> = emptyList(),
+    val bookings     : List<Booking>  = emptyList(),
+    val actionSuccess: Boolean        = false,
+    val errorMessage : String?        = null,
+    val successMessage: String?       = null   // ✅ NEW: success toast ke liye
 )
 
 @HiltViewModel
@@ -75,7 +77,9 @@ class ManagementViewModel @Inject constructor(
         }
     }
 
-    // --- Property Actions ---
+    // ─────────────────────────────────────────────────────────
+    // Property Actions
+    // ─────────────────────────────────────────────────────────
 
     fun approveProperty(propertyId: String) = viewModelScope.launch {
         _uiState.update { it.copy(isLoading = true) }
@@ -92,7 +96,9 @@ class ManagementViewModel @Inject constructor(
         handleActionResult(adminRepository.deleteProperty(propertyId)) { loadAllProperties() }
     }
 
-    // --- User Actions ---
+    // ─────────────────────────────────────────────────────────
+    // User Actions
+    // ─────────────────────────────────────────────────────────
 
     fun banUser(userId: String) = viewModelScope.launch {
         _uiState.update { it.copy(isLoading = true) }
@@ -104,14 +110,76 @@ class ManagementViewModel @Inject constructor(
         handleActionResult(adminRepository.unbanUser(userId)) { loadAllUsers() }
     }
 
-    // --- Booking Actions ---
+    // ─────────────────────────────────────────────────────────
+    // Booking Actions
+    // ─────────────────────────────────────────────────────────
 
     fun cancelBooking(bookingId: String) = viewModelScope.launch {
         _uiState.update { it.copy(isLoading = true) }
         handleActionResult(adminRepository.cancelBooking(bookingId)) { loadAllBookings() }
     }
 
-    // --- Helper ---
+    // ✅ NEW: Landlord booking approve kare — PENDING_APPROVAL → CONFIRMED
+    fun approveBooking(bookingId: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        val result = adminRepository.updateBookingStatus(bookingId, BookingStatus.CONFIRMED.name)
+        when (result) {
+            is Resource.Success -> {
+                // ✅ Local list turant update karo (optimistic UI)
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading      = false,
+                        actionSuccess  = true,
+                        successMessage = "Booking confirmed successfully!",
+                        bookings       = state.bookings.map { booking ->
+                            if (booking.bookingId == bookingId)
+                                booking.copy(status = BookingStatus.CONFIRMED.name)
+                            else booking
+                        }
+                    )
+                }
+                // Fresh data Firestore se bhi load karo
+                loadAllBookings()
+            }
+            is Resource.Error -> _uiState.update {
+                it.copy(isLoading = false, errorMessage = result.message)
+            }
+            Resource.Loading -> Unit
+        }
+    }
+
+    // ✅ NEW: Landlord booking reject kare — PENDING_APPROVAL → CANCELLED
+    fun rejectBooking(bookingId: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        val result = adminRepository.updateBookingStatus(bookingId, BookingStatus.CANCELLED.name)
+        when (result) {
+            is Resource.Success -> {
+                // ✅ Local list turant update karo (optimistic UI)
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading      = false,
+                        actionSuccess  = true,
+                        successMessage = "Booking rejected.",
+                        bookings       = state.bookings.map { booking ->
+                            if (booking.bookingId == bookingId)
+                                booking.copy(status = BookingStatus.CANCELLED.name)
+                            else booking
+                        }
+                    )
+                }
+                // Fresh data Firestore se bhi load karo
+                loadAllBookings()
+            }
+            is Resource.Error -> _uiState.update {
+                it.copy(isLoading = false, errorMessage = result.message)
+            }
+            Resource.Loading -> Unit
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Helper
+    // ─────────────────────────────────────────────────────────
 
     private fun handleActionResult(result: Resource<Unit>, onSuccess: () -> Unit) {
         _uiState.update { state ->
@@ -127,6 +195,6 @@ class ManagementViewModel @Inject constructor(
     }
 
     fun resetActionState() {
-        _uiState.update { it.copy(actionSuccess = false, errorMessage = null) }
+        _uiState.update { it.copy(actionSuccess = false, errorMessage = null, successMessage = null) }
     }
 }

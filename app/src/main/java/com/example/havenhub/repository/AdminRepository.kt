@@ -1,6 +1,7 @@
 package com.example.havenhub.repository
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.Payment
@@ -31,8 +32,8 @@ class AdminRepository @Inject constructor(
     }
 
     private fun parseUserSafely(
-        data: Map<String, Any?>,
-        fallbackUserId: String = ""
+        data           : Map<String, Any?>,
+        fallbackUserId : String = ""
     ): User {
 
         @Suppress("UNCHECKED_CAST")
@@ -63,8 +64,7 @@ class AdminRepository @Inject constructor(
             profileImageUrl     = data["profileImageUrl"] as? String ?: "",
             role                = data["role"] as? String ?: "TENANT",
             verificationStatus  = data["verificationStatus"] as? String ?: "PENDING",
-            // ✅ FIX: isVerified field na ho toh verificationStatus se check karo
-            isVerified = (data["isVerified"] as? Boolean)
+            isVerified          = (data["isVerified"] as? Boolean)
                 ?: (data["verificationStatus"] as? String)
                     ?.uppercase()
                     ?.let { it == "VERIFIED" || it == "APPROVED" }
@@ -84,8 +84,8 @@ class AdminRepository @Inject constructor(
     }
 
     private fun parsePropertySafely(
-        data: Map<String, Any?>,
-        fallbackPropertyId: String = ""
+        data               : Map<String, Any?>,
+        fallbackPropertyId : String = ""
     ): Property {
         return Property(
             propertyId        = data["propertyId"] as? String ?: fallbackPropertyId,
@@ -147,7 +147,7 @@ class AdminRepository @Inject constructor(
         }
     }
 
-    // ✅ FIX: Approve user — isVerified=true, verificationStatus=APPROVED, banned=false, active=true
+    // ✅ Approve user — isVerified=true, verificationStatus=APPROVED, banned=false, active=true
     suspend fun unbanUser(userId: String): Resource<Unit> {
         return try {
             usersCollection.document(userId)
@@ -167,7 +167,7 @@ class AdminRepository @Inject constructor(
         }
     }
 
-    // ✅ FIX: Reject user — isVerified=false, verificationStatus=REJECTED, banned=true, active=false
+    // ✅ Reject user — isVerified=false, verificationStatus=REJECTED, banned=true, active=false
     suspend fun banUser(userId: String): Resource<Unit> {
         return try {
             usersCollection.document(userId)
@@ -266,10 +266,33 @@ class AdminRepository @Inject constructor(
         }
     }
 
+    // ✅ NEW: Generic booking status update — landlord approve/reject ke liye
+    //    ManagementViewModel.approveBooking() aur rejectBooking() yahi call karte hain
+    suspend fun updateBookingStatus(bookingId: String, status: String): Resource<Unit> {
+        return try {
+            bookingsCollection.document(bookingId)
+                .update(
+                    mapOf(
+                        "status"    to status,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                .await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to update booking status")
+        }
+    }
+
     suspend fun confirmBooking(bookingId: String): Resource<Unit> {
         return try {
             bookingsCollection.document(bookingId)
-                .update(mapOf("status" to "CONFIRMED"))
+                .update(
+                    mapOf(
+                        "status"    to "CONFIRMED",
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
                 .await()
             Resource.Success(Unit)
         } catch (e: Exception) {
@@ -284,7 +307,8 @@ class AdminRepository @Inject constructor(
                     mapOf(
                         "status"      to "CANCELLED",
                         "cancelledAt" to Timestamp.now(),
-                        "cancelledBy" to "ADMIN"
+                        "cancelledBy" to "ADMIN",
+                        "updatedAt"   to FieldValue.serverTimestamp()
                     )
                 )
                 .await()

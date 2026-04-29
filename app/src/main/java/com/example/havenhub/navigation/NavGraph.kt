@@ -50,6 +50,9 @@ fun HavenHubNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    // ✅ Derived cleanly from uiState
+    val isCurrentUserLandlord: Boolean = uiState.userRole == "landlord"
+
     val isAuthRoute  = currentRoute in authRoutes
     val isAdminRoute = adminRoutes.any { currentRoute == it } ||
             currentRoute?.startsWith("property_verification_detail") == true ||
@@ -61,9 +64,9 @@ fun HavenHubNavGraph(
                 isAuthRoute  -> {}
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
                 else         -> BottomNavBar(
-                    navController      = navController,
-                    unreadMessageCount = unreadMessageCount,
-                    userRole           = uiState.userRole
+                    navController         = navController,
+                    unreadMessageCount    = unreadMessageCount,
+                    userRole              = uiState.userRole,
                 )
             }
         }
@@ -103,12 +106,11 @@ fun HavenHubNavGraph(
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
 
             composable(Screen.AddProperty.route) {
-                val role       = uiState.userRole
                 val isVerified = uiState.isVerified
                 when {
-                    uiState.isLoading  -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                    role != "landlord" -> { LaunchedEffect(Unit) { navController.popBackStack() } }
-                    !isVerified        -> UnverifiedAccessScreen(
+                    uiState.isLoading     -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    !isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }  // ✅ reused
+                    !isVerified           -> UnverifiedAccessScreen(
                         message = "Your account needs to be verified by admin before you can add properties.",
                         onBack  = { navController.popBackStack() }
                     )
@@ -123,8 +125,8 @@ fun HavenHubNavGraph(
                 arguments = listOf(navArgument(Screen.PropertyDetail.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 PropertyDetailScreen(
-                    navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.PropertyDetail.ARG_PROPERTY_ID) ?: ""
+                    navController         = navController,
+                    propertyId            = back.arguments?.getString(Screen.PropertyDetail.ARG_PROPERTY_ID) ?: "",
                 )
             }
 
@@ -139,20 +141,19 @@ fun HavenHubNavGraph(
             }
 
 // ── Bookings ──────────────────────────────────────────────────────
-            // ✅ SINGLE MyBookings route with optional tab param
             composable(
                 route     = "my_bookings?tab={tab}",
                 arguments = listOf(
                     navArgument("tab") {
                         type         = NavType.IntType
-                        defaultValue = 0   // 0=Pending (default), 1=Confirmed
+                        defaultValue = 0
                     }
                 )
             ) { back ->
                 MyBookingsScreen(
-                    navController = navController,
-                    userId        = FirebaseAuth.getInstance().currentUser?.uid ?: "",
-                    initialTab    = back.arguments?.getInt("tab") ?: 0   // ✅ tab pass hoga
+                    navController         = navController,
+                    userId                = FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                    initialTab            = back.arguments?.getInt("tab") ?: 0,
                 )
             }
 
@@ -160,12 +161,11 @@ fun HavenHubNavGraph(
                 route     = Screen.Booking.route,
                 arguments = listOf(navArgument(Screen.Booking.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
-                val role       = uiState.userRole
                 val isVerified = uiState.isVerified
                 when {
-                    uiState.isLoading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                    role != "tenant"  -> { LaunchedEffect(Unit) { navController.popBackStack() } }
-                    !isVerified       -> UnverifiedAccessScreen(
+                    uiState.isLoading    -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }  // ✅ landlord can't book
+                    !isVerified          -> UnverifiedAccessScreen(
                         message = "Your account needs to be verified by admin before you can book properties.",
                         onBack  = { navController.popBackStack() }
                     )

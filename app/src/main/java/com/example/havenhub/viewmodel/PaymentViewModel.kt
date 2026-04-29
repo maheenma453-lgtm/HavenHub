@@ -63,28 +63,31 @@ class PaymentViewModel @Inject constructor(
                     payeeName     = payeeName,
                     amount        = amount,
                     paymentMethod = method.name,
-                    status        = PaymentStatus.PENDING.name,
+                    // ✅ FIX: Payment ka status COMPLETED hai (paise aa gaye)
+                    //    lekin booking PENDING_APPROVAL rahegi jab tak landlord approve na kare
+                    status        = PaymentStatus.COMPLETED.name,
                     type          = PaymentType.BOOKING.name
                 )
 
                 when (val result = paymentRepository.savePayment(payment)) {
                     is Resource.Success -> {
-                        // ✅ 1. Booking status CONFIRMED karo
+
+                        // ✅ FIX 1: Booking status PENDING_APPROVAL rakho — CONFIRMED nahi
+                        //    Landlord approve kare ga tab CONFIRMED hoga
                         bookingRepository.updateBookingStatus(
                             bookingId,
-                            BookingStatus.CONFIRMED
+                            BookingStatus.PENDING_APPROVAL   // ← KEY CHANGE
                         )
 
-                        // ✅ 2. Booking document mein paymentStatus = PAID aur paymentId update karo
-                        //       Yeh woh fix hai jo missing tha — ab har booking pay hone ke baad
-                        //       paymentStatus "PAID" show karega chahe koi bhi property ho
+                        // ✅ FIX 2: Booking document mein paymentStatus = PAID aur paymentId update karo
                         bookingRepository.updatePaymentStatusOnBooking(
                             bookingId     = bookingId,
                             paymentStatus = PaymentStatus.COMPLETED.name,
                             paymentId     = result.data ?: ""
                         )
 
-                        // ✅ 3. Payment record ka status bhi COMPLETED karo
+                        // ✅ Payment record already COMPLETED save hua upar — dobara update ki zaroorat nahi
+                        //    Lekin agar payment ko track karna ho toh:
                         paymentRepository.updatePaymentStatus(
                             result.data ?: "",
                             PaymentStatus.COMPLETED.name

@@ -54,27 +54,30 @@ private fun formatDate(date: Date?): String {
 fun BookingDetailScreen(
     navController        : NavController,
     bookingId            : String,
-    isCurrentUserLandlord: Boolean       = false,
+    isCurrentUserLandlord: Boolean          = false,
     viewModel            : BookingViewModel = hiltViewModel(),
     authViewModel        : AuthViewModel    = hiltViewModel()
 ) {
     val uiState   by viewModel.uiState.collectAsState()
     val authState by authViewModel.uiState.collectAsState()
     val booking   = uiState.currentBooking
-    var showCancelDialog by remember { mutableStateOf(false) }
+
+    var showCancelDialog  by remember { mutableStateOf(false) }
+    var showRejectDialog  by remember { mutableStateOf(false) }
+    var showApproveDialog by remember { mutableStateOf(false) }
 
     val tenantName = remember(booking, authState) {
         when {
-            !booking?.tenantName.isNullOrBlank()                          -> booking!!.tenantName
-            authState.currentUser?.displayName?.isNotBlank() == true      -> authState.currentUser!!.displayName!!
-            authState.currentUser?.email?.isNotBlank() == true            -> authState.currentUser!!.email!!
-            else                                                           -> "—"
+            !booking?.tenantName.isNullOrBlank()                     -> booking!!.tenantName
+            authState.currentUser?.displayName?.isNotBlank() == true -> authState.currentUser!!.displayName!!
+            authState.currentUser?.email?.isNotBlank() == true       -> authState.currentUser!!.email!!
+            else                                                      -> "—"
         }
     }
 
     LaunchedEffect(bookingId) { viewModel.loadBookingById(bookingId) }
 
-    // Cancel success → wapas MyBookings
+    // Action success → wapas MyBookings
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             navController.popBackStack()
@@ -82,7 +85,7 @@ fun BookingDetailScreen(
         }
     }
 
-    // Cancel dialog
+    // ── Cancel Dialog ──────────────────────────────────────────
     if (showCancelDialog) {
         CancelConfirmDialog(
             onConfirm = {
@@ -90,6 +93,114 @@ fun BookingDetailScreen(
                 showCancelDialog = false
             },
             onDismiss = { showCancelDialog = false }
+        )
+    }
+
+    // ── Reject Dialog ──────────────────────────────────────────
+    if (showRejectDialog) {
+        AlertDialog(
+            onDismissRequest = { showRejectDialog = false },
+            containerColor   = DWhite,
+            shape            = RoundedCornerShape(20.dp),
+            icon = {
+                Box(
+                    Modifier.size(56.dp).clip(CircleShape)
+                        .background(DRed.copy(0.10f)),
+                    Alignment.Center
+                ) {
+                    Icon(Icons.Default.Close, null,
+                        tint = DRed, modifier = Modifier.size(28.dp))
+                }
+            },
+            title = {
+                Text("Reject Booking?",
+                    fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = DNavy)
+            },
+            text = {
+                Text(
+                    "Are you sure you want to reject this booking request?\nTenant will be notified.",
+                    fontSize = 14.sp, color = DMuted, lineHeight = 21.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        booking?.bookingId?.let {
+                            viewModel.updateStatusByAdmin(it, BookingStatus.CANCELLED)
+                        }
+                        showRejectDialog = false
+                    },
+                    shape  = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DRed),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Yes, Reject", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick  = { showRejectDialog = false },
+                    shape    = RoundedCornerShape(12.dp),
+                    border   = BorderStroke(1.5.dp, DNavy),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Go Back", color = DNavy, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        )
+    }
+
+    // ── Approve Dialog ─────────────────────────────────────────
+    if (showApproveDialog) {
+        AlertDialog(
+            onDismissRequest = { showApproveDialog = false },
+            containerColor   = DWhite,
+            shape            = RoundedCornerShape(20.dp),
+            icon = {
+                Box(
+                    Modifier.size(56.dp).clip(CircleShape)
+                        .background(DGreen.copy(0.10f)),
+                    Alignment.Center
+                ) {
+                    Icon(Icons.Default.Check, null,
+                        tint = DGreen, modifier = Modifier.size(28.dp))
+                }
+            },
+            title = {
+                Text("Approve Booking?",
+                    fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = DNavy)
+            },
+            text = {
+                Text(
+                    "Confirm this booking request?\nTenant will be notified of the approval.",
+                    fontSize = 14.sp, color = DMuted, lineHeight = 21.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        booking?.bookingId?.let {
+                            viewModel.updateStatusByAdmin(it, BookingStatus.CONFIRMED)
+                        }
+                        showApproveDialog = false
+                    },
+                    shape  = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DGreen),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Yes, Approve", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick  = { showApproveDialog = false },
+                    shape    = RoundedCornerShape(12.dp),
+                    border   = BorderStroke(1.5.dp, DNavy),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Go Back", color = DNavy, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
         )
     }
 
@@ -110,12 +221,12 @@ fun BookingDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = DGold)
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("Booking Details", fontWeight = FontWeight.Bold, color = DWhite, fontSize = 17.sp)
+                        Text("Booking Details",
+                            fontWeight = FontWeight.Bold, color = DWhite, fontSize = 17.sp)
                         booking?.let {
                             Text(
                                 "#${it.bookingId.take(8).uppercase()}",
-                                color    = DWhite.copy(0.55f),
-                                fontSize = 11.sp
+                                color = DWhite.copy(0.55f), fontSize = 11.sp
                             )
                         }
                     }
@@ -126,25 +237,23 @@ fun BookingDetailScreen(
     ) { padding ->
 
         when {
-            // ── Loading ──────────────────────────────────────
             uiState.isLoading -> {
                 Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator(color = DGold, strokeWidth = 3.dp)
                 }
             }
 
-            // ── Not found ────────────────────────────────────
             booking == null -> {
                 Box(Modifier.fillMaxSize(), Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("📋", fontSize = 48.sp)
                         Spacer(Modifier.height(12.dp))
-                        Text("Booking not found", color = DMuted, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        Text("Booking not found",
+                            color = DMuted, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
 
-            // ── Content ──────────────────────────────────────
             else -> {
                 Column(
                     modifier = Modifier
@@ -172,7 +281,7 @@ fun BookingDetailScreen(
                         }
 
                         // ══════════════════════════════════════
-                        // 3. STAY DETAILS — check-in/out cards
+                        // 3. STAY DETAILS
                         // ══════════════════════════════════════
                         Card(
                             modifier  = Modifier.fillMaxWidth(),
@@ -184,12 +293,10 @@ fun BookingDetailScreen(
                                 BDSectionHeader(Icons.Default.CalendarMonth, "Stay Details")
                                 Spacer(Modifier.height(14.dp))
 
-                                // Check-in / Check-out side by side
                                 Row(
                                     Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    // Check-in
                                     Column(
                                         modifier = Modifier.weight(1f)
                                             .clip(RoundedCornerShape(12.dp))
@@ -197,21 +304,20 @@ fun BookingDetailScreen(
                                             .padding(12.dp)
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.FlightLand, null, tint = DGreen, modifier = Modifier.size(13.dp))
+                                            Icon(Icons.Default.FlightLand, null,
+                                                tint = DGreen, modifier = Modifier.size(13.dp))
                                             Spacer(Modifier.width(4.dp))
-                                            Text("Check-in", color = DGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            Text("Check-in", color = DGreen,
+                                                fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         }
                                         Spacer(Modifier.height(6.dp))
                                         Text(
                                             formatDate(booking.checkInDate?.toDate()),
-                                            color      = DNavy,
-                                            fontSize   = 13.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            lineHeight = 17.sp
+                                            color = DNavy, fontSize = 13.sp,
+                                            fontWeight = FontWeight.ExtraBold, lineHeight = 17.sp
                                         )
                                     }
 
-                                    // Check-out
                                     Column(
                                         modifier = Modifier.weight(1f)
                                             .clip(RoundedCornerShape(12.dp))
@@ -219,24 +325,23 @@ fun BookingDetailScreen(
                                             .padding(12.dp)
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.FlightTakeoff, null, tint = DRed, modifier = Modifier.size(13.dp))
+                                            Icon(Icons.Default.FlightTakeoff, null,
+                                                tint = DRed, modifier = Modifier.size(13.dp))
                                             Spacer(Modifier.width(4.dp))
-                                            Text("Check-out", color = DRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            Text("Check-out", color = DRed,
+                                                fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         }
                                         Spacer(Modifier.height(6.dp))
                                         Text(
                                             formatDate(booking.checkOutDate?.toDate()),
-                                            color      = DNavy,
-                                            fontSize   = 13.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            lineHeight = 17.sp
+                                            color = DNavy, fontSize = 13.sp,
+                                            fontWeight = FontWeight.ExtraBold, lineHeight = 17.sp
                                         )
                                     }
                                 }
 
                                 Spacer(Modifier.height(12.dp))
 
-                                // Nights + Guests pills
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     BDStayPill(Icons.Default.NightsStay, "${booking.totalNights} Night(s)")
                                     BDStayPill(Icons.Default.People,     "${booking.guestCount} Guest(s)")
@@ -264,7 +369,6 @@ fun BookingDetailScreen(
 
                                 Spacer(Modifier.height(6.dp))
 
-                                // Payment status chip
                                 Row(
                                     Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -282,25 +386,29 @@ fun BookingDetailScreen(
                                             .background(pColor.copy(0.12f))
                                             .padding(horizontal = 12.dp, vertical = 4.dp)
                                     ) {
-                                        Text(pStatus, color = pColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(pStatus,
+                                            color = pColor, fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold)
                                     }
                                 }
 
                                 Spacer(Modifier.height(10.dp))
                                 Box(
                                     Modifier.fillMaxWidth().height(1.dp)
-                                        .background(Brush.horizontalGradient(listOf(DGold.copy(0.5f), Color.Transparent)))
+                                        .background(Brush.horizontalGradient(
+                                            listOf(DGold.copy(0.5f), Color.Transparent)))
                                 )
                                 Spacer(Modifier.height(10.dp))
 
-                                // Total
                                 Row(
                                     Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment     = Alignment.CenterVertically
                                 ) {
-                                    Text("Total Amount", fontWeight = FontWeight.Bold, color = DNavy, fontSize = 15.sp)
-                                    Text(booking.formattedTotal, fontWeight = FontWeight.ExtraBold, color = DGold, fontSize = 20.sp)
+                                    Text("Total Amount",
+                                        fontWeight = FontWeight.Bold, color = DNavy, fontSize = 15.sp)
+                                    Text(booking.formattedTotal,
+                                        fontWeight = FontWeight.ExtraBold, color = DGold, fontSize = 20.sp)
                                 }
                             }
                         }
@@ -332,21 +440,27 @@ fun BookingDetailScreen(
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.CheckCircle, null, tint = DGreen, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.CheckCircle, null,
+                                    tint = DGreen, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Column {
-                                    Text("Booking Confirmed", fontWeight = FontWeight.Bold, color = DGreen, fontSize = 13.sp)
-                                    Text("Your landlord has accepted this booking.", color = DMuted, fontSize = 12.sp)
+                                    Text("Booking Confirmed",
+                                        fontWeight = FontWeight.Bold, color = DGreen, fontSize = 13.sp)
+                                    Text("Your landlord has accepted this booking.",
+                                        color = DMuted, fontSize = 12.sp)
                                 }
                             }
                         }
 
+                        val isPending = booking.bookingStatus == BookingStatus.PENDING
+
                         // ══════════════════════════════════════
-                        // 8. CANCEL BUTTON — sirf PENDING tenant ke liye
+                        // 8. TENANT: Cancel + Pay Now
                         //    SRS BR-3
                         // ══════════════════════════════════════
-                        val isPending = booking.bookingStatus == BookingStatus.PENDING
                         if (!isCurrentUserLandlord && isPending) {
+
+                            // Cancel button
                             Button(
                                 onClick  = { showCancelDialog = true },
                                 modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -358,42 +472,106 @@ fun BookingDetailScreen(
                             ) {
                                 Icon(Icons.Default.Close, null, modifier = Modifier.size(17.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Cancel Booking", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Cancel Booking",
+                                    fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             }
-                        }
 
-                        // ══════════════════════════════════════
-                        // 9. PAY NOW — tenant + PENDING + unpaid
-                        // ══════════════════════════════════════
-                        if (!isCurrentUserLandlord && isPending &&
-                            booking.paymentStatusEnum.displayName() == "Pending") {
-                            Button(
-                                onClick  = {
-                                    navController.navigate(
-                                        Screen.Payment.createRoute(
-                                            bookingId = booking.bookingId,
-                                            payerId   = booking.tenantId,
-                                            payeeId   = booking.landlordId,
-                                            payerName = booking.tenantName,
-                                            payeeName = booking.landlordName,
-                                            amount    = booking.totalAmount
+                            // Pay Now button — sirf unpaid ke liye
+                            if (booking.paymentStatusEnum.displayName() == "Pending") {
+                                Button(
+                                    onClick  = {
+                                        navController.navigate(
+                                            Screen.Payment.createRoute(
+                                                bookingId = booking.bookingId,
+                                                payerId   = booking.tenantId,
+                                                payeeId   = booking.landlordId,
+                                                payerName = booking.tenantName,
+                                                payeeName = booking.landlordName,
+                                                amount    = booking.totalAmount
+                                            )
                                         )
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                                    shape    = RoundedCornerShape(14.dp),
+                                    colors   = ButtonDefaults.buttonColors(
+                                        containerColor = DNavy,
+                                        contentColor   = DWhite
                                     )
-                                },
-                                modifier = Modifier.fillMaxWidth().height(50.dp),
-                                shape    = RoundedCornerShape(14.dp),
-                                colors   = ButtonDefaults.buttonColors(
-                                    containerColor = DNavy,
-                                    contentColor   = DWhite
-                                )
-                            ) {
-                                Icon(Icons.Default.Payment, null, tint = DGold, modifier = Modifier.size(17.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Pay Now", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = DGold)
+                                ) {
+                                    Icon(Icons.Default.Payment, null,
+                                        tint = DGold, modifier = Modifier.size(17.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Pay Now",
+                                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = DGold)
+                                }
                             }
                         }
 
-                        // Error
+                        // ══════════════════════════════════════
+                        // 9. LANDLORD: Approve + Reject buttons
+                        //    Sirf PENDING booking par dikhein
+                        // ══════════════════════════════════════
+                        if (isCurrentUserLandlord && isPending) {
+
+                            // Info strip — landlord ko batao ke pending request hai
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(DGold.copy(0.10f))
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Notifications, null,
+                                    tint = DGold, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text("New Booking Request",
+                                        fontWeight = FontWeight.Bold, color = DGold, fontSize = 13.sp)
+                                    Text("Please review and approve or reject this booking.",
+                                        color = DMuted, fontSize = 12.sp)
+                                }
+                            }
+
+                            // Reject + Approve side by side
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // Reject
+                                OutlinedButton(
+                                    onClick  = { showRejectDialog = true },
+                                    modifier = Modifier.weight(1f).height(50.dp),
+                                    shape    = RoundedCornerShape(14.dp),
+                                    border   = BorderStroke(1.5.dp, DRed),
+                                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = DRed)
+                                ) {
+                                    Icon(Icons.Default.Close, null,
+                                        modifier = Modifier.size(17.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Reject",
+                                        fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+
+                                // Approve
+                                Button(
+                                    onClick  = { showApproveDialog = true },
+                                    modifier = Modifier.weight(1f).height(50.dp),
+                                    shape    = RoundedCornerShape(14.dp),
+                                    colors   = ButtonDefaults.buttonColors(
+                                        containerColor = DGreen,
+                                        contentColor   = DWhite
+                                    )
+                                ) {
+                                    Icon(Icons.Default.Check, null,
+                                        modifier = Modifier.size(17.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Approve",
+                                        fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                            }
+                        }
+
+                        // Error strip
                         uiState.errorMessage?.let {
                             Row(
                                 modifier = Modifier.fillMaxWidth()
@@ -402,7 +580,8 @@ fun BookingDetailScreen(
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Warning, null, tint = DRed, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Warning, null,
+                                    tint = DRed, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(it, color = DRed, fontSize = 13.sp)
                             }
@@ -463,11 +642,13 @@ fun CancelConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                 Modifier.size(56.dp).clip(CircleShape).background(DRed.copy(0.10f)),
                 Alignment.Center
             ) {
-                Icon(Icons.Default.Warning, null, tint = DRed, modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.Warning, null,
+                    tint = DRed, modifier = Modifier.size(28.dp))
             }
         },
         title = {
-            Text("Cancel Booking?", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = DNavy)
+            Text("Cancel Booking?",
+                fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = DNavy)
         },
         text = {
             Text(
@@ -526,7 +707,8 @@ fun BDSection(
 fun BDSectionHeader(icon: ImageVector, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(DNavy.copy(0.08f)),
+            Modifier.size(32.dp).clip(RoundedCornerShape(8.dp))
+                .background(DNavy.copy(0.08f)),
             Alignment.Center
         ) {
             Icon(icon, null, tint = DNavy, modifier = Modifier.size(17.dp))
@@ -543,7 +725,8 @@ fun BDInfoItem(label: String, value: String) {
         Spacer(Modifier.height(2.dp))
         Text(value.ifBlank { "—" }, color = DNavy, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
-    HorizontalDivider(color = Color(0xFFF0F0F0), thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
+    HorizontalDivider(color = Color(0xFFF0F0F0), thickness = 0.5.dp,
+        modifier = Modifier.padding(vertical = 2.dp))
 }
 
 @Composable
@@ -572,7 +755,7 @@ private fun BDStayPill(icon: ImageVector, text: String) {
     }
 }
 
-// ── Legacy aliases (backward compatibility) ───────────────────
+// ── Legacy aliases ────────────────────────────────────────────
 @Composable
 fun BookingSection(
     title  : String,
