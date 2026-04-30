@@ -29,6 +29,7 @@ import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.BookingViewModel
+import androidx.compose.material.icons.automirrored.filled.Login
 
 private val MNavy  = Color(0xFF0D1B3E)
 private val MGold  = Color(0xFFD4AF37)
@@ -59,12 +60,31 @@ fun MyBookingsScreen(
             )
         }
     }
-
+    LaunchedEffect(Unit) {
+        if (userRole.isNotEmpty()) {
+            viewModel.loadBookings(userId = userId, role = userRole)
+        }
+    }
     val uiState    by viewModel.uiState.collectAsState()
     val isLandlord  = userRole.lowercase() == "landlord"
 
     var selectedTab      by remember { mutableIntStateOf(initialTab) }
+    var focusBookingId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(initialTab) { selectedTab = initialTab }
+    LaunchedEffect(uiState.bookings, focusBookingId) {
+
+        val target = uiState.bookings.find { it.bookingId == focusBookingId }
+            ?: return@LaunchedEffect
+
+        selectedTab = when (target.bookingStatus) {
+            BookingStatus.PENDING          -> 0
+            BookingStatus.PENDING_APPROVAL -> 1
+            BookingStatus.CONFIRMED        -> 2
+            BookingStatus.CHECKED_IN       -> 3
+            BookingStatus.COMPLETED        -> 4
+            BookingStatus.CANCELLED        -> 5
+        }
+    }
 
     var showCancelDialog by remember { mutableStateOf(false) }
     var cancelBookingId  by remember { mutableStateOf("") }
@@ -74,7 +94,7 @@ fun MyBookingsScreen(
         Icons.Default.HourglassEmpty,
         Icons.Default.AccessTime,
         Icons.Default.CheckCircle,
-        Icons.Default.Login,
+        Icons.AutoMirrored.Filled.Login,
         Icons.Default.Done,
         Icons.Default.Cancel
     )
@@ -345,6 +365,7 @@ fun MyBookingsScreen(
                                     )
                                 },
                                 onPayNow   = {
+                                    focusBookingId = booking.bookingId
                                     navController.navigate(
                                         Screen.Payment.createRoute(
                                             bookingId = booking.bookingId,

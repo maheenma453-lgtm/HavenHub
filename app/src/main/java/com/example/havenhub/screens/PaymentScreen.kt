@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.PaymentMethod
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.BookingViewModel
@@ -49,11 +50,21 @@ fun PaymentScreen(
     bookingViewModel: BookingViewModel  = hiltViewModel()   // ✅ add kiya
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val bookingUiState by bookingViewModel.uiState.collectAsState()
+    val bookingMethod = bookingUiState.currentBooking?.paymentMethod
 
     // ✅ Payment success → PaymentSuccess screen pe jao
     // confirmPayment() wahan se hoga ya PaymentViewModel already handle karta hai
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
+
+            // ✅ STEP 3.1: Booking status update karo
+            bookingViewModel.updateStatusByAdmin(
+                bookingId,
+                BookingStatus.PENDING_APPROVAL
+            )
+
+            // ✅ STEP 3.2: Navigate karo
             navController.navigate(
                 Screen.PaymentSuccess.createRoute(bookingId)
             ) {
@@ -61,10 +72,15 @@ fun PaymentScreen(
                     inclusive = true
                 }
             }
+
+            // ✅ STEP 3.3: Clear state
             viewModel.clearMessages()
         }
     }
-
+// ✅ YEH NAYA CODE (STEP 2)
+    LaunchedEffect(bookingId) {
+        bookingViewModel.loadBookingById(bookingId)
+    }
     Scaffold(
         topBar = {
             Box(
@@ -181,7 +197,20 @@ fun PaymentScreen(
                 Triple(PaymentMethod.CREDIT_CARD,   "💳", Color(0xFF1565C0)),
                 Triple(PaymentMethod.BANK_TRANSFER, "🏦", Color(0xFF4A148C))
             )
-
+            LaunchedEffect(bookingMethod) {
+                bookingMethod?.let {
+                    val matched = methods.find { m ->
+                        when (it) {
+                            "JazzCash" -> m.first == PaymentMethod.JAZZCASH
+                            "EasyPaisa" -> m.first == PaymentMethod.EASYPAISA
+                            "Bank Transfer" -> m.first == PaymentMethod.BANK_TRANSFER
+                            "Cash on Arrival" -> m.first == PaymentMethod.CREDIT_CARD
+                            else -> false
+                        }
+                    }?.first
+                    matched?.let { viewModel.selectPaymentMethod(it) }
+                }
+            }
             methods.forEach { (method, icon, accent) ->
                 val isSelected = uiState.selectedMethod == method
                 Row(
@@ -210,7 +239,7 @@ fun PaymentScreen(
                             when (method) {
                                 PaymentMethod.JAZZCASH      -> "Pay via JazzCash mobile account"
                                 PaymentMethod.EASYPAISA     -> "Pay via EasyPaisa mobile account"
-                                PaymentMethod.CREDIT_CARD   -> "Visa / MasterCard / UnionPay"
+                                PaymentMethod.CREDIT_CARD   -> "Cash on Arrival"
                                 PaymentMethod.BANK_TRANSFER -> "Direct bank transfer"
                                 else                        -> ""
                             },
@@ -237,17 +266,32 @@ fun PaymentScreen(
 
             Button(
                 onClick = {
-                    uiState.selectedMethod?.let { method ->
-                        viewModel.processPayment(
-                            bookingId = bookingId,
-                            payerId   = payerId,
-                            payeeId   = payeeId,
-                            payerName = payerName,
-                            payeeName = payeeName,
-                            amount    = amount,
-                            method    = method
-                        )
+                    val selected = uiState.selectedMethod
+
+                    if (selected == null) return@Button
+
+                    val isMatch = when (bookingMethod) {
+                        "JazzCash" -> selected == PaymentMethod.JAZZCASH
+                        "EasyPaisa" -> selected == PaymentMethod.EASYPAISA
+                        "Bank Transfer" -> selected == PaymentMethod.BANK_TRANSFER
+                        "Cash on Arrival" -> selected == PaymentMethod.CREDIT_CARD
+                        else -> false
                     }
+
+                    if (!isMatch) {
+                        viewModel.setError("Booking and payment method do not match")
+                        return@Button
+                    }
+
+                    viewModel.processPayment(
+                        bookingId = bookingId,
+                        payerId   = payerId,
+                        payeeId   = payeeId,
+                        payerName = payerName,
+                        payeeName = payeeName,
+                        amount    = amount,
+                        method    = selected
+                    )
                 },
                 modifier = Modifier.fillMaxWidth().height(54.dp),
                 shape    = RoundedCornerShape(14.dp),

@@ -34,17 +34,17 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingScreen(
-    navController    : NavController,
-    propertyId       : String,
-    viewModel        : BookingViewModel  = hiltViewModel(),
+    navController: NavController,
+    propertyId: String,
+    viewModel: BookingViewModel = hiltViewModel(),
     propertyViewModel: PropertyViewModel = hiltViewModel(),
-    authViewModel    : AuthViewModel     = hiltViewModel()
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    val uiState     by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
     val authUiState by authViewModel.uiState.collectAsState()
     val propUiState by propertyViewModel.uiState.collectAsState()
 
-    val currentUid  = authUiState.currentUser?.uid         ?: ""
+    val currentUid = authUiState.currentUser?.uid ?: ""
     val currentName = authUiState.currentUser?.displayName ?: ""
 
     LaunchedEffect(propertyId) {
@@ -53,25 +53,25 @@ fun BookingScreen(
 
     val property = propUiState.propertyDetail
 
-    var selectedDuration  by remember { mutableStateOf("Daily") }
-    var nights            by remember { mutableIntStateOf(1) }
-    var guests            by remember { mutableIntStateOf(1) }
-    var checkInDate       by remember { mutableStateOf("") }
-    var checkOutDate      by remember { mutableStateOf("") }
-    var showCheckInPicker  by remember { mutableStateOf(false) }
+    var selectedDuration by remember { mutableStateOf("Daily") }
+    var nights by remember { mutableIntStateOf(1) }
+    var guests by remember { mutableIntStateOf(1) }
+    var checkInDate by remember { mutableStateOf("") }
+    var checkOutDate by remember { mutableStateOf("") }
+    var selectedPayment by remember { mutableStateOf("JazzCash") }
+    var showCheckInPicker by remember { mutableStateOf(false) }
     var showCheckOutPicker by remember { mutableStateOf(false) }
 
     val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
 
     val totalAmount = remember(nights, selectedDuration, property) {
         when (selectedDuration) {
-            "Weekly"  -> (property?.pricePerWeek  ?: (property?.pricePerNight?.times(7)  ?: 0.0)) * (nights / 7).coerceAtLeast(1)
+            "Weekly" -> (property?.pricePerWeek ?: (property?.pricePerNight?.times(7) ?: 0.0)) * (nights / 7).coerceAtLeast(1)
             "Monthly" -> (property?.pricePerMonth ?: (property?.pricePerNight?.times(30) ?: 0.0)) * (nights / 30).coerceAtLeast(1)
-            else      -> (property?.pricePerNight ?: 0.0) * nights
+            else -> (property?.pricePerNight ?: 0.0) * nights
         }
     }
 
-    // ✅ Booking create hone ke baad BookingConfirmation pe jao
     LaunchedEffect(uiState.actionSuccess, uiState.createdBookingId) {
         if (uiState.actionSuccess && !uiState.createdBookingId.isNullOrEmpty()) {
             navController.navigate(
@@ -83,44 +83,31 @@ fun BookingScreen(
         }
     }
 
-    // ── Date Pickers ──────────────────────────────────────────────
     if (showCheckInPicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = System.currentTimeMillis()
-        )
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
         DatePickerDialog(
             onDismissRequest = { showCheckInPicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let {
-                        checkInDate = dateFormatter.format(Date(it))
-                    }
+                    datePickerState.selectedDateMillis?.let { checkInDate = dateFormatter.format(Date(it)) }
                     showCheckInPicker = false
                 }) { Text("OK") }
             },
-            dismissButton = {
-                TextButton(onClick = { showCheckInPicker = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showCheckInPicker = false }) { Text("Cancel") } }
         ) { DatePicker(state = datePickerState) }
     }
 
     if (showCheckOutPicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = System.currentTimeMillis() + 86400000L
-        )
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis() + 86400000L)
         DatePickerDialog(
             onDismissRequest = { showCheckOutPicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let {
-                        checkOutDate = dateFormatter.format(Date(it))
-                    }
+                    datePickerState.selectedDateMillis?.let { checkOutDate = dateFormatter.format(Date(it)) }
                     showCheckOutPicker = false
                 }) { Text("OK") }
             },
-            dismissButton = {
-                TextButton(onClick = { showCheckOutPicker = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showCheckOutPicker = false }) { Text("Cancel") } }
         ) { DatePicker(state = datePickerState) }
     }
 
@@ -128,17 +115,15 @@ fun BookingScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = {
-                    Text("Complete Booking", fontWeight = FontWeight.Bold)
-                },
+                title = { Text("Complete Booking", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor         = Color(0xFF0D1B3E),
-                    titleContentColor      = Color.White,
+                    containerColor = Color(0xFF0D1B3E),
+                    titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
@@ -155,97 +140,54 @@ fun BookingScreen(
         ) {
             when {
                 propUiState.isLoading -> {
-                    Box(
-                        modifier         = Modifier.fillMaxWidth().height(200.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Color(0xFF0D1B3E))
                     }
                 }
 
                 property == null -> {
-                    Card(
-                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Property load nahi ho rahi. Wapas jao aur dobara try karo.",
-                            color    = Color(0xFFB71C1C),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(16.dp)
-                        )
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.fillMaxWidth()) {
+                        Text("Property load nahi ho rahi. Wapas jao aur dobara try karo.", color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(16.dp))
                     }
                 }
 
                 property.status != "APPROVED" -> {
-                    Card(
-                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Yeh property abhi admin se approve nahi hui — booking nahi ho sakti.",
-                            color    = Color(0xFFB71C1C),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(16.dp)
-                        )
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.fillMaxWidth()) {
+                        Text("Yeh property abhi admin se approve nahi hui — booking nahi ho sakti.", color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(16.dp))
                     }
                 }
 
                 else -> {
-
-                    // ── 1. Property Summary ───────────────────────
+                    // ── Property Summary ──
                     Card(
-                        modifier  = Modifier.fillMaxWidth(),
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Property", fontSize = 13.sp, color = Color(0xFF8899AA))
-                            Text(
-                                property.title,
-                                fontSize   = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = Color(0xFF0D1B3E)
-                            )
-                            Spacer(Modifier.height(4.dp))
+                            Text(property.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.LocationOn, null,
-                                    tint     = Color(0xFFD4AF37),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Text(
-                                    " ${property.city}",
-                                    fontSize = 13.sp,
-                                    color    = Color(0xFF8899AA)
-                                )
-                                Spacer(Modifier.weight(1f))
-                                Text(
-                                    property.formattedPrice + "/night",
-                                    fontSize   = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color      = Color(0xFF0D1B3E)
-                                )
+                                Icon(Icons.Default.LocationOn, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(14.dp))
+                                Text(" ${property.city}", fontSize = 13.sp, color = Color(0xFF8899AA))
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(property.formattedPrice + "/night", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
                             }
                         }
                     }
 
-                    // ── 2. Duration Type ──────────────────────────
+                    // ── Duration Type ──
                     Card(
-                        modifier  = Modifier.fillMaxWidth(),
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "Rental Duration Type",
-                                fontSize   = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = Color(0xFF0D1B3E)
-                            )
-                            Spacer(Modifier.height(12.dp))
+                            Text("Rental Duration Type", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf("Daily", "Weekly", "Monthly").forEach { duration ->
                                     val isSelected = selectedDuration == duration
@@ -253,181 +195,149 @@ fun BookingScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(
-                                                if (isSelected) Color(0xFF0D1B3E)
-                                                else Color(0xFFF5F7FA)
-                                            )
+                                            .background(if (isSelected) Color(0xFF0D1B3E) else Color(0xFFF5F7FA))
                                             .clickable { selectedDuration = duration }
                                             .padding(vertical = 10.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            duration,
-                                            fontSize   = 13.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color      = if (isSelected) Color(0xFFD4AF37)
-                                            else Color(0xFF8899AA)
-                                        )
+                                        Text(duration, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (isSelected) Color(0xFFD4AF37) else Color(0xFF8899AA))
                                     }
                                 }
                             }
                         }
                     }
 
-                    // ── 3. Dates ──────────────────────────────────
+                    // ── Dates ──
                     Card(
-                        modifier  = Modifier.fillMaxWidth(),
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "Select Dates",
-                                fontSize   = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = Color(0xFF0D1B3E)
-                            )
-                            Spacer(Modifier.height(12.dp))
+                            Text("Select Dates", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 OutlinedButton(
-                                    onClick  = { showCheckInPicker = true },
+                                    onClick = { showCheckInPicker = true },
                                     modifier = Modifier.weight(1f),
-                                    shape    = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Check-in",  fontSize = 11.sp, color = Color(0xFF8899AA))
-                                        Text(
-                                            checkInDate.ifEmpty { "Select" },
-                                            fontSize   = 13.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color      = Color(0xFF0D1B3E)
-                                        )
+                                        Text("Check-in", fontSize = 11.sp, color = Color(0xFF8899AA))
+                                        Text(checkInDate.ifEmpty { "Select" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0D1B3E))
                                     }
                                 }
                                 OutlinedButton(
-                                    onClick  = { showCheckOutPicker = true },
+                                    onClick = { showCheckOutPicker = true },
                                     modifier = Modifier.weight(1f),
-                                    shape    = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Check-out", fontSize = 11.sp, color = Color(0xFF8899AA))
-                                        Text(
-                                            checkOutDate.ifEmpty { "Select" },
-                                            fontSize   = 13.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color      = Color(0xFF0D1B3E)
-                                        )
+                                        Text(checkOutDate.ifEmpty { "Select" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0D1B3E))
                                     }
                                 }
                             }
                         }
                     }
 
-                    // ── 4. Stay Details ───────────────────────────
+                    // ── Stay Details (Updated with better visibility) ──
                     Card(
-                        modifier  = Modifier.fillMaxWidth(),
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "Stay Details",
-                                fontSize   = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = Color(0xFF0D1B3E)
-                            )
-                            Spacer(Modifier.height(16.dp))
+                            Text("Stay Details", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Nights Selector
                             CounterRow(
-                                label       = "Number of Nights",
-                                count       = nights,
+                                label = "Number of Nights",
+                                count = nights,
                                 onDecrement = { if (nights > 1) nights-- },
                                 onIncrement = { nights++ }
                             )
-                            Spacer(Modifier.height(16.dp))
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Guests Selector
                             CounterRow(
-                                label       = "Number of Guests",
-                                count       = guests,
+                                label = "Number of Guests",
+                                count = guests,
                                 onDecrement = { if (guests > 1) guests-- },
                                 onIncrement = { if (guests < property.maxGuests) guests++ }
                             )
-                            Text(
-                                "Max ${property.maxGuests} guests allowed",
-                                fontSize = 12.sp,
-                                color    = Color(0xFF8899AA),
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
+
+                            Text("Max ${property.maxGuests} guests allowed", fontSize = 12.sp, color = Color(0xFF8899AA), modifier = Modifier.padding(top = 8.dp))
                         }
                     }
 
-                    // ── 5. Price Breakdown ────────────────────────
-                    // ✅ Payment Method section HATAYA — ab sirf price breakdown hai
-                    //    Payment method PaymentScreen pe select hoga
+                    // ── Payment Method ──
                     Card(
-                        modifier  = Modifier.fillMaxWidth(),
-                        shape     = RoundedCornerShape(16.dp),
-                        colors    = CardDefaults.cardColors(containerColor = Color(0xFF0D1B3E)),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "Price Breakdown",
-                                fontSize   = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = Color.White
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            PriceRow(
-                                "${property.formattedPrice} × $nights nights",
-                                "PKR ${"%.0f".format(property.pricePerNight * nights)}"
-                            )
+                            Text("Payment Method", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            listOf("JazzCash" to "📱", "EasyPaisa" to "💚", "Cash on Arrival" to "💵", "Bank Transfer" to "🏦").forEach { (method, icon) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (selectedPayment == method) Color(0xFF0D1B3E).copy(0.05f) else Color.Transparent)
+                                        .clickable { selectedPayment = method }
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(icon, fontSize = 20.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(method, fontSize = 14.sp, color = Color(0xFF0D1B3E), modifier = Modifier.weight(1f))
+                                    RadioButton(
+                                        selected = selectedPayment == method,
+                                        onClick = { selectedPayment = method },
+                                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF0D1B3E))
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Price Breakdown ──
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1B3E)),
+                        elevation = CardDefaults.cardElevation(2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Price Breakdown", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            PriceRow("${property.formattedPrice} × $nights nights", "PKR ${"%.0f".format(property.pricePerNight * nights)}")
                             if (property.securityDeposit > 0) {
-                                PriceRow(
-                                    "Security Deposit",
-                                    "PKR ${"%.0f".format(property.securityDeposit)}"
-                                )
+                                PriceRow("Security Deposit", "PKR ${"%.0f".format(property.securityDeposit)}")
                             }
-                            HorizontalDivider(
-                                color    = Color.White.copy(0.2f),
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                            Row(
-                                modifier              = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    "Total",
-                                    fontSize   = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color      = Color(0xFFD4AF37)
-                                )
-                                Text(
-                                    "PKR ${"%.0f".format(totalAmount + property.securityDeposit)}",
-                                    fontSize   = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color      = Color(0xFFD4AF37)
-                                )
+                            HorizontalDivider(color = Color.White.copy(0.2f), modifier = Modifier.padding(vertical = 8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Total", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD4AF37))
+                                Text("PKR ${"%.0f".format(totalAmount + property.securityDeposit)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD4AF37))
                             }
                         }
                     }
 
-                    // ── Error ─────────────────────────────────────
+                    // ── Error ──
                     uiState.errorMessage?.let { error ->
-                        Card(
-                            colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                error,
-                                color    = Color(0xFFB71C1C),
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(12.dp)
-                            )
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.fillMaxWidth()) {
+                            Text(error, color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(12.dp))
                         }
                     }
 
-                    // ── Confirm Button ────────────────────────────
+                    // ── Confirm Button (Updated Colors) ──
                     val isFormComplete = checkInDate.isNotEmpty() && checkOutDate.isNotEmpty()
 
                     Button(
@@ -439,12 +349,12 @@ fun BookingScreen(
                             val booking = Booking(
                                 propertyId       = propertyId,
                                 propertyTitle    = property.title,
-                                landlordId       = property.ownerId,      // ✅ landlordId = property owner
+                                landlordId       = property.ownerId,
                                 landlordName     = property.ownerName,
                                 tenantId         = currentUid,
                                 tenantName       = currentName,
                                 pricePerNight    = property.pricePerNight,
-                                totalAmount      = totalAmount + property.securityDeposit,
+                                totalAmount      = totalAmount,
                                 subtotal         = totalAmount,
                                 securityDeposit  = property.securityDeposit,
                                 status           = BookingStatus.PENDING.name,
@@ -453,43 +363,33 @@ fun BookingScreen(
                                 propertyCoverUrl = property.coverImageUrl,
                                 totalNights      = nights,
                                 guestCount       = guests,
-                                paymentMethod    = "",  // ✅ Payment method PaymentScreen pe set hoga
-                                checkInDate      = checkIn?.let  { com.google.firebase.Timestamp(it) },
+                                paymentMethod    = selectedPayment,
+                                checkInDate      = checkIn?.let { com.google.firebase.Timestamp(it) },
                                 checkOutDate     = checkOut?.let { com.google.firebase.Timestamp(it) }
                             )
                             viewModel.createBooking(booking)
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(54.dp),
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
                         enabled = !uiState.isLoading && isFormComplete,
-                        shape   = RoundedCornerShape(12.dp),
-                        colors  = ButtonDefaults.buttonColors(
-                            containerColor         = Color(0xFF0D1B3E),
-                            contentColor           = Color.White,
-                            disabledContainerColor = Color(0xFFBDC3C7),
-                            disabledContentColor   = Color.White.copy(0.6f)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF0D1B3E),
+                            contentColor = Color.White,
+                            disabledContainerColor = Color(0xFFBDC3C7), // Proper grey when disabled
+                            disabledContentColor = Color.White.copy(alpha = 0.6f)
                         )
                     ) {
                         if (uiState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier    = Modifier.size(20.dp),
-                                color       = Color.White,
-                                strokeWidth = 2.dp
-                            )
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                         } else {
-                            Text(
-                                "Confirm Booking",
-                                fontSize   = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("Confirm Booking", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Text(
                         "By confirming, you agree to the cancellation policy",
                         fontSize = 11.sp,
-                        color    = Color(0xFF8899AA),
+                        color = Color(0xFF8899AA),
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                 }
@@ -498,51 +398,59 @@ fun BookingScreen(
     }
 }
 
-// ── Counter Row ───────────────────────────────────────────────────
+/**
+ * Custom Counter Row for better visibility of +/- buttons
+ */
 @Composable
 private fun CounterRow(
-    label      : String,
-    count      : Int,
+    label: String,
+    count: Int,
     onDecrement: () -> Unit,
     onIncrement: () -> Unit
 ) {
     Row(
-        modifier              = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, fontSize = 14.sp, color = Color(0xFF0D1B3E))
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Minus Button - Grey Background, Dark Icon
             IconButton(
-                onClick  = onDecrement,
+                onClick = onDecrement,
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFFE0E6ED))
             ) {
                 Icon(
-                    Icons.Default.Remove, null,
-                    tint     = Color(0xFF0D1B3E),
+                    imageVector = Icons.Default.Remove,
+                    contentDescription = null,
+                    tint = Color(0xFF0D1B3E),
                     modifier = Modifier.size(18.dp)
                 )
             }
+
             Text(
-                "$count",
-                fontSize   = 17.sp,
+                text = "$count",
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
-                modifier   = Modifier.padding(horizontal = 18.dp),
-                color      = Color(0xFF0D1B3E)
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = Color(0xFF0D1B3E)
             )
+
+            // Plus Button - Dark Blue Background, White Icon
             IconButton(
-                onClick  = onIncrement,
+                onClick = onIncrement,
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF0D1B3E))
             ) {
                 Icon(
-                    Icons.Default.Add, null,
-                    tint     = Color.White,
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    tint = Color.White,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -550,15 +458,9 @@ private fun CounterRow(
     }
 }
 
-// ── Price Row ─────────────────────────────────────────────────────
 @Composable
 private fun PriceRow(label: String, value: String) {
-    Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontSize = 13.sp, color = Color.White.copy(0.8f))
         Text(value, fontSize = 13.sp, color = Color.White)
     }

@@ -314,7 +314,7 @@ fun PaymentSuccessScreen(
             // ── View Booking button ───────────────────────────────
             Button(
                 onClick = {
-                    navController.navigate("my_bookings?tab=0") {
+                    navController.navigate("my_bookings?tab=1") {
                         popUpTo("my_bookings?tab={tab}") { inclusive = true }
                         launchSingleTop = true
                     }
