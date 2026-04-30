@@ -26,7 +26,9 @@ private val authRoutes = listOf(
     Screen.ForgotPassword.route
 )
 
-private val adminRoutes = listOf(
+// Yeh sirf admin-specific routes hain
+// Notifications/Settings shared routes hain — role se decide hongi
+private val strictAdminRoutes = listOf(
     Screen.AdminDashboard.route,
     Screen.ManageUsers.route,
     Screen.ManageProperties.route,
@@ -36,7 +38,22 @@ private val adminRoutes = listOf(
     Screen.PropertyVerificationDetail.route,
     Screen.UserVerificationDetail.route,
     Screen.Reports.route,
-    Screen.PaymentReports.route
+    Screen.PaymentReports.route,
+)
+
+// Yeh routes admin aur tenant dono use karte hain
+// Inhe role se judge karo, route se nahi
+private val sharedRoutes = listOf(
+    Screen.Notifications.route,
+    Screen.NotificationDetail.route,
+    Screen.Settings.route,
+    Screen.AccountSettings.route,
+    Screen.NotificationSettings.route,
+    Screen.PrivacySettings.route,
+    Screen.About.route,
+    Screen.HelpAndSupport.route,
+    Screen.Profile.route,
+    Screen.EditProfile.route,
 )
 
 @Composable
@@ -50,13 +67,24 @@ fun HavenHubNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // ✅ Derived cleanly from uiState
     val isCurrentUserLandlord: Boolean = uiState.userRole == "landlord"
+    val isCurrentUserAdmin: Boolean = uiState.userRole == "admin"
 
-    val isAuthRoute  = currentRoute in authRoutes
-    val isAdminRoute = adminRoutes.any { currentRoute == it } ||
-            currentRoute?.startsWith("property_verification_detail") == true ||
-            currentRoute?.startsWith("user_verification_detail") == true
+    val isAuthRoute = currentRoute in authRoutes
+
+    // ✅ FIX: isAdminRoute ab ROLE check karta hai, sirf route nahi
+    // Pehle bug: "notifications" route adminRoutes mein tha, toh tenant ko bhi admin navbar milta tha
+    // Ab fix: strict admin routes (dashboard, manage, verify) + agar admin role hai toh shared routes bhi
+    val isAdminRoute = when {
+        // Clearly admin-only screens
+        strictAdminRoutes.any { currentRoute == it }                               -> true
+        currentRoute?.startsWith("property_verification_detail") == true           -> true
+        currentRoute?.startsWith("user_verification_detail") == true               -> true
+        // Shared screens (notifications, settings, profile) — role se decide karo
+        sharedRoutes.any { currentRoute == it }                                    -> isCurrentUserAdmin
+        currentRoute?.startsWith("notification_detail") == true                    -> isCurrentUserAdmin
+        else                                                                       -> false
+    }
 
     Scaffold(
         bottomBar = {
@@ -64,9 +92,9 @@ fun HavenHubNavGraph(
                 isAuthRoute  -> {}
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
                 else         -> BottomNavBar(
-                    navController         = navController,
-                    unreadMessageCount    = unreadMessageCount,
-                    userRole              = uiState.userRole,
+                    navController      = navController,
+                    unreadMessageCount = unreadMessageCount,
+                    userRole           = uiState.userRole,
                 )
             }
         }
@@ -108,9 +136,9 @@ fun HavenHubNavGraph(
             composable(Screen.AddProperty.route) {
                 val isVerified = uiState.isVerified
                 when {
-                    uiState.isLoading     -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                    !isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }  // ✅ reused
-                    !isVerified           -> UnverifiedAccessScreen(
+                    uiState.isLoading      -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    !isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }
+                    !isVerified            -> UnverifiedAccessScreen(
                         message = "Your account needs to be verified by admin before you can add properties.",
                         onBack  = { navController.popBackStack() }
                     )
@@ -125,8 +153,8 @@ fun HavenHubNavGraph(
                 arguments = listOf(navArgument(Screen.PropertyDetail.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 PropertyDetailScreen(
-                    navController         = navController,
-                    propertyId            = back.arguments?.getString(Screen.PropertyDetail.ARG_PROPERTY_ID) ?: "",
+                    navController = navController,
+                    propertyId    = back.arguments?.getString(Screen.PropertyDetail.ARG_PROPERTY_ID) ?: "",
                 )
             }
 
@@ -151,9 +179,9 @@ fun HavenHubNavGraph(
                 )
             ) { back ->
                 MyBookingsScreen(
-                    navController         = navController,
-                    userId                = FirebaseAuth.getInstance().currentUser?.uid ?: "",
-                    initialTab            = back.arguments?.getInt("tab") ?: 0,
+                    navController = navController,
+                    userId        = FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                    initialTab    = back.arguments?.getInt("tab") ?: 0,
                 )
             }
 
@@ -163,9 +191,9 @@ fun HavenHubNavGraph(
             ) { back ->
                 val isVerified = uiState.isVerified
                 when {
-                    uiState.isLoading    -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                    isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }  // ✅ landlord can't book
-                    !isVerified          -> UnverifiedAccessScreen(
+                    uiState.isLoading     -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }
+                    !isVerified           -> UnverifiedAccessScreen(
                         message = "Your account needs to be verified by admin before you can book properties.",
                         onBack  = { navController.popBackStack() }
                     )

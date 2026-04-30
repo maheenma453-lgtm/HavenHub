@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,17 +24,39 @@ class AuthRepository @Inject constructor(
 
     fun isUserSignedIn(): Boolean = auth.currentUser != null
 
-    // ── Sign In ───────────────────────────────────────────────────────────────
+    // Helper: get FCM token and save to Firestore for a given userId
+    // Called after login/register so the token is always fresh in Firestore.
+    private suspend fun saveFcmTokenToFirestore(userId: String) {
+        try {
+            val token = FirebaseMessaging.getInstance().token.await()
+            if (token.isNotEmpty()) {
+                usersCollection.document(userId)
+                    .update("fcmToken", token)
+                    .await()
+                Log.d("HAVEN_AUTH", "FCM token saved for user: $userId")
+            }
+        } catch (e: Exception) {
+            // Non-fatal — notifications may not work but app continues
+            Log.e("HAVEN_AUTH", "saveFcmToken error: ${e.localizedMessage}")
+        }
+    }
+
+    // Sign In
     suspend fun signIn(email: String, password: String): Resource<FirebaseUser?> {
         return try {
             val result = auth.signInWithEmailAndPassword(email, password).await()
-            Resource.Success(result.user)
+            val user   = result.user ?: return Resource.Error("Sign in failed")
+
+            // Save FCM token immediately after login so notifications reach this device
+            saveFcmTokenToFirestore(user.uid)
+
+            Resource.Success(user)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Sign in failed")
         }
     }
 
-    // ── Register — CNIC + profile image bhi save hoga ────────────────────────
+    // Register — CNIC + profile image saved too
     suspend fun registerUser(
         email          : String,
         password       : String,
@@ -47,28 +70,33 @@ class AuthRepository @Inject constructor(
             val result = auth.createUserWithEmailAndPassword(email, password).await()
             val user   = result.user ?: return Resource.Error("Registration failed")
 
+            // Fetch FCM token upfront so it is stored with the user document from day one
+            val fcmToken = try {
+                FirebaseMessaging.getInstance().token.await()
+            } catch (e: Exception) { "" }
+
             val userDoc = mapOf(
-                "userId"             to user.uid,
-                "fullName"           to fullName,
-                "email"              to email,
-                "role"               to role.uppercase(),
-                "profileImageUrl"    to profileImageUrl,
-                "cnicNumber"         to cnicNumber,
-                "cnicImageUrl"       to cnicImageUrl,
-                "verificationStatus" to "PENDING",
-                "isVerified"         to false,
-                "isActive"           to true,
-                "isBanned"           to false,
-                "phoneNumber"        to "",
-                "fcmToken"           to "",
-                "landlordRating"     to 0.0,
+                "userId"              to user.uid,
+                "fullName"            to fullName,
+                "email"               to email,
+                "role"                to role.uppercase(),
+                "profileImageUrl"     to profileImageUrl,
+                "cnicNumber"          to cnicNumber,
+                "cnicImageUrl"        to cnicImageUrl,
+                "verificationStatus"  to "PENDING",
+                "isVerified"          to false,
+                "isActive"            to true,
+                "isBanned"            to false,
+                "phoneNumber"         to "",
+                "fcmToken"            to fcmToken,   // Saved at registration time
+                "landlordRating"      to 0.0,
                 "landlordReviewCount" to 0,
-                "createdAt"          to FieldValue.serverTimestamp(),
-                "updatedAt"          to FieldValue.serverTimestamp()
+                "createdAt"           to FieldValue.serverTimestamp(),
+                "updatedAt"           to FieldValue.serverTimestamp()
             )
 
             usersCollection.document(user.uid).set(userDoc).await()
-            Log.d("HAVEN_AUTH", "User registered: ${user.uid} role=$role")
+            Log.d("HAVEN_AUTH", "User registered: ${user.uid} role=$role token=$fcmToken")
             Resource.Success(user)
         } catch (e: Exception) {
             Log.e("HAVEN_AUTH", "registerUser error: ${e.localizedMessage}")
@@ -76,14 +104,17 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // ── Google Sign In ────────────────────────────────────────────────────────
+    // Google Sign In
     suspend fun signInWithGoogle(idToken: String): Resource<FirebaseUser?> {
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             val result     = auth.signInWithCredential(credential).await()
             val user       = result.user ?: return Resource.Error("Google sign in failed")
 
-            // Agar pehli baar login ho toh Firestore mein save karo
+            val fcmToken = try {
+                FirebaseMessaging.getInstance().token.await()
+            } catch (e: Exception) { "" }
+
             val doc = usersCollection.document(user.uid).get().await()
             if (!doc.exists()) {
                 val userDoc = mapOf(
@@ -99,13 +130,18 @@ class AuthRepository @Inject constructor(
                     "isActive"            to true,
                     "isBanned"            to false,
                     "phoneNumber"         to "",
-                    "fcmToken"            to "",
+                    "fcmToken"            to fcmToken,
                     "landlordRating"      to 0.0,
                     "landlordReviewCount" to 0,
                     "createdAt"           to FieldValue.serverTimestamp(),
                     "updatedAt"           to FieldValue.serverTimestamp()
                 )
                 usersCollection.document(user.uid).set(userDoc).await()
+            } else {
+                // Existing user — just refresh the token
+                usersCollection.document(user.uid)
+                    .update("fcmToken", fcmToken)
+                    .await()
             }
 
             Resource.Success(user)
@@ -114,13 +150,13 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // ── Sign Out ──────────────────────────────────────────────────────────────
+    // Sign Out
     suspend fun signOut() {
         try { auth.signOut() }
         catch (e: Exception) { Log.e("HAVEN_AUTH", "signOut error: ${e.localizedMessage}") }
     }
 
-    // ── Password Reset ────────────────────────────────────────────────────────
+    // Password Reset
     suspend fun sendPasswordResetEmail(email: String): Resource<Unit> {
         return try {
             auth.sendPasswordResetEmail(email).await()
@@ -130,7 +166,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // ── Delete Account ────────────────────────────────────────────────────────
+    // Delete Account
     suspend fun deleteAccount(): Resource<Unit> {
         return try {
             val user = auth.currentUser ?: return Resource.Error("No user logged in")
@@ -142,15 +178,13 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // ── Get User Role ─────────────────────────────────────────────────────────
+    // Get User Role
     suspend fun getUserRole(uid: String): String {
         return try {
-            // Direct UID se pehle try karo
             val directDoc = usersCollection.document(uid).get().await()
             if (directDoc.exists()) {
                 return directDoc.getString("role")?.lowercase()?.trim() ?: "tenant"
             }
-            // Fallback: userId field se query
             val query = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
             if (!query.isEmpty) {
                 query.documents.first().getString("role")?.lowercase()?.trim() ?: "tenant"
@@ -163,7 +197,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // ── Get User Verified Status ──────────────────────────────────────────────
+    // Get User Verified Status
     suspend fun getUserVerified(uid: String): Boolean {
         return try {
             val directDoc = usersCollection.document(uid).get().await()
@@ -187,7 +221,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // ── Update User Fields ────────────────────────────────────────────────────
+    // Update User Fields
     suspend fun updateUserFields(uid: String, fields: Map<String, Any>): Resource<Unit> {
         return try {
             val directDoc = usersCollection.document(uid).get().await()
@@ -207,7 +241,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // ── Get Full User Object ──────────────────────────────────────────────────
+    // Get Full User Object
     suspend fun getUser(uid: String): Resource<User> {
         return try {
             val directDoc = usersCollection.document(uid).get().await()

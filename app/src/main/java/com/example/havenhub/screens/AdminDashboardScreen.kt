@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
@@ -24,6 +23,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,12 +31,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.Notification
 import com.example.havenhub.data.NotificationType
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
+import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.DashboardViewModel
 import com.example.havenhub.viewmodel.PropertyStatusSlice
 import com.example.havenhub.viewmodel.RevenueChartPoint
@@ -73,9 +75,9 @@ private fun notifColor(type: String): Color = when (type) {
     NotificationType.BOOKING_COMPLETED.name  -> Color(0xFF00897B)
     NotificationType.PAYMENT_RECEIVED.name   -> Color(0xFFC9A84C)
     NotificationType.PAYMENT_FAILED.name     -> Color(0xFFBA1A1A)
-    NotificationType.REFUND_ISSUED.name      -> Color(0xFFE67E22)
+    NotificationType.REFUND_ISSUED.name      -> Color(0xFFFF6F00)
     NotificationType.NEW_REVIEW.name,
-    NotificationType.REVIEW_REPLY.name       -> Color(0xFFE67E22)
+    NotificationType.REVIEW_REPLY.name       -> Color(0xFFFF6F00)
     NotificationType.NEW_MESSAGE.name        -> Color(0xFF4A90D9)
     NotificationType.PROPERTY_APPROVED.name  -> Color(0xFF2ECC71)
     NotificationType.PROPERTY_REJECTED.name  -> Color(0xFFBA1A1A)
@@ -89,8 +91,8 @@ private fun timeAgo(timestamp: com.google.firebase.Timestamp?): String {
     val diffMs = System.currentTimeMillis() - timestamp.toDate().time
     return when {
         diffMs < 60_000     -> "Just now"
-        diffMs < 3_600_000  -> "${TimeUnit.MILLISECONDS.toMinutes(diffMs)} min ago"
-        diffMs < 86_400_000 -> "${TimeUnit.MILLISECONDS.toHours(diffMs)} hr ago"
+        diffMs < 3_600_000  -> "${TimeUnit.MILLISECONDS.toMinutes(diffMs)}m ago"
+        diffMs < 86_400_000 -> "${TimeUnit.MILLISECONDS.toHours(diffMs)}h ago"
         else                -> "${TimeUnit.MILLISECONDS.toDays(diffMs)}d ago"
     }
 }
@@ -100,7 +102,7 @@ private fun bookingStatusColor(status: String): Color = when (status) {
     BookingStatus.CANCELLED.name  -> Color(0xFFBA1A1A)
     BookingStatus.COMPLETED.name  -> Color(0xFF4A90D9)
     BookingStatus.CHECKED_IN.name -> Color(0xFF00897B)
-    else                          -> Color(0xFFE67E22)
+    else                          -> Color(0xFFFF6F00)
 }
 
 private fun bookingStatusLabel(status: String): String =
@@ -112,20 +114,89 @@ private fun bookingStatusLabel(status: String): String =
 @Composable
 fun AdminDashboardScreen(
     navController : NavController,
-    viewModel     : DashboardViewModel = hiltViewModel()
+    viewModel     : DashboardViewModel = hiltViewModel(),
+    authViewModel : AuthViewModel      = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val stats    = uiState.stats
+    val uiState   by viewModel.uiState.collectAsState()
+    val authState by authViewModel.uiState.collectAsState()
+    val stats      = uiState.stats
+
+    // ✅ Admin ka real name Firebase se
+    val adminName = authState.currentUser?.displayName?.ifBlank { "Admin" } ?: "Admin"
+    val adminInitial = adminName.firstOrNull()?.uppercaseChar()?.toString() ?: "A"
+
+    // ✅ Admin profile image URL (agar available ho)
+    val adminPhotoUrl = authState.currentUser?.photoUrl?.toString()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope       = rememberCoroutineScope()
+
+    // ✅ Logout confirm dialog
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // ✅ Logout Confirmation Dialog
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            icon             = {
+                Icon(
+                    Icons.AutoMirrored.Filled.Logout,
+                    null,
+                    tint     = Color(0xFFBA1A1A),
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Logout",
+                    fontWeight = FontWeight.Bold,
+                    color      = Color(0xFF1A1A2E)
+                )
+            },
+            text = {
+                Text(
+                    "Are you sure you want to logout?",
+                    color    = Color(0xFF555555),
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutDialog = false
+                        authViewModel.signOut()
+                        navController.navigate(Screen.SignIn.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBA1A1A))
+                ) {
+                    Text("Logout", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = Color.White,
+            shape          = RoundedCornerShape(16.dp)
+        )
+    }
 
     ModalNavigationDrawer(
         drawerState   = drawerState,
         drawerContent = {
             AdminDrawerContent(
-                navController = navController,
-                onClose       = { scope.launch { drawerState.close() } }
+                navController    = navController,
+                adminName        = adminName,
+                adminInitial     = adminInitial,
+                adminPhotoUrl    = adminPhotoUrl,
+                onClose          = { scope.launch { drawerState.close() } },
+                onLogoutClick    = {
+                    scope.launch { drawerState.close() }
+                    showLogoutDialog = true
+                }
             )
         }
     ) {
@@ -133,8 +204,21 @@ fun AdminDashboardScreen(
             topBar = {
                 AdminTopBar(
                     notifCount          = uiState.unreadNotifCount,
+                    adminName           = adminName,
+                    adminInitial        = adminInitial,
+                    adminPhotoUrl       = adminPhotoUrl,
                     onMenuClick         = { scope.launch { drawerState.open() } },
-                    onNotificationClick = { navController.navigate(Screen.Notifications.route) }
+                    onNotificationClick = {
+                        // ✅ FIX: Sirf notifications route pe navigate karo
+                        navController.navigate(Screen.Notifications.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onProfileClick      = {
+                        navController.navigate(Screen.Profile.route) {
+                            launchSingleTop = true
+                        }
+                    }
                 )
             },
             containerColor = Color(0xFFF4F6FB)
@@ -156,7 +240,7 @@ fun AdminDashboardScreen(
             ) {
 
                 // ── Hero Banner ───────────────────────────────────
-                item { HeroBanner() }
+                item { HeroBanner(adminName = adminName) }
 
                 // ── Stats Cards ───────────────────────────────────
                 item {
@@ -173,7 +257,7 @@ fun AdminDashboardScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             ModernStatCard(
                                 icon     = Icons.Default.Home,
-                                label    = "Total Properties",
+                                label    = "Properties",
                                 value    = "${stats.totalProperties}",
                                 change   = "+8.3%",
                                 positive = true,
@@ -193,20 +277,22 @@ fun AdminDashboardScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             ModernStatCard(
                                 icon     = Icons.Default.CalendarMonth,
-                                label    = "Total Bookings",
+                                label    = "Bookings",
                                 value    = "${stats.totalBookings}",
                                 change   = "+15.7%",
                                 positive = true,
-                                gradient = listOf(Color(0xFF1565C0), Color(0xFF42A5F5)),
+                                // ✅ Orange gradient use kiya
+                                gradient = listOf(Color(0xFFE65100), Color(0xFFFF9800)),
                                 modifier = Modifier.weight(1f)
                             )
                             ModernStatCard(
                                 icon     = Icons.Default.AccountBalanceWallet,
-                                label    = "Total Revenue",
+                                label    = "Revenue",
                                 value    = "PKR ${"%.0f".format(stats.totalEarnings)}",
                                 change   = "+18.6%",
                                 positive = true,
-                                gradient = listOf(Color(0xFF6A1B9A), Color(0xFFAB47BC)),
+                                // ✅ Gold gradient use kiya
+                                gradient = listOf(Color(0xFF9B7D2E), Color(0xFFC9A84C)),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -224,61 +310,92 @@ fun AdminDashboardScreen(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     Spacer(Modifier.height(12.dp))
-                    LazyRow(
-                        contentPadding        = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    // ✅ FIX: LazyRow ki jagah Grid use kiya — sab screen pe properly fit ho
+                    Column(
+                        modifier            = Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         val actions = listOf(
-                            Triple(Icons.Default.CheckCircle,    "Verify\nProperties", Screen.VerifyProperties.route),
-                            Triple(Icons.Default.VerifiedUser,   "Verify\nUsers",      Screen.VerifyUsers.route),
-                            Triple(Icons.Default.ManageAccounts, "Manage\nUsers",      Screen.ManageUsers.route),
-                            Triple(Icons.Default.HomeWork,       "Manage\nProps",      Screen.ManageProperties.route),
-                            Triple(Icons.Default.CalendarMonth,  "Manage\nBookings",   Screen.ManageBookings.route),
-                            Triple(Icons.Default.BarChart,       "View\nReports",      Screen.Reports.route),
-                            Triple(Icons.Default.Payment,        "Payment\nReports",   Screen.PaymentReports.route),
+                            Triple(Icons.Default.CheckCircle,    "Verify Properties", Screen.VerifyProperties.route),
+                            Triple(Icons.Default.VerifiedUser,   "Verify Users",      Screen.VerifyUsers.route),
+                            Triple(Icons.Default.ManageAccounts, "Manage Users",      Screen.ManageUsers.route),
+                            Triple(Icons.Default.HomeWork,       "Manage Properties", Screen.ManageProperties.route),
+                            Triple(Icons.Default.CalendarMonth,  "Manage Bookings",   Screen.ManageBookings.route),
+                            Triple(Icons.Default.BarChart,       "View Reports",      Screen.Reports.route),
+                            Triple(Icons.Default.Payment,        "Payment Reports",   Screen.PaymentReports.route),
                         )
-                        items(actions) { (icon, label, route) ->
-                            QuickActionChip(icon, label) { navController.navigate(route) }
+                        // ✅ 2 columns grid — responsive aur proper spacing
+                        actions.chunked(2).forEach { rowActions ->
+                            Row(
+                                modifier              = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                rowActions.forEach { (icon, label, route) ->
+                                    QuickActionCard(
+                                        icon     = icon,
+                                        label    = label,
+                                        modifier = Modifier.weight(1f),
+                                        onClick  = { navController.navigate(route) }
+                                    )
+                                }
+                                // Agar odd number hai toh last row mein spacer
+                                if (rowActions.size == 1) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                 }
 
-                // ── ✅ NEW: Charts Section ─────────────────────────
+                // ── Analytics — User Overview (SEPARATE SECTION) ──
                 item {
                     Spacer(Modifier.height(24.dp))
                     SectionTitle(
-                        "Analytics Overview",
+                        "User Overview",
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     Spacer(Modifier.height(12.dp))
+                    // ✅ FIX: Full width — squish nahi hoga
+                    UsersOverviewChart(
+                        points   = uiState.userChartPoints,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    )
+                }
 
-                    // Users Overview + Revenue Overview — side by side (scrollable row)
-                    // Then Property Status below — full width
-                    Column(
-                        modifier            = Modifier.padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Row 1: Users Overview + Revenue Overview
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            UsersOverviewChart(
-                                points   = uiState.userChartPoints,
-                                modifier = Modifier.weight(1f)
-                            )
-                            RevenueOverviewChart(
-                                points   = uiState.revenueChartPoints,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                // ── Analytics — Revenue Overview (SEPARATE SECTION) ──
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    SectionTitle(
+                        "Revenue Overview",
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    // ✅ FIX: Full width — own section mein
+                    RevenueOverviewChart(
+                        points   = uiState.revenueChartPoints,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    )
+                }
 
-                        // Row 2: Property Status — full width donut
-                        PropertyStatusChart(
-                            slices   = uiState.propertyStatusSlices,
-                            total    = stats.totalProperties,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                // ── Analytics — Property Status (SEPARATE SECTION) ──
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    SectionTitle(
+                        "Property Status",
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    PropertyStatusChart(
+                        slices   = uiState.propertyStatusSlices,
+                        total    = stats.totalProperties,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    )
                 }
 
                 // ── Recent Activity ───────────────────────────────
@@ -292,7 +409,11 @@ fun AdminDashboardScreen(
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         SectionTitle("Recent Activity")
-                        TextButton(onClick = { navController.navigate(Screen.Notifications.route) }) {
+                        TextButton(onClick = {
+                            navController.navigate(Screen.Notifications.route) {
+                                launchSingleTop = true
+                            }
+                        }) {
                             Text("View All", color = PrimaryBlue, fontSize = 13.sp)
                         }
                     }
@@ -383,10 +504,8 @@ fun AdminDashboardScreen(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ✅ CHART COMPOSABLES
+// CHART COMPOSABLES
 // ═══════════════════════════════════════════════════════════════════════════════
-
-// ─── Users Overview Line Chart ────────────────────────────────────────────────
 
 @Composable
 fun UsersOverviewChart(
@@ -405,49 +524,43 @@ fun UsersOverviewChart(
         colors    = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                Text(
-                    "Users Overview",
-                    fontSize   = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color      = Color(0xFF1A1A2E)
-                )
+                // ✅ Total users summary
+                Column {
+                    Text(
+                        "${points.sumOf { it.newUsers }} new",
+                        fontSize   = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = Color(0xFF1A1A2E)
+                    )
+                    Text("users this week", fontSize = 11.sp, color = Color(0xFF888888))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LegendDot(Color(0xFF4A90D9), "New")
+                    LegendDot(AccentOrange,       "Active")
+                }
             }
-            Spacer(Modifier.height(4.dp))
-
-            // Legend
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LegendDot(Color(0xFF4A90D9), "New")
-                LegendDot(Color(0xFF26C6DA), "Active")
-            }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
             if (points.isEmpty()) {
                 Box(
-                    modifier         = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp),
+                    modifier         = Modifier.fillMaxWidth().height(140.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No data", fontSize = 11.sp, color = Color(0xFFCCCCCC))
+                    Text("No data yet", fontSize = 13.sp, color = Color(0xFFCCCCCC))
                 }
             } else {
-                // Canvas line chart
                 Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
+                    modifier = Modifier.fillMaxWidth().height(140.dp)
                 ) {
                     drawUsersLineChart(points, animProgress)
                 }
-                Spacer(Modifier.height(4.dp))
-                // X-axis labels
+                Spacer(Modifier.height(6.dp))
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -455,10 +568,10 @@ fun UsersOverviewChart(
                     points.forEach { pt ->
                         Text(
                             pt.label,
-                            fontSize = 8.sp,
-                            color    = Color(0xFFAAAAAA),
-                            modifier = Modifier.weight(1f),
-                            textAlign= TextAlign.Center
+                            fontSize  = 10.sp,
+                            color     = Color(0xFFAAAAAA),
+                            modifier  = Modifier.weight(1f),
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -478,51 +591,68 @@ private fun DrawScope.drawUsersLineChart(points: List<UserChartPoint>, progress:
     val padBot  = 4.dp.toPx()
     val drawH   = h - padTop - padBot
 
+    // Horizontal grid lines
+    for (i in 0..3) {
+        val y = padTop + drawH * i / 3f
+        drawLine(
+            color       = Color(0xFFEEEEEE),
+            start       = Offset(0f, y),
+            end         = Offset(w, y),
+            strokeWidth = 1.dp.toPx()
+        )
+    }
+
     fun xOf(i: Int)      = i * stepX
     fun yOf(v: Int): Float = padTop + drawH * (1f - v.toFloat() / maxVal)
 
-    // Draw filled area + line for newUsers (blue)
+    // newUsers — blue filled area + line
     val newPath = Path()
     val newFill = Path()
     points.forEachIndexed { i, pt ->
-        val x = xOf(i)
-        val y = yOf(pt.newUsers)
-        if (i == 0) { newPath.moveTo(x, y); newFill.moveTo(x, h) ; newFill.lineTo(x, y) }
-        else { newPath.lineTo(x, y); newFill.lineTo(x, y) }
+        val x = xOf(i); val y = yOf(pt.newUsers)
+        if (i == 0) { newPath.moveTo(x, y); newFill.moveTo(x, h); newFill.lineTo(x, y) }
+        else {
+            val prevX = xOf(i - 1); val prevY = yOf(points[i - 1].newUsers)
+            val cp1X  = prevX + (x - prevX) / 2f
+            newPath.cubicTo(cp1X, prevY, cp1X, y, x, y)
+            newFill.cubicTo(cp1X, prevY, cp1X, y, x, y)
+        }
     }
-    newFill.lineTo(xOf(points.lastIndex), h)
-    newFill.close()
+    newFill.lineTo(xOf(points.lastIndex), h); newFill.close()
 
-    // Clip to animated progress
     clipRect(right = w * progress) {
         drawPath(newFill, Brush.verticalGradient(
-            listOf(Color(0xFF4A90D9).copy(alpha = 0.18f), Color.Transparent)
+            listOf(Color(0xFF4A90D9).copy(alpha = 0.20f), Color.Transparent)
         ))
-        drawPath(newPath, color = Color(0xFF4A90D9), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(newPath, color = Color(0xFF4A90D9), style = Stroke(
+            width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round
+        ))
     }
 
-    // Draw line for activeUsers (teal)
+    // activeUsers — orange dashed line
     val activePath = Path()
     points.forEachIndexed { i, pt ->
-        val x = xOf(i)
-        val y = yOf(pt.activeUsers)
-        if (i == 0) activePath.moveTo(x, y) else activePath.lineTo(x, y)
+        val x = xOf(i); val y = yOf(pt.activeUsers)
+        if (i == 0) activePath.moveTo(x, y)
+        else {
+            val prevX = xOf(i - 1); val prevY = yOf(points[i - 1].activeUsers)
+            val cp1X  = prevX + (x - prevX) / 2f
+            activePath.cubicTo(cp1X, prevY, cp1X, y, x, y)
+        }
     }
     clipRect(right = w * progress) {
-        drawPath(activePath, color = Color(0xFF26C6DA), style = Stroke(
-            width = 2.dp.toPx(),
-            cap   = StrokeCap.Round,
-            join  = StrokeJoin.Round,
-            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 4f))
+        drawPath(activePath, color = Color(0xFFFF6F00), style = Stroke(
+            width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round,
+            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 5f))
         ))
     }
 
-    // Dots on last visible point
+    // Dots on last animated point
     val lastIdx = ((points.size - 1) * progress).toInt().coerceIn(0, points.lastIndex)
-    drawCircle(Color(0xFF4A90D9), radius = 4.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].newUsers)))
-    drawCircle(Color.White,       radius = 2.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].newUsers)))
-    drawCircle(Color(0xFF26C6DA), radius = 4.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].activeUsers)))
-    drawCircle(Color.White,       radius = 2.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].activeUsers)))
+    drawCircle(Color(0xFF4A90D9), radius = 5.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].newUsers)))
+    drawCircle(Color.White,       radius = 2.5.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].newUsers)))
+    drawCircle(Color(0xFFFF6F00), radius = 5.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].activeUsers)))
+    drawCircle(Color.White,       radius = 2.5.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].activeUsers)))
 }
 
 // ─── Revenue Overview Line Chart ──────────────────────────────────────────────
@@ -544,41 +674,38 @@ fun RevenueOverviewChart(
         colors    = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                Text(
-                    "Revenue Overview",
-                    fontSize   = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color      = Color(0xFF1A1A2E)
-                )
+                Column {
+                    Text(
+                        "PKR ${"%.0f".format(points.sumOf { it.revenue })}",
+                        fontSize   = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = Color(0xFF1A1A2E)
+                    )
+                    Text("this week", fontSize = 11.sp, color = Color(0xFF888888))
+                }
+                // ✅ Gold color legend — brand color se match
+                LegendDot(AccentGold, "Revenue")
             }
-            Spacer(Modifier.height(4.dp))
-            Row { LegendDot(Color(0xFF2ECC71), "Revenue") }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
             if (points.isEmpty()) {
                 Box(
-                    modifier         = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp),
+                    modifier         = Modifier.fillMaxWidth().height(140.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No data", fontSize = 11.sp, color = Color(0xFFCCCCCC))
+                    Text("No revenue data yet", fontSize = 13.sp, color = Color(0xFFCCCCCC))
                 }
             } else {
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                ) {
+                Canvas(modifier = Modifier.fillMaxWidth().height(140.dp)) {
                     drawRevenueLineChart(points, animProgress)
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -586,7 +713,7 @@ fun RevenueOverviewChart(
                     points.forEach { pt ->
                         Text(
                             pt.label,
-                            fontSize  = 8.sp,
+                            fontSize  = 10.sp,
                             color     = Color(0xFFAAAAAA),
                             modifier  = Modifier.weight(1f),
                             textAlign = TextAlign.Center
@@ -609,45 +736,44 @@ private fun DrawScope.drawRevenueLineChart(points: List<RevenueChartPoint>, prog
     val padBot = 4.dp.toPx()
     val drawH  = h - padTop - padBot
 
-    fun xOf(i: Int)      = i * stepX
-    fun yOf(v: Double)   = (padTop + drawH * (1.0 - v / maxVal)).toFloat()
+    // Grid lines
+    for (i in 0..3) {
+        val y = padTop + drawH * i / 3f
+        drawLine(Color(0xFFEEEEEE), Offset(0f, y), Offset(w, y), 1.dp.toPx())
+    }
+
+    fun xOf(i: Int)    = i * stepX
+    fun yOf(v: Double) = (padTop + drawH * (1.0 - v / maxVal)).toFloat()
 
     val linePath = Path()
     val fillPath = Path()
     points.forEachIndexed { i, pt ->
-        val x = xOf(i)
-        val y = yOf(pt.revenue)
+        val x = xOf(i); val y = yOf(pt.revenue)
         if (i == 0) {
-            linePath.moveTo(x, y)
-            fillPath.moveTo(x, h)
-            fillPath.lineTo(x, y)
+            linePath.moveTo(x, y); fillPath.moveTo(x, h); fillPath.lineTo(x, y)
         } else {
-            // Smooth curve using cubic bezier
-            val prevX = xOf(i - 1)
-            val prevY = yOf(points[i - 1].revenue)
+            val prevX = xOf(i - 1); val prevY = yOf(points[i - 1].revenue)
             val cp1X  = prevX + (x - prevX) / 2f
             linePath.cubicTo(cp1X, prevY, cp1X, y, x, y)
             fillPath.cubicTo(cp1X, prevY, cp1X, y, x, y)
         }
     }
-    fillPath.lineTo(xOf(points.lastIndex), h)
-    fillPath.close()
+    fillPath.lineTo(xOf(points.lastIndex), h); fillPath.close()
 
     clipRect(right = w * progress) {
+        // ✅ Gold gradient fill
         drawPath(fillPath, Brush.verticalGradient(
-            listOf(Color(0xFF2ECC71).copy(alpha = 0.22f), Color.Transparent)
+            listOf(Color(0xFFC9A84C).copy(alpha = 0.25f), Color.Transparent)
         ))
-        drawPath(linePath, color = Color(0xFF2ECC71), style = Stroke(
-            width = 2.dp.toPx(),
-            cap   = StrokeCap.Round,
-            join  = StrokeJoin.Round
+        // ✅ Gold line
+        drawPath(linePath, color = Color(0xFFC9A84C), style = Stroke(
+            width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round
         ))
     }
 
-    // Dot on last animated point
     val lastIdx = ((points.size - 1) * progress).toInt().coerceIn(0, points.lastIndex)
-    drawCircle(Color(0xFF2ECC71), radius = 4.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].revenue)))
-    drawCircle(Color.White,       radius = 2.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].revenue)))
+    drawCircle(Color(0xFFC9A84C), radius = 5.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].revenue)))
+    drawCircle(Color.White,       radius = 2.5.dp.toPx(), center = Offset(xOf(lastIdx), yOf(points[lastIdx].revenue)))
 }
 
 // ─── Property Status Donut Chart ──────────────────────────────────────────────
@@ -671,71 +797,60 @@ fun PropertyStatusChart(
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "Property Status",
-                fontSize   = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color      = Color(0xFF1A1A2E)
-            )
-            Spacer(Modifier.height(12.dp))
-
             Row(
                 modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Donut canvas
+                // ✅ Donut canvas — larger for full width card
                 Box(
-                    modifier         = Modifier.size(130.dp),
+                    modifier         = Modifier.size(150.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         drawDonutChart(slices, animProgress)
                     }
-                    // Center label
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             "$total",
-                            fontSize   = 20.sp,
+                            fontSize   = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color      = Color(0xFF1A1A2E)
                         )
-                        Text(
-                            "Total",
-                            fontSize = 10.sp,
-                            color    = Color(0xFF888888)
-                        )
+                        Text("Total", fontSize = 11.sp, color = Color(0xFF888888))
                     }
                 }
 
-                // Legend — right side
+                // ✅ Legend — right side, properly spaced
                 Column(
-                    modifier            = Modifier.padding(start = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier            = Modifier
+                        .weight(1f)
+                        .padding(start = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     slices.forEach { slice ->
                         val sliceColor = Color(slice.colorHex)
                         val pct = if (total > 0) (slice.count * 100f / total) else 0f
                         Row(
                             verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(10.dp)
+                                    .size(12.dp)
                                     .clip(CircleShape)
                                     .background(sliceColor)
                             )
                             Column {
                                 Text(
                                     slice.label,
-                                    fontSize   = 12.sp,
+                                    fontSize   = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color      = Color(0xFF1A1A2E)
                                 )
                                 Text(
                                     "${slice.count} (${"%.1f".format(pct)}%)",
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     color    = Color(0xFF888888)
                                 )
                             }
@@ -750,22 +865,19 @@ fun PropertyStatusChart(
 private fun DrawScope.drawDonutChart(slices: List<PropertyStatusSlice>, progress: Float) {
     if (slices.isEmpty()) return
 
-    val total      = slices.sumOf { it.count }.coerceAtLeast(1)
-    val stroke     = 22.dp.toPx()
-    val padding    = stroke / 2f + 4.dp.toPx()
-    val diameter   = size.minDimension - padding * 2
-    val topLeft    = Offset(padding, padding)
-    val arcSize    = Size(diameter, diameter)
-    val gap        = 3f   // degrees gap between slices
+    val total    = slices.sumOf { it.count }.coerceAtLeast(1)
+    val stroke   = 24.dp.toPx()
+    val padding  = stroke / 2f + 4.dp.toPx()
+    val diameter = size.minDimension - padding * 2
+    val topLeft  = Offset(padding, padding)
+    val arcSize  = Size(diameter, diameter)
+    val gap      = 3f
 
     var startAngle = -90f
-
     slices.forEach { slice ->
-        val sweep      = (slice.count.toFloat() / total) * 360f * progress - gap
-        val color      = Color(slice.colorHex)
-
+        val sweep = (slice.count.toFloat() / total) * 360f * progress - gap
         drawArc(
-            color      = color,
+            color      = Color(slice.colorHex),
             startAngle = startAngle,
             sweepAngle = sweep.coerceAtLeast(0f),
             useCenter  = false,
@@ -785,15 +897,15 @@ private fun DrawScope.drawDonutChart(slices: List<PropertyStatusSlice>, progress
 private fun LegendDot(color: Color, label: String) {
     Row(
         verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(7.dp)
+                .size(8.dp)
                 .clip(CircleShape)
                 .background(color)
         )
-        Text(label, fontSize = 9.sp, color = Color(0xFF888888))
+        Text(label, fontSize = 10.sp, color = Color(0xFF888888))
     }
 }
 
@@ -817,8 +929,12 @@ private fun EmptyStateBox(icon: ImageVector, text: String) {
 @Composable
 fun AdminTopBar(
     notifCount         : Int,
+    adminName          : String,
+    adminInitial       : String,
+    adminPhotoUrl      : String?,
     onMenuClick        : () -> Unit,
-    onNotificationClick: () -> Unit
+    onNotificationClick: () -> Unit,
+    onProfileClick     : () -> Unit   // ✅ NEW — profile click handler
 ) {
     TopAppBar(
         navigationIcon = {
@@ -827,12 +943,18 @@ fun AdminTopBar(
             }
         },
         title = {
-            Text("HavenHub", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(
+                "HavenHub",
+                color      = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize   = 20.sp
+            )
         },
         actions = {
+            // ✅ Notification Bell with Badge
             BadgedBox(badge = {
                 if (notifCount > 0) {
-                    Badge(containerColor = AccentGold) {
+                    Badge(containerColor = AccentOrange) {
                         Text(
                             if (notifCount > 99) "99+" else "$notifCount",
                             fontSize = 9.sp,
@@ -842,70 +964,124 @@ fun AdminTopBar(
                 }
             }) {
                 IconButton(onClick = onNotificationClick) {
-                    Icon(Icons.Default.Notifications, null, tint = Color.White)
+                    Icon(Icons.Default.Notifications, "Notifications", tint = Color.White)
                 }
             }
-            Spacer(Modifier.width(4.dp))
+
+            Spacer(Modifier.width(2.dp))
+
+            // ✅ Admin Profile Icon — clickable, real photo ya initial
             Box(
                 modifier         = Modifier
                     .padding(end = 12.dp)
-                    .size(34.dp)
+                    .size(36.dp)
                     .clip(CircleShape)
-                    .background(AccentGold),
+                    .background(AccentGold)
+                    .clickable { onProfileClick() },
                 contentAlignment = Alignment.Center
             ) {
-                Text("A", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                if (!adminPhotoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model             = adminPhotoUrl,
+                        contentDescription = "Admin Photo",
+                        modifier          = Modifier.fillMaxSize().clip(CircleShape),
+                        contentScale      = ContentScale.Crop
+                    )
+                } else {
+                    Text(
+                        adminInitial,
+                        color      = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 16.sp
+                    )
+                }
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = PrimaryBlue
+        )
     )
 }
 
 // ─── Hero Banner ──────────────────────────────────────────────────────────────
 
 @Composable
-fun HeroBanner() {
+fun HeroBanner(adminName: String = "Admin") {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(
                 Brush.linearGradient(
-                    colors = listOf(PrimaryBlue, Color(0xFF0D4F8C), Color(0xFF1565C0))
+                    colors = listOf(
+                        PrimaryBlueDark,
+                        PrimaryBlue,
+                        Color(0xFF1565C0)
+                    )
                 )
             )
             .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
+        // Decorative circles
         Box(
             modifier = Modifier
-                .size(100.dp)
+                .size(110.dp)
                 .align(Alignment.TopEnd)
-                .offset(x = 30.dp, y = (-20).dp)
+                .offset(x = 35.dp, y = (-25).dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.06f))
+                .background(Color.White.copy(alpha = 0.05f))
         )
         Box(
             modifier = Modifier
-                .size(60.dp)
+                .size(70.dp)
                 .align(Alignment.BottomEnd)
-                .offset(x = 10.dp, y = 20.dp)
+                .offset(x = 15.dp, y = 25.dp)
+                .clip(CircleShape)
+                // ✅ Orange decorative circle
+                .background(AccentOrange.copy(alpha = 0.12f))
+        )
+        // ✅ Gold decorative circle
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .align(Alignment.BottomStart)
+                .offset(x = (-10).dp, y = 15.dp)
                 .clip(CircleShape)
                 .background(AccentGold.copy(alpha = 0.15f))
         )
+
         Column {
-            Text("Welcome back, Admin 👋", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(
+                "Welcome back, $adminName 👋",
+                fontSize   = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color      = Color.White
+            )
             Spacer(Modifier.height(4.dp))
-            Text("Here's what's happening today.", fontSize = 13.sp, color = Color.White.copy(alpha = 0.75f))
+            Text(
+                "Here's what's happening today.",
+                fontSize = 13.sp,
+                color    = Color.White.copy(alpha = 0.75f)
+            )
             Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color.White.copy(alpha = 0.12f))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(Icons.Default.CalendarToday, null, tint = AccentGold, modifier = Modifier.size(13.dp))
-                Text("Super Admin  •  Platform Overview", fontSize = 11.sp, color = Color.White.copy(alpha = 0.9f))
+                Icon(
+                    Icons.Default.CalendarToday,
+                    null,
+                    tint     = AccentGold,
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    "Super Admin  •  Platform Overview",
+                    fontSize = 11.sp,
+                    color    = Color.White.copy(alpha = 0.9f)
+                )
             }
         }
     }
@@ -940,13 +1116,20 @@ fun ModernStatCard(
                 Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.height(10.dp))
-            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                value,
+                fontSize  = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color     = Color(0xFF1A1A2E),
+                maxLines  = 1,
+                overflow  = TextOverflow.Ellipsis
+            )
             Spacer(Modifier.height(2.dp))
             Text(label, fontSize = 11.sp, color = Color(0xFF888888))
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = if (positive) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                    imageVector        = if (positive) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                     contentDescription = null,
                     tint     = if (positive) Color(0xFF2ECC71) else Color(0xFFBA1A1A),
                     modifier = Modifier.size(12.dp)
@@ -970,16 +1153,19 @@ fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
         modifier  = Modifier.fillMaxWidth().clickable { onClick() },
         shape     = RoundedCornerShape(16.dp),
         colors    = CardDefaults.cardColors(
+            // ✅ Orange use kiya pending ke liye
             containerColor = if (pendingCount > 0) Color(0xFFFFF3E0) else Color(0xFFF1F8F1)
         ),
         elevation = CardDefaults.cardElevation(0.dp),
         border    = BorderStroke(
             1.dp,
-            if (pendingCount > 0) Color(0xFFE67E22).copy(alpha = 0.3f) else Color(0xFF2ECC71).copy(alpha = 0.3f)
+            if (pendingCount > 0) AccentOrange.copy(alpha = 0.3f) else Color(0xFF2ECC71).copy(alpha = 0.3f)
         )
     ) {
         Row(
-            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier              = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -988,14 +1174,19 @@ fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
-                    modifier         = Modifier.size(36.dp).clip(CircleShape)
-                        .background(if (pendingCount > 0) Color(0xFFE67E22).copy(alpha = 0.15f) else Color(0xFF2ECC71).copy(alpha = 0.15f)),
+                    modifier         = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (pendingCount > 0) AccentOrange.copy(alpha = 0.15f)
+                            else Color(0xFF2ECC71).copy(alpha = 0.15f)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (pendingCount > 0) Icons.Default.PendingActions else Icons.Default.CheckCircle,
+                        imageVector        = if (pendingCount > 0) Icons.Default.PendingActions else Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint     = if (pendingCount > 0) Color(0xFFE67E22) else Color(0xFF2ECC71),
+                        tint     = if (pendingCount > 0) AccentOrange else Color(0xFF2ECC71),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -1004,7 +1195,7 @@ fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
                         "$pendingCount Pending Bookings",
                         fontSize   = 14.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color      = if (pendingCount > 0) Color(0xFFE67E22) else Color(0xFF2ECC71)
+                        color      = if (pendingCount > 0) AccentOrange else Color(0xFF2ECC71)
                     )
                     Text(
                         if (pendingCount > 0) "Tap to review & take action" else "All bookings are handled",
@@ -1013,32 +1204,56 @@ fun PendingHighlightCard(pendingCount: Int, onClick: () -> Unit) {
                     )
                 }
             }
-            Icon(Icons.Default.ChevronRight, null, tint = Color(0xFFAAAAAA), modifier = Modifier.size(20.dp))
+            Icon(
+                Icons.Default.ChevronRight,
+                null,
+                tint     = Color(0xFFAAAAAA),
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
 
-// ─── Quick Action Chip ────────────────────────────────────────────────────────
+// ─── Quick Action Card (Grid) — FIX: LazyRow se replace ──────────────────────
 
 @Composable
-fun QuickActionChip(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .width(80.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White)
-            .clickable { onClick() }
-            .padding(vertical = 14.dp, horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+fun QuickActionCard(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Card(
+        modifier  = modifier.clickable { onClick() },
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        Box(
-            modifier         = Modifier.size(42.dp).clip(CircleShape).background(PrimaryBlue.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier          = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(icon, null, tint = PrimaryBlue, modifier = Modifier.size(20.dp))
+            Box(
+                modifier         = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    // ✅ Blue + Gold gradient for action icons
+                    .background(
+                        Brush.linearGradient(
+                            listOf(PrimaryBlue, PrimaryBlueLight)
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+            Text(
+                label,
+                fontSize   = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color      = Color(0xFF1A1A2E),
+                maxLines   = 1,
+                overflow   = TextOverflow.Ellipsis
+            )
         }
-        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color(0xFF444444), lineHeight = 13.sp, textAlign = TextAlign.Center, maxLines = 2)
     }
 }
 
@@ -1049,23 +1264,45 @@ fun RealActivityRow(notification: Notification) {
     val icon  = notifIcon(notification.type)
     val color = notifColor(notification.type)
     Row(
-        modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier              = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            modifier         = Modifier.size(38.dp).clip(CircleShape).background(color.copy(alpha = 0.15f)),
+            modifier         = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(notification.title.ifBlank { notification.body }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1A1A2E), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                notification.title.ifBlank { notification.body },
+                fontSize   = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color      = Color(0xFF1A1A2E),
+                maxLines   = 1,
+                overflow   = TextOverflow.Ellipsis
+            )
             if (notification.body.isNotBlank() && notification.title.isNotBlank()) {
-                Text(notification.body, fontSize = 11.sp, color = Color(0xFF888888), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    notification.body,
+                    fontSize = 11.sp,
+                    color    = Color(0xFF888888),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
-        Text(timeAgo(notification.createdAt), fontSize = 11.sp, color = Color(0xFFAAAAAA))
+        Text(
+            timeAgo(notification.createdAt),
+            fontSize = 11.sp,
+            color    = Color(0xFFAAAAAA)
+        )
     }
 }
 
@@ -1076,23 +1313,57 @@ fun RealBookingRow(booking: Booking) {
     val statusColor = bookingStatusColor(booking.status)
     val statusLabel = bookingStatusLabel(booking.status)
     Row(
-        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier          = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(modifier = Modifier.weight(1.4f), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier         = Modifier.size(28.dp).clip(CircleShape).background(PrimaryBlue.copy(alpha = 0.15f)),
+                modifier         = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(PrimaryBlue.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(booking.tenantName.firstOrNull()?.toString() ?: "?", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                Text(
+                    booking.tenantName.firstOrNull()?.toString() ?: "?",
+                    fontSize   = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color      = PrimaryBlue
+                )
             }
             Spacer(Modifier.width(6.dp))
-            Text(booking.tenantName.ifBlank { "Guest" }, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1A1A2E), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                booking.tenantName.ifBlank { "Guest" },
+                fontSize  = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color     = Color(0xFF1A1A2E),
+                maxLines  = 1,
+                overflow  = TextOverflow.Ellipsis
+            )
         }
-        Text(booking.propertyTitle.ifBlank { "Property" }, modifier = Modifier.weight(1.8f), fontSize = 12.sp, color = Color(0xFF555555), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("PKR ${"%.0f".format(booking.totalAmount)}", modifier = Modifier.weight(1.4f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = PrimaryBlue)
+        Text(
+            booking.propertyTitle.ifBlank { "Property" },
+            modifier  = Modifier.weight(1.8f),
+            fontSize  = 12.sp,
+            color     = Color(0xFF555555),
+            maxLines  = 1,
+            overflow  = TextOverflow.Ellipsis
+        )
+        Text(
+            "PKR ${"%.0f".format(booking.totalAmount)}",
+            modifier   = Modifier.weight(1.4f),
+            fontSize   = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color      = PrimaryBlue
+        )
         Box(
-            modifier         = Modifier.weight(1.2f).clip(RoundedCornerShape(20.dp)).background(statusColor.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 3.dp),
+            modifier         = Modifier
+                .weight(1.2f)
+                .clip(RoundedCornerShape(20.dp))
+                .background(statusColor.copy(alpha = 0.12f))
+                .padding(horizontal = 6.dp, vertical = 3.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(statusLabel, fontSize = 10.sp, color = statusColor, fontWeight = FontWeight.SemiBold)
@@ -1104,20 +1375,51 @@ fun RealBookingRow(booking: Booking) {
 
 @Composable
 fun TableHeaderCell(text: String, modifier: Modifier = Modifier) {
-    Text(text, modifier = modifier, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF888888))
+    Text(
+        text,
+        modifier   = modifier,
+        fontSize   = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        color      = Color(0xFF888888)
+    )
 }
 
 // ─── Section Title ────────────────────────────────────────────────────────────
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    Text(text, modifier = modifier, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E))
+    Row(
+        modifier          = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // ✅ Gold accent bar — brand color
+        Box(
+            modifier = Modifier
+                .size(width = 4.dp, height = 18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(AccentGold)
+        )
+        Text(
+            text,
+            fontSize   = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color      = Color(0xFF1A1A2E)
+        )
+    }
 }
 
 // ─── Side Drawer ──────────────────────────────────────────────────────────────
 
 @Composable
-fun AdminDrawerContent(navController: NavController, onClose: () -> Unit) {
+fun AdminDrawerContent(
+    navController : NavController,
+    adminName     : String,
+    adminInitial  : String,
+    adminPhotoUrl : String?,
+    onClose       : () -> Unit,
+    onLogoutClick : () -> Unit    // ✅ FIX: Real logout handler
+) {
     val drawerItems = listOf(
         Triple(Icons.Default.Dashboard,      "Dashboard",         Screen.AdminDashboard.route),
         Triple(Icons.Default.CheckCircle,    "Verify Properties", Screen.VerifyProperties.route),
@@ -1130,27 +1432,97 @@ fun AdminDrawerContent(navController: NavController, onClose: () -> Unit) {
         Triple(Icons.Default.Notifications,  "Notifications",     Screen.Notifications.route),
         Triple(Icons.Default.Settings,       "Settings",          Screen.Settings.route),
     )
-    ModalDrawerSheet(drawerContainerColor = Color.White, modifier = Modifier.width(280.dp)) {
+
+    ModalDrawerSheet(
+        drawerContainerColor = Color.White,
+        modifier             = Modifier.width(280.dp)
+    ) {
+        // Header
         Box(
-            modifier = Modifier.fillMaxWidth()
-                .background(Brush.linearGradient(listOf(PrimaryBlue, Color(0xFF1565C0))))
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(PrimaryBlueDark, PrimaryBlue, Color(0xFF1565C0))
+                    )
+                )
                 .padding(20.dp)
         ) {
+            // ✅ Orange decorative element in drawer header
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 20.dp, y = (-15).dp)
+                    .clip(CircleShape)
+                    .background(AccentOrange.copy(alpha = 0.10f))
+            )
+
             Column {
-                Box(modifier = Modifier.size(52.dp).clip(CircleShape).background(AccentGold), contentAlignment = Alignment.Center) {
-                    Text("A", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                // ✅ Real profile photo or initial
+                Box(
+                    modifier         = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(AccentGold),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!adminPhotoUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model              = adminPhotoUrl,
+                            contentDescription = "Admin Photo",
+                            modifier           = Modifier.fillMaxSize().clip(CircleShape),
+                            contentScale       = ContentScale.Crop
+                        )
+                    } else {
+                        Text(
+                            adminInitial,
+                            color      = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 24.sp
+                        )
+                    }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("Admin",       color = Color.White,                     fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text("Super Admin", color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp)
+                // ✅ Real admin name
+                Text(
+                    adminName,
+                    color      = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 16.sp
+                )
+                Text(
+                    "Super Admin",
+                    color    = Color.White.copy(alpha = 0.75f),
+                    fontSize = 12.sp
+                )
             }
         }
+
         Spacer(Modifier.height(8.dp))
+
+        val navBackStackEntry = navController.currentBackStackEntry
+        val currentRoute      = navBackStackEntry?.destination?.route
+
         drawerItems.forEach { (icon, label, route) ->
+            val isSelected = currentRoute == route
             NavigationDrawerItem(
-                icon     = { Icon(icon, null, tint = PrimaryBlue) },
-                label    = { Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
-                selected = false,
+                icon     = {
+                    Icon(
+                        icon,
+                        null,
+                        tint = if (isSelected) AccentGold else PrimaryBlue
+                    )
+                },
+                label    = {
+                    Text(
+                        label,
+                        fontSize   = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color      = if (isSelected) PrimaryBlue else Color(0xFF333333)
+                    )
+                },
+                selected = isSelected,
                 onClick  = {
                     navController.navigate(route) {
                         popUpTo(Screen.AdminDashboard.route) { saveState = true }
@@ -1161,31 +1533,37 @@ fun AdminDrawerContent(navController: NavController, onClose: () -> Unit) {
                 },
                 modifier = Modifier.padding(horizontal = 8.dp),
                 colors   = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = Color.Transparent,
-                    selectedContainerColor   = PrimaryBlue.copy(alpha = 0.1f)
+                    selectedContainerColor   = PrimaryBlue.copy(alpha = 0.1f),
+                    unselectedContainerColor = Color.Transparent
                 )
             )
         }
+
         Spacer(Modifier.weight(1f))
         HorizontalDivider(color = Color(0xFFEEEEEE))
+
+        // ✅ FIX: Logout ab properly kaam karta hai
         NavigationDrawerItem(
-            icon     = { Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color(0xFFBA1A1A)) },
-            label    = { Text("Logout", color = Color(0xFFBA1A1A), fontWeight = FontWeight.Medium) },
+            icon     = {
+                Icon(
+                    Icons.AutoMirrored.Filled.Logout,
+                    null,
+                    tint = Color(0xFFBA1A1A)
+                )
+            },
+            label    = {
+                Text(
+                    "Logout",
+                    color      = Color(0xFFBA1A1A),
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
             selected = false,
-            onClick  = { /* handle logout */ },
+            onClick  = onLogoutClick,  // ✅ Real logout — dialog dikhata hai
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            colors   = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+            colors   = NavigationDrawerItemDefaults.colors(
+                unselectedContainerColor = Color(0xFFBA1A1A).copy(alpha = 0.05f)
+            )
         )
     }
 }
-
-
-
-
-
-
-
-
-
-
-

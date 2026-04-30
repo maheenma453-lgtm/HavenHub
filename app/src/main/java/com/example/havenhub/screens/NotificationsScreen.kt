@@ -37,13 +37,24 @@ fun NotificationsScreen(
     viewModel    : NotificationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    val userId  = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    // ✅ Admin note dialog state
     var showNoteDialog   by remember { mutableStateOf(false) }
     var dialogTitle      by remember { mutableStateOf("") }
     var dialogNote       by remember { mutableStateOf("") }
     var dialogIsApproved by remember { mutableStateOf(true) }
+
+    LaunchedEffect(userId) {
+        if (userId.isNotEmpty()) viewModel.observeNotifications(userId)
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessages()
+        }
+    }
 
     if (showNoteDialog) {
         AlertDialog(
@@ -71,26 +82,18 @@ fun NotificationsScreen(
                     )
                     if (dialogNote.isNotEmpty()) {
                         HorizontalDivider()
-                        Text(
-                            "Admin Note:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize   = 13.sp,
-                            color      = TextSecondary
-                        )
-                        // ✅ Admin note card mein clearly dikhao
+                        Text("Admin Note:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextSecondary)
                         Card(
                             shape  = RoundedCornerShape(8.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (dialogIsApproved)
-                                    Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                                containerColor = if (dialogIsApproved) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
                             )
                         ) {
                             Text(
                                 text     = dialogNote,
                                 modifier = Modifier.padding(12.dp),
                                 fontSize = 14.sp,
-                                color    = if (dialogIsApproved)
-                                    Color(0xFF2E7D32) else Color(0xFFC62828)
+                                color    = if (dialogIsApproved) Color(0xFF2E7D32) else Color(0xFFC62828)
                             )
                         }
                     }
@@ -107,11 +110,8 @@ fun NotificationsScreen(
         )
     }
 
-    LaunchedEffect(userId) {
-        if (userId.isNotEmpty()) viewModel.loadNotifications(userId)
-    }
-
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -122,7 +122,7 @@ fun NotificationsScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.2f))
+                                    .background(Color.White.copy(alpha = 0.25f))
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 Text(
@@ -137,7 +137,7 @@ fun NotificationsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 },
                 actions = {
@@ -157,7 +157,7 @@ fun NotificationsScreen(
     ) { padding ->
 
         if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = PrimaryBlue)
             }
             return@Scaffold
@@ -177,6 +177,12 @@ fun NotificationsScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text("No notifications yet", color = TextSecondary, fontSize = 16.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Aapki notifications yahan dikhengi",
+                        color    = TextSecondary.copy(alpha = 0.6f),
+                        fontSize = 13.sp
+                    )
                 }
             }
         } else {
@@ -184,33 +190,36 @@ fun NotificationsScreen(
                 modifier       = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
-                items(uiState.notifications, key = { it.notificationId }) { notification ->
+                items(
+                    items = uiState.notifications,
+                    // ✅ FIX: duplicate key crash fix — index fallback add kiya
+                    key   = { notification ->
+                        notification.notificationId
+                            .ifEmpty { notification.hashCode().toString() }
+                    }
+                ) { notification ->
                     val enumType = try {
                         NotificationType.valueOf(notification.type)
                     } catch (e: Exception) {
-                        NotificationType.BOOKING_REQUESTED
+                        NotificationType.GENERAL
                     }
 
                     NotificationCard(
                         item     = notification,
                         enumType = enumType,
+                        onDelete = { viewModel.deleteNotification(notification.notificationId, userId) },
                         onClick  = {
                             viewModel.markAsRead(notification.notificationId, userId)
-
                             when (enumType) {
-                                // ✅ FIX: Property approved — dialog mein admin note dikhao
                                 NotificationType.PROPERTY_APPROVED -> {
                                     dialogTitle      = "Property Approved ✓"
-                                    // ✅ FIX: adminNote field nahi — body use karo
-                                    dialogNote       = notification.body
+                                    dialogNote       = notification.adminNote.ifEmpty { notification.body }
                                     dialogIsApproved = true
                                     showNoteDialog   = true
                                 }
-                                // ✅ FIX: Property rejected — dialog mein reject reason dikhao
                                 NotificationType.PROPERTY_REJECTED -> {
                                     dialogTitle      = "Property Rejected"
-                                    // ✅ FIX: adminNote field nahi — body use karo
-                                    dialogNote       = notification.body
+                                    dialogNote       = notification.adminNote.ifEmpty { notification.body }
                                     dialogIsApproved = false
                                     showNoteDialog   = true
                                 }
@@ -219,24 +228,18 @@ fun NotificationsScreen(
                                 NotificationType.BOOKING_REMINDER,
                                 NotificationType.BOOKING_COMPLETED,
                                 NotificationType.BOOKING_REQUESTED -> {
-                                    if (notification.referenceId.isNotEmpty()) {
+                                    if (notification.referenceId.isNotEmpty())
                                         navController.navigate(
                                             Screen.BookingDetails.createRoute(notification.referenceId)
                                         )
-                                    }
                                 }
                                 NotificationType.NEW_MESSAGE -> {
-                                    if (notification.referenceId.isNotEmpty()) {
+                                    if (notification.referenceId.isNotEmpty())
                                         navController.navigate(
                                             Screen.Chat.createRoute(notification.referenceId)
                                         )
-                                    }
                                 }
-                                else -> {
-                                    navController.navigate(
-                                        "notification_detail/${notification.notificationId}"
-                                    )
-                                }
+                                else -> { }
                             }
                         }
                     )
@@ -247,7 +250,12 @@ fun NotificationsScreen(
 }
 
 @Composable
-fun NotificationCard(item: Notification, enumType: NotificationType, onClick: () -> Unit) {
+fun NotificationCard(
+    item    : Notification,
+    enumType: NotificationType,
+    onClick : () -> Unit,
+    onDelete: () -> Unit
+) {
     val bgColor = if (item.isRead) Color.Transparent else PrimaryBlue.copy(alpha = 0.05f)
 
     Row(
@@ -260,16 +268,16 @@ fun NotificationCard(item: Notification, enumType: NotificationType, onClick: ()
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(42.dp)
                 .clip(CircleShape)
-                .background(screenNotificationColor(enumType).copy(alpha = 0.1f)),
+                .background(screenNotificationColor(enumType).copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector        = screenNotificationIcon(enumType),
                 contentDescription = null,
                 tint               = screenNotificationColor(enumType),
-                modifier           = Modifier.size(20.dp)
+                modifier           = Modifier.size(22.dp)
             )
         }
 
@@ -278,32 +286,32 @@ fun NotificationCard(item: Notification, enumType: NotificationType, onClick: ()
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text       = enumType.name.replace("_", " "),
+                    text       = item.title.ifEmpty { enumType.name.replace("_", " ") },
                     fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Medium,
                     fontSize   = 14.sp,
                     color      = TextPrimary,
                     modifier   = Modifier.weight(1f)
                 )
                 Text(
-                    text     = item.createdAt?.toString()?.take(10) ?: "-",
+                    text     = item.createdAt?.toDate()?.let {
+                        java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault()).format(it)
+                    } ?: "-",
                     fontSize = 11.sp,
                     color    = TextSecondary
                 )
             }
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
             Text(
                 text     = item.body,
                 fontSize = 13.sp,
                 color    = if (!item.isRead) TextPrimary else TextSecondary,
                 maxLines = 2
             )
-            // ✅ Admin note preview card mein bhi dikhao
             if (item.adminNote.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Default.Info,
-                        null,
+                        Icons.Default.Info, null,
                         modifier = Modifier.size(12.dp),
                         tint     = when (enumType) {
                             NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)
@@ -326,19 +334,31 @@ fun NotificationCard(item: Notification, enumType: NotificationType, onClick: ()
             }
         }
 
-        if (!item.isRead) {
-            Box(
-                modifier = Modifier
-                    .padding(start = 8.dp, top = 4.dp)
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryBlue)
-            )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (!item.isRead) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(PrimaryBlue)
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            IconButton(
+                onClick  = onDelete,
+                modifier = Modifier.size(20.dp)
+            ) {
+                Icon(
+                    Icons.Default.Close, "Delete",
+                    tint     = TextSecondary.copy(alpha = 0.5f),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
     }
     HorizontalDivider(
         modifier = Modifier.padding(horizontal = 16.dp),
-        color    = BorderGray.copy(alpha = 0.5f)
+        color    = BorderGray.copy(alpha = 0.4f)
     )
 }
 
@@ -354,15 +374,22 @@ fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.NEW_MESSAGE       -> Icons.AutoMirrored.Filled.Message
     NotificationType.PROPERTY_APPROVED -> Icons.Default.CheckCircle
     NotificationType.PROPERTY_REJECTED -> Icons.Default.Cancel
+    NotificationType.PROPERTY_PENDING  -> Icons.Default.HourglassEmpty
+    NotificationType.USER_VERIFIED     -> Icons.Default.VerifiedUser
+    NotificationType.USER_REJECTED     -> Icons.Default.PersonOff
+    NotificationType.USER_VERIFICATION_PENDING -> Icons.Default.PersonSearch
     else                               -> Icons.Default.Notifications
 }
 
 fun screenNotificationColor(type: NotificationType): Color = when (type) {
     NotificationType.BOOKING_REQUESTED,
-    NotificationType.BOOKING_CONFIRMED -> PrimaryBlue
-    NotificationType.BOOKING_CANCELLED -> Color.Red
-    NotificationType.PAYMENT_RECEIVED  -> Color(0xFF4CAF50)
-    NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)  // ✅ Green
-    NotificationType.PROPERTY_REJECTED -> Color.Red           // ✅ Red
-    else                               -> Color.Gray
+    NotificationType.BOOKING_CONFIRMED  -> PrimaryBlue
+    NotificationType.BOOKING_CANCELLED  -> Color.Red
+    NotificationType.PAYMENT_RECEIVED   -> Color(0xFF4CAF50)
+    NotificationType.PROPERTY_APPROVED  -> Color(0xFF4CAF50)
+    NotificationType.PROPERTY_REJECTED  -> Color.Red
+    NotificationType.PROPERTY_PENDING   -> Color(0xFFFF9800)
+    NotificationType.USER_VERIFIED      -> Color(0xFF4CAF50)
+    NotificationType.USER_REJECTED      -> Color.Red
+    else                                -> Color.Gray
 }

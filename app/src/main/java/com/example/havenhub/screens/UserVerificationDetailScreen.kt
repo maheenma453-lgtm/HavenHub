@@ -30,9 +30,12 @@ fun UserVerificationDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // ✅ FIX: User object find karo — ye hi functions ko pass hoga
     val user = remember(uiState.pendingUsers, userId) {
         uiState.pendingUsers.find { it.userId == userId }
     }
+
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
@@ -41,18 +44,67 @@ fun UserVerificationDetailScreen(
         }
     }
 
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.resetActionState()
+        }
+    }
+
+    // ── Reject Dialog ─────────────────────────────────────────────────────────
+    var showRejectDialog by remember { mutableStateOf(false) }
+    var rejectReason     by remember { mutableStateOf("") }
+
+    if (showRejectDialog && user != null) {
+        AlertDialog(
+            onDismissRequest = { showRejectDialog = false },
+            title            = { Text("Reject User") },
+            text             = {
+                OutlinedTextField(
+                    value         = rejectReason,
+                    onValueChange = { rejectReason = it },
+                    label         = { Text("Reason for rejection") },
+                    modifier      = Modifier.fillMaxWidth(),
+                    minLines      = 2
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // ✅ FIX: String ki jagah User object + reason pass karo
+                        viewModel.rejectUser(
+                            user   = user,
+                            reason = rejectReason.ifEmpty { "Does not meet criteria" }
+                        )
+                        showRejectDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Confirm Reject") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showRejectDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Verify User", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor    = Color(0xFF0D1B3E),
-                    titleContentColor = Color.White,
+                    containerColor             = Color(0xFF0D1B3E),
+                    titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
@@ -61,29 +113,42 @@ fun UserVerificationDetailScreen(
             if (user != null) {
                 Surface(tonalElevation = 2.dp, shadowElevation = 4.dp) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        // ✅ FIX: rejectUser(userId) → showRejectDialog = true (dialog se user object pass hoga)
                         OutlinedButton(
-                            onClick  = { viewModel.rejectUser(userId) },
-                            modifier = Modifier.weight(1f).height(50.dp),
+                            onClick  = { showRejectDialog = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
                             enabled  = !uiState.isLoading,
                             shape    = RoundedCornerShape(12.dp),
                             colors   = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error)
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
                         ) { Text("Reject", fontWeight = FontWeight.SemiBold) }
 
+                        // ✅ FIX: approveUser(userId) → verifyUser(user) — sahi function naam
                         Button(
-                            onClick  = { viewModel.approveUser(userId) },
-                            modifier = Modifier.weight(1f).height(50.dp),
+                            onClick  = { viewModel.verifyUser(user) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
                             enabled  = !uiState.isLoading,
                             shape    = RoundedCornerShape(12.dp),
                             colors   = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF0D1B3E))
+                                containerColor = Color(0xFF0D1B3E)
+                            )
                         ) {
                             if (uiState.isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp, color = Color.White)
+                                CircularProgressIndicator(
+                                    modifier    = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color       = Color.White
+                                )
                             } else {
                                 Text("Approve", fontWeight = FontWeight.SemiBold)
                             }
@@ -93,7 +158,11 @@ fun UserVerificationDetailScreen(
             }
         }
     ) { pad ->
-        Box(modifier = Modifier.fillMaxSize().padding(pad)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(pad)
+        ) {
             when {
                 uiState.isLoading && user == null -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -103,7 +172,9 @@ fun UserVerificationDetailScreen(
                 }
                 else -> {
                     LazyColumn(
-                        modifier            = Modifier.fillMaxSize().padding(16.dp),
+                        modifier            = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // ── User Details Card ────────────────────────────────
@@ -113,18 +184,29 @@ fun UserVerificationDetailScreen(
                                 shape     = RoundedCornerShape(16.dp),
                                 elevation = CardDefaults.cardElevation(2.dp)
                             ) {
-                                Column(modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("User Details", fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 16.sp, color = Color(0xFF0D1B3E))
+                                Column(
+                                    modifier            = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Text(
+                                        "User Details",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize   = 16.sp,
+                                        color      = Color(0xFF0D1B3E)
+                                    )
                                     HorizontalDivider(thickness = 0.5.dp)
                                     UserDetailRow("Name",   user.fullName)
                                     UserDetailRow("Email",  user.email)
-                                    UserDetailRow("Role",   user.role.lowercase()
-                                        .replaceFirstChar { it.uppercase() })
-                                    UserDetailRow("Status",
-                                        if (user.isVerified) "Verified" else "Pending")
-                                    // ✅ CNIC Number
+                                    UserDetailRow(
+                                        "Role",
+                                        user.role.toString()
+                                            .lowercase()
+                                            .replaceFirstChar { it.uppercase() }
+                                    )
+                                    UserDetailRow(
+                                        "Status",
+                                        if (user.isVerified) "Verified" else "Pending"
+                                    )
                                     if (user.cnicNumber.isNotEmpty()) {
                                         UserDetailRow("CNIC", user.cnicNumber)
                                     }
@@ -140,13 +222,22 @@ fun UserVerificationDetailScreen(
                                     shape     = RoundedCornerShape(16.dp),
                                     elevation = CardDefaults.cardElevation(2.dp)
                                 ) {
-                                    Column(modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text("CNIC Document", fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 16.sp, color = Color(0xFF0D1B3E))
+                                    Column(
+                                        modifier            = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Text(
+                                            "CNIC Document",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize   = 16.sp,
+                                            color      = Color(0xFF0D1B3E)
+                                        )
                                         HorizontalDivider(thickness = 0.5.dp)
-                                        Text("Verify the CNIC image below:",
-                                            fontSize = 13.sp, color = Color.Gray)
+                                        Text(
+                                            "Verify the CNIC image below:",
+                                            fontSize = 13.sp,
+                                            color    = Color.Gray
+                                        )
                                         AsyncImage(
                                             model              = user.cnicImageUrl,
                                             contentDescription = "CNIC Image",
@@ -154,7 +245,7 @@ fun UserVerificationDetailScreen(
                                                 .fillMaxWidth()
                                                 .height(220.dp)
                                                 .clip(RoundedCornerShape(12.dp)),
-                                            contentScale = ContentScale.Fit
+                                            contentScale       = ContentScale.Fit
                                         )
                                     }
                                 }
@@ -164,25 +255,27 @@ fun UserVerificationDetailScreen(
                         // ── Info Banner ──────────────────────────────────────
                         item {
                             Row(
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .then(Modifier.run {
-                                        if (user.isVerified)
-                                            background(Color(0xFFE8F5E9))
-                                        else
-                                            background(Color(0xFFFFF8E1))
-                                    })
+                                    .background(
+                                        if (user.isVerified) Color(0xFFE8F5E9)
+                                        else Color(0xFFFFF8E1)
+                                    )
                                     .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                                verticalAlignment     = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Text(
-                                    if (user.isVerified)
+                                    text = if (user.isVerified)
                                         "✅ This user is already verified."
                                     else
                                         "⏳ Awaiting admin verification. Review CNIC above.",
                                     fontSize = 13.sp,
-                                    color = if (user.isVerified) Color(0xFF2E7D32) else Color(0xFF8A7040)
+                                    color    = if (user.isVerified)
+                                        Color(0xFF2E7D32)
+                                    else
+                                        Color(0xFF8A7040)
                                 )
                             }
                         }
@@ -193,6 +286,7 @@ fun UserVerificationDetailScreen(
     }
 }
 
+// ── Detail Row ────────────────────────────────────────────────────────────────
 @Composable
 private fun UserDetailRow(label: String, value: String) {
     Row(
@@ -200,9 +294,15 @@ private fun UserDetailRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment     = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text  = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text       = value,
+            fontWeight = FontWeight.Bold,
+            style      = MaterialTheme.typography.bodyMedium
+        )
     }
 }
