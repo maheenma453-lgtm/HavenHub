@@ -27,6 +27,7 @@ fun PropertyVerificationDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // ✅ Property object find karo list se — yahi object functions ko pass hoga
     val property = remember(uiState.pendingProperties, propertyId) {
         uiState.pendingProperties.find { it.propertyId == propertyId }
     }
@@ -52,7 +53,8 @@ fun PropertyVerificationDetailScreen(
     var rejectReason      by remember { mutableStateOf("") }
     var adminNote         by remember { mutableStateOf("") }
 
-    if (showRejectDialog) {
+    // ── Reject Dialog ─────────────────────────────────────────────────────────
+    if (showRejectDialog && property != null) {
         AlertDialog(
             onDismissRequest = { showRejectDialog = false },
             title            = { Text("Reject Property") },
@@ -67,9 +69,10 @@ fun PropertyVerificationDetailScreen(
             },
             confirmButton = {
                 Button(onClick = {
+                    // ✅ FIX: String ki jagah Property object pass karo
                     viewModel.rejectProperty(
-                        propertyId,
-                        rejectReason.ifEmpty { "Does not meet criteria" }
+                        property  = property,
+                        adminNote = rejectReason.ifEmpty { "Does not meet criteria" }
                     )
                     showRejectDialog = false
                 }) { Text("Confirm Reject") }
@@ -80,7 +83,8 @@ fun PropertyVerificationDetailScreen(
         )
     }
 
-    if (showApproveDialog) {
+    // ── Approve Dialog ────────────────────────────────────────────────────────
+    if (showApproveDialog && property != null) {
         AlertDialog(
             onDismissRequest = { showApproveDialog = false },
             title            = { Text("Approve Property") },
@@ -98,7 +102,11 @@ fun PropertyVerificationDetailScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.approveProperty(propertyId, adminNote)
+                    // ✅ FIX: String ki jagah Property object pass karo
+                    viewModel.approveProperty(
+                        property  = property,
+                        adminNote = adminNote
+                    )
                     showApproveDialog = false
                 }) { Text("Approve") }
             },
@@ -124,7 +132,9 @@ fun PropertyVerificationDetailScreen(
             if (property != null) {
                 Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
                     Row(
-                        modifier              = Modifier.fillMaxWidth().padding(16.dp),
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         OutlinedButton(
@@ -132,6 +142,7 @@ fun PropertyVerificationDetailScreen(
                             modifier = Modifier.weight(1f),
                             enabled  = !uiState.isLoading
                         ) { Text("Reject") }
+
                         Button(
                             onClick  = { showApproveDialog = true },
                             modifier = Modifier.weight(1f),
@@ -153,7 +164,9 @@ fun PropertyVerificationDetailScreen(
     ) { pad ->
         if (property == null) {
             Box(
-                modifier         = Modifier.fillMaxSize().padding(pad),
+                modifier         = Modifier
+                    .fillMaxSize()
+                    .padding(pad),
                 contentAlignment = Alignment.Center
             ) {
                 if (uiState.isLoading) CircularProgressIndicator()
@@ -168,7 +181,7 @@ fun PropertyVerificationDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding      = PaddingValues(vertical = 16.dp)
             ) {
-                // ── Basic Info ──
+                // ── Basic Info ────────────────────────────────────────────────
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(
@@ -176,7 +189,11 @@ fun PropertyVerificationDetailScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Home, null, tint = MaterialTheme.colorScheme.primary)
+                                Icon(
+                                    Icons.Default.Home,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     "Basic Information",
@@ -201,7 +218,7 @@ fun PropertyVerificationDetailScreen(
                     }
                 }
 
-                // ── Owner Info ──
+                // ── Owner Info ────────────────────────────────────────────────
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(
@@ -220,7 +237,7 @@ fun PropertyVerificationDetailScreen(
                     }
                 }
 
-                // ── Description ──
+                // ── Description ───────────────────────────────────────────────
                 if (property.description.isNotEmpty()) {
                     item {
                         Card(modifier = Modifier.fillMaxWidth()) {
@@ -231,13 +248,16 @@ fun PropertyVerificationDetailScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(Modifier.height(8.dp))
-                                Text(property.description, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    property.description,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
                             }
                         }
                     }
                 }
 
-                // ── Amenities ──
+                // ── Amenities ─────────────────────────────────────────────────
                 if (property.amenities.isNotEmpty()) {
                     item {
                         Card(modifier = Modifier.fillMaxWidth()) {
@@ -254,7 +274,7 @@ fun PropertyVerificationDetailScreen(
                     }
                 }
 
-                // ── Property Photos ──
+                // ── Property Photos ───────────────────────────────────────────
                 item {
                     Text(
                         "Property Photos",
@@ -267,7 +287,9 @@ fun PropertyVerificationDetailScreen(
                     item {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Box(
-                                modifier         = Modifier.fillMaxWidth().padding(24.dp),
+                                modifier         = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -284,14 +306,16 @@ fun PropertyVerificationDetailScreen(
                             AsyncImage(
                                 model              = imageUrl,
                                 contentDescription = null,
-                                modifier           = Modifier.fillMaxWidth().height(220.dp),
+                                modifier           = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp),
                                 contentScale       = ContentScale.Crop
                             )
                         }
                     }
                 }
 
-                // ── ✅ PT-1 Document Section ──
+                // ── PT-1 Document ─────────────────────────────────────────────
                 item {
                     Text(
                         "PT-1 Verification Document",
@@ -317,19 +341,18 @@ fun PropertyVerificationDetailScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    if (property.hasPt1Document)
+                                    text = if (property.hasPt1Document)
                                         "PT-1 Document Uploaded"
                                     else
                                         "PT-1 Document Not Uploaded",
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (property.hasPt1Document)
+                                    color      = if (property.hasPt1Document)
                                         MaterialTheme.colorScheme.primary
                                     else
                                         MaterialTheme.colorScheme.error
                                 )
                             }
 
-                            // ✅ PT-1 image show karo agar uploaded hai
                             if (property.hasPt1Document) {
                                 HorizontalDivider()
                                 Text(
@@ -367,6 +390,7 @@ fun PropertyVerificationDetailScreen(
     }
 }
 
+// ── Detail Row ────────────────────────────────────────────────────────────────
 @Composable
 private fun DetailItem(label: String, value: String) {
     Row(

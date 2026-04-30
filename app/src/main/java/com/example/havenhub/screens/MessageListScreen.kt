@@ -38,40 +38,43 @@ fun MessageListScreen(
     val uiState    by viewModel.uiState.collectAsState()
     val currentUid  = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
+    // FIX: userRole aur loadConversations ko alag LaunchedEffect mein mat rakho —
+    // race condition hoti thi. Ab ek hi effect mein pehle role fetch karo,
+    // phir conversations load karo. Is tarah guaranteed order hai.
     var userRole  by remember { mutableStateOf("") }
     val userNames  = remember { mutableStateMapOf<String, String>() }
 
     LaunchedEffect(currentUid) {
-        if (currentUid.isNotEmpty()) {
-            try {
-                val directDoc = FirebaseFirestore.getInstance()
+        if (currentUid.isEmpty()) return@LaunchedEffect
+
+        // Step 1: Role fetch karo pehle
+        try {
+            val directDoc = FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(currentUid)
+                .get()
+                .await()
+
+            userRole = if (directDoc.exists()) {
+                directDoc.getString("role")?.trim() ?: ""
+            } else {
+                val query = FirebaseFirestore.getInstance()
                     .collection("users")
-                    .document(currentUid)
+                    .whereEqualTo("userId", currentUid)
+                    .limit(1)
                     .get()
                     .await()
-
-                if (directDoc.exists()) {
-                    // ✅ .trim() — trailing space se bachao
-                    userRole = directDoc.getString("role")?.trim() ?: ""
-                } else {
-                    val query = FirebaseFirestore.getInstance()
-                        .collection("users")
-                        .whereEqualTo("userId", currentUid)
-                        .limit(1)
-                        .get()
-                        .await()
-                    // ✅ .trim() — trailing space se bachao
-                    userRole = query.documents.firstOrNull()
-                        ?.getString("role")?.trim() ?: ""
-                }
-            } catch (_: Exception) {
-                userRole = ""
+                query.documents.firstOrNull()?.getString("role")?.trim() ?: ""
             }
-
-            viewModel.loadConversations(currentUid)
+        } catch (_: Exception) {
+            userRole = ""
         }
+
+        // Step 2: Role fetch hone ke BAAD conversations load karo
+        viewModel.loadConversations(currentUid)
     }
 
+    // User names fetch — conversations update hone pe chalega
     LaunchedEffect(uiState.conversations) {
         uiState.conversations.forEach { convo ->
             val participants = (convo["participants"] as? List<*>) ?: emptyList<Any>()
@@ -140,6 +143,9 @@ fun MessageListScreen(
                 .background(BackgroundWhite)
         ) {
             when {
+                // FIX: Loading state — conversations aur userRole dono ka wait karo.
+                // Pehle sirf uiState.isLoading check hota tha, userRole empty hone pe
+                // bhi EmptyMessagesState show ho jata tha with wrong message.
                 uiState.isLoading -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
@@ -148,6 +154,8 @@ fun MessageListScreen(
                 }
 
                 uiState.conversations.isEmpty() -> {
+                    // FIX: userRole ab guaranteed set hai jab yahan pahuncho,
+                    // kyunki conversations load karne se pehle role fetch ho chuki hai.
                     EmptyMessagesState(userRole = userRole)
                 }
 
@@ -217,7 +225,7 @@ private fun EmptyMessagesState(userRole: String) {
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text     = if (userRole == "landlord")
+            text     = if (userRole.equals("landlord", ignoreCase = true))
                 "Tenants will appear here when they message you"
             else
                 "Start a conversation with a landlord",

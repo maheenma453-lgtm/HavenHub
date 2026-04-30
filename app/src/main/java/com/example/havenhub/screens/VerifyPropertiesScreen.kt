@@ -35,24 +35,39 @@ fun VerifyPropertiesScreen(
     val uiState           by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // ✅ FIX: errorMessage aaye to snackbar dikhao, phir reset karo
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.resetActionState()
         }
     }
+
+    // ✅ FIX: actionSuccess true ho to snackbar dikhao (successMessage ke saath), phir reset karo
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
-            snackbarHostState.showSnackbar("Action completed successfully")
+            val msg = uiState.successMessage ?: "Action completed successfully"
+            snackbarHostState.showSnackbar(msg)
             viewModel.resetActionState()
         }
+    }
+
+    // ✅ Screen open hone pe pending properties load karo
+    LaunchedEffect(Unit) {
+        viewModel.loadPendingProperties()
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Verify Properties", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "Verify Properties",
+                        color      = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
@@ -117,7 +132,9 @@ fun VerifyPropertiesScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Brush.verticalGradient(listOf(PrimaryBlue, Color(0xFF1565C0))))
+                            .background(
+                                Brush.verticalGradient(listOf(PrimaryBlue, Color(0xFF1565C0)))
+                            )
                             .padding(horizontal = 16.dp, vertical = 14.dp)
                     ) {
                         Row(
@@ -131,7 +148,12 @@ fun VerifyPropertiesScreen(
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.HourglassEmpty, null, tint = WarningOrange, modifier = Modifier.size(20.dp))
+                                Icon(
+                                    Icons.Default.HourglassEmpty,
+                                    null,
+                                    tint     = WarningOrange,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                             Column {
                                 Text(
@@ -157,7 +179,9 @@ fun VerifyPropertiesScreen(
                             ModernPropertyVerifyCard(
                                 property = property,
                                 onClick  = {
-                                    navController.navigate("property_verification_detail/${property.propertyId}")
+                                    navController.navigate(
+                                        "property_verification_detail/${property.propertyId}"
+                                    )
                                 }
                             )
                         }
@@ -168,6 +192,7 @@ fun VerifyPropertiesScreen(
     }
 }
 
+// ── Property Card ─────────────────────────────────────────────────────────────
 @Composable
 fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
     Card(
@@ -189,7 +214,12 @@ fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                     .background(PrimaryBlue.copy(.1f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Home, null, tint = PrimaryBlue, modifier = Modifier.size(24.dp))
+                Icon(
+                    Icons.Default.Home,
+                    null,
+                    tint     = PrimaryBlue,
+                    modifier = Modifier.size(24.dp)
+                )
             }
 
             Spacer(Modifier.width(12.dp))
@@ -221,7 +251,9 @@ fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            property.propertyType.lowercase().replaceFirstChar { it.uppercase() },
+                            property.propertyType
+                                .lowercase()
+                                .replaceFirstChar { it.uppercase() },
                             fontSize   = 11.sp,
                             color      = PrimaryBlue,
                             fontWeight = FontWeight.Medium
@@ -245,14 +277,22 @@ fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
             }
 
             // Pending badge + arrow
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .background(WarningOrange.copy(.12f))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Text("Pending", fontSize = 11.sp, color = WarningOrange, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Pending",
+                        fontSize   = 11.sp,
+                        color      = WarningOrange,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -264,23 +304,3 @@ fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
