@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.Property
+import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.repository.BookingRepository
 import com.example.havenhub.repository.PaymentRepository
 import com.example.havenhub.repository.PropertyRepository
@@ -20,29 +21,33 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class HomeUiState(
-    val featuredProperties  : List<Property> = emptyList(),
-    val nearbyProperties    : List<Property> = emptyList(),
-    val allProperties       : List<Property> = emptyList(),
-    val isLoading           : Boolean        = false,
-    val errorMessage        : String?        = null,
-    val totalProperties     : Int            = 0,
-    val activeBookingsCount : Int            = 0,
-    val pendingRequestsCount: Int            = 0,
-    val totalRevenue        : Double         = 0.0,
-    val averageRating       : Float          = 0f
+    val featuredProperties   : List<Property> = emptyList(),
+    val nearbyProperties     : List<Property> = emptyList(),
+    val allProperties        : List<Property> = emptyList(),
+    val isLoading            : Boolean        = false,
+    val errorMessage         : String?        = null,
+    val totalProperties      : Int            = 0,
+    val activeBookingsCount  : Int            = 0,
+    val pendingRequestsCount : Int            = 0,
+    val totalRevenue         : Double         = 0.0,
+    val averageRating        : Float          = 0f,
+    // ✦ Favourites state
+    val favouriteProperties  : List<Property> = emptyList(),
+    val favouriteIds         : Set<String>    = emptySet(),
+    val isFavouritesLoading  : Boolean        = false
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val propertyRepository: PropertyRepository,
     private val bookingRepository : BookingRepository,
-    private val paymentRepository : PaymentRepository
+    private val paymentRepository : PaymentRepository,
+    private val firebaseDataManager: FirebaseDataManager   // ✦ NEW
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    // ✅ userId aur userRole — HomeScreen inhe collect karega
     private val _userId   = MutableStateFlow("")
     val userId: StateFlow<String> = _userId.asStateFlow()
 
@@ -54,7 +59,7 @@ class HomeViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Firebase se userId aur userRole fetch karo
+    // User info + favourite IDs load karo
     // ─────────────────────────────────────────────────────────────
     private fun loadUserInfo() {
         viewModelScope.launch {
@@ -62,24 +67,98 @@ class HomeViewModel @Inject constructor(
                 val firebaseUser = FirebaseAuth.getInstance().currentUser
                 if (firebaseUser == null) {
                     _userId.value   = ""
-                    _userRole.value = "tenant" // guest = tenant view
+                    _userRole.value = "tenant"
                     return@launch
                 }
-
                 _userId.value = firebaseUser.uid
 
-                // Firestore se role fetch karo
                 val doc = FirebaseFirestore.getInstance()
                     .collection("users")
                     .document(firebaseUser.uid)
                     .get()
                     .await()
-
                 _userRole.value = doc.getString("role") ?: "tenant"
+
+                // ✦ Favourite IDs bhi load karo taake heart icon sahi dikhe
+                loadFavouriteIds(firebaseUser.uid)
 
             } catch (e: Exception) {
                 _userId.value   = FirebaseAuth.getInstance().currentUser?.uid ?: ""
                 _userRole.value = "tenant"
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ✦ FAVOURITES — IDs load (for heart icon state in cards)
+    // ─────────────────────────────────────────────────────────────
+    private fun loadFavouriteIds(userId: String) {
+        if (userId.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val result = firebaseDataManager.getFavouriteIds(userId)
+                if (result is Resource.Success) {
+                    _uiState.update { it.copy(favouriteIds = result.data.toSet()) }
+                }
+            } catch (e: Exception) {
+                // Silent — heart icons sirf default state mein rahenge
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ✦ FAVOURITES — Full list load (FavouritesScreen ke liye)
+    // ─────────────────────────────────────────────────────────────
+    fun loadFavouriteProperties() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isFavouritesLoading = true) }
+            try {
+                val result = firebaseDataManager.getFavouriteProperties(uid)
+                when (result) {
+                    is Resource.Success -> _uiState.update {
+                        it.copy(
+                            favouriteProperties = result.data,
+                            favouriteIds        = result.data.map { p -> p.propertyId }.toSet(),
+                            isFavouritesLoading = false
+                        )
+                    }
+                    is Resource.Error   -> _uiState.update {
+                        it.copy(isFavouritesLoading = false)
+                    }
+                    else                -> _uiState.update {
+                        it.copy(isFavouritesLoading = false)
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isFavouritesLoading = false) }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ✦ FAVOURITES — Toggle (add/remove)
+    // ─────────────────────────────────────────────────────────────
+    fun toggleFavourite(propertyId: String) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        viewModelScope.launch {
+            val isFav = _uiState.value.favouriteIds.contains(propertyId)
+            // Optimistic UI update — turant dikhe
+            if (isFav) {
+                _uiState.update {
+                    it.copy(
+                        favouriteIds        = it.favouriteIds - propertyId,
+                        favouriteProperties = it.favouriteProperties.filter { p -> p.propertyId != propertyId }
+                    )
+                }
+                firebaseDataManager.removeFavourite(uid, propertyId)
+            } else {
+                _uiState.update {
+                    it.copy(favouriteIds = it.favouriteIds + propertyId)
+                }
+                firebaseDataManager.addFavourite(uid, propertyId)
+                // Nai property fetch karke list refresh karo
+                loadFavouriteProperties()
             }
         }
     }

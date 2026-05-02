@@ -24,7 +24,6 @@ class FirebaseDataManager @Inject constructor(
     private val reviewsCollection       = firestore.collection("reviews")
     private val notificationsCollection = firestore.collection("notifications")
 
-    // ── Helper — updatedAt ko safely Long mein convert karo ──────────────────
     private fun extractUpdatedAt(doc: com.google.firebase.firestore.DocumentSnapshot): Long? {
         return when (val raw = doc.get("updatedAt")) {
             is Long      -> raw
@@ -33,7 +32,6 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── Helper — DocumentSnapshot se manually Property banao ─────────────────
     private fun parseProperty(doc: com.google.firebase.firestore.DocumentSnapshot): Property? {
         return try {
             Property(
@@ -55,11 +53,9 @@ class FirebaseDataManager @Inject constructor(
                 maxGuests         = (doc.getLong("maxGuests")          ?: 2L).toInt(),
                 areaSqFt          = doc.getDouble("areaSqFt"),
                 floor             = doc.getLong("floor")?.toInt(),
-                imageUrls         = (doc.get("imageUrls") as? List<*>)
-                    ?.filterIsInstance<String>()   ?: emptyList(),
+                imageUrls         = (doc.get("imageUrls") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                 pt1DocumentUrl    = doc.getString("pt1DocumentUrl")    ?: "",
-                amenities         = (doc.get("amenities") as? List<*>)
-                    ?.filterIsInstance<String>()   ?: emptyList(),
+                amenities         = (doc.get("amenities") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                 drawableImageName = doc.getString("drawableImageName") ?: "",
                 petsAllowed       = doc.getBoolean("petsAllowed")      ?: false,
                 smokingAllowed    = doc.getBoolean("smokingAllowed")   ?: false,
@@ -75,9 +71,7 @@ class FirebaseDataManager @Inject constructor(
                 createdAt         = doc.getTimestamp("createdAt"),
                 updatedAt         = doc.getTimestamp("updatedAt")
             )
-        } catch (e: Exception) {
-            null
-        }
+        } catch (e: Exception) { null }
     }
 
     // ── User ─────────────────────────────────────────────────────────────────
@@ -86,273 +80,237 @@ class FirebaseDataManager @Inject constructor(
         return try {
             usersCollection.document(user.userId).set(user).await()
             Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to save user")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to save user") }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // getUser — FIX: Pehle Auth UID se document dhundho (normal case).
-    // Agar document empty aaye (manually added users jinka doc ID alag hai),
-    // toh "userId" field se query karo — yeh fallback manually added users
-    // jaise landlord_001, tenant_001 ke liye kaam karta hai.
-    //
-    // Problem: Firestore mein doc ID = "landlord_001" lekin
-    //          Auth UID = "L26zDiaueIVyoSYGJV4cm4Rx0992"
-    //          Aur userId field mein Auth UID stored hai.
-    // Solution: Direct doc fetch fail ho toh whereEqualTo("userId", uid) se dhundho.
-    // ─────────────────────────────────────────────────────────────────────────
     suspend fun getUser(uid: String): Resource<User> {
         return try {
-            // Step 1: Pehle direct UID se try karo (normal registered users)
             val directSnapshot = usersCollection.document(uid).get().await()
-
             if (directSnapshot.exists()) {
                 val user = directSnapshot.toObject(User::class.java)
-                if (user != null) {
-                    Log.d("HAVEN_DATA", "getUser: found by doc ID = $uid")
-                    return Resource.Success(user)
-                }
+                if (user != null) return Resource.Success(user)
             }
-
-            // Step 2: Fallback — userId field se query karo
-            // (manually added users jinka doc ID Auth UID se alag hai)
-            Log.d("HAVEN_DATA", "getUser: doc not found by ID, querying by userId field = $uid")
-            val querySnapshot = usersCollection
-                .whereEqualTo("userId", uid)
-                .limit(1)
-                .get()
-                .await()
-
+            val querySnapshot = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
             if (!querySnapshot.isEmpty) {
                 val user = querySnapshot.documents.first().toObject(User::class.java)
-                if (user != null) {
-                    Log.d("HAVEN_DATA", "getUser: found by userId field query")
-                    return Resource.Success(user)
-                }
+                if (user != null) return Resource.Success(user)
             }
-
-            Log.d("HAVEN_DATA", "getUser: user not found for uid = $uid")
             Resource.Error("User not found")
-
-        } catch (e: Exception) {
-            Log.e("HAVEN_DATA", "getUser error: ${e.localizedMessage}")
-            Resource.Error(e.localizedMessage ?: "Failed to fetch user")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch user") }
     }
 
     suspend fun updateUserFields(uid: String, fields: Map<String, Any>): Resource<Unit> {
         return try {
-            // FIX: Update bhi same logic — pehle direct, phir query se doc ID lo
             val directSnapshot = usersCollection.document(uid).get().await()
-
-            val docId = if (directSnapshot.exists()) {
-                uid
-            } else {
-                // Manually added user — userId field se doc ID dhundho
-                val querySnapshot = usersCollection
-                    .whereEqualTo("userId", uid)
-                    .limit(1)
-                    .get()
-                    .await()
-                querySnapshot.documents.firstOrNull()?.id
-                    ?: return Resource.Error("User document not found for update")
+            val docId = if (directSnapshot.exists()) uid
+            else {
+                val q = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
+                q.documents.firstOrNull()?.id ?: return Resource.Error("User document not found")
             }
-
             usersCollection.document(docId).update(fields).await()
             Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to update user")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to update user") }
     }
 
     suspend fun deleteUser(uid: String): Resource<Unit> {
         return try {
             usersCollection.document(uid).delete().await()
             Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to delete user")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to delete user") }
     }
 
     // ── Property ─────────────────────────────────────────────────────────────
 
     suspend fun addProperty(property: Property): Resource<String> {
         return try {
-            val docRef      = propertiesCollection.document()
-            val newProperty = property.copy(propertyId = docRef.id)
-            docRef.set(newProperty).await()
+            val docRef = propertiesCollection.document()
+            docRef.set(property.copy(propertyId = docRef.id)).await()
             Resource.Success(docRef.id)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to add property")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to add property") }
     }
 
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
-            val snapshot   = propertiesCollection.get().await()
-            val properties = snapshot.documents
-                .mapNotNull { doc -> parseProperty(doc) }
-                .sortedByDescending { it.createdAt?.seconds ?: 0L }
-            Resource.Success(properties)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to fetch properties")
-        }
+            val snapshot = propertiesCollection.get().await()
+            Resource.Success(snapshot.documents.mapNotNull { parseProperty(it) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L })
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch properties") }
     }
 
     suspend fun getPropertiesByOwner(ownerId: String): Resource<List<Property>> {
         return try {
-            val snapshot   = propertiesCollection
-                .whereEqualTo("ownerId", ownerId)
-                .get()
-                .await()
-            val properties = snapshot.documents
-                .mapNotNull { doc -> parseProperty(doc) }
-                .sortedByDescending { it.createdAt?.seconds ?: 0L }
-            Resource.Success(properties)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to fetch owner properties")
-        }
+            val snapshot = propertiesCollection.whereEqualTo("ownerId", ownerId).get().await()
+            Resource.Success(snapshot.documents.mapNotNull { parseProperty(it) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L })
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch owner properties") }
     }
 
     suspend fun getPropertyById(propertyId: String): Resource<Property> {
         return try {
-            val doc      = propertiesCollection.document(propertyId).get().await()
-            val property = parseProperty(doc)
-                ?: return Resource.Error("Property not found")
-            Resource.Success(property)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to fetch property")
-        }
+            val doc = propertiesCollection.document(propertyId).get().await()
+            Resource.Success(parseProperty(doc) ?: return Resource.Error("Property not found"))
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch property") }
     }
 
     suspend fun updateProperty(propertyId: String, fields: Map<String, Any>): Resource<Unit> {
         return try {
             propertiesCollection.document(propertyId).update(fields).await()
             Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to update property")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to update property") }
     }
 
     suspend fun deleteProperty(propertyId: String): Resource<Unit> {
         return try {
             propertiesCollection.document(propertyId).delete().await()
             Resource.Success(Unit)
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to delete property") }
+    }
+
+    // ── Favourites ✦ ─────────────────────────────────────────────────────────
+
+    suspend fun addFavourite(userId: String, propertyId: String): Resource<Unit> {
+        return try {
+            usersCollection.document(userId).collection("favourites").document(propertyId)
+                .set(mapOf("propertyId" to propertyId, "addedAt" to FieldValue.serverTimestamp()))
+                .await()
+            Log.d("HAVEN_FAV", "addFavourite SUCCESS: userId=$userId propertyId=$propertyId")
+            Resource.Success(Unit)
         } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to delete property")
+            Log.e("HAVEN_FAV", "addFavourite FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to add favourite")
         }
+    }
+
+    suspend fun removeFavourite(userId: String, propertyId: String): Resource<Unit> {
+        return try {
+            usersCollection.document(userId).collection("favourites").document(propertyId)
+                .delete().await()
+            Log.d("HAVEN_FAV", "removeFavourite SUCCESS: userId=$userId propertyId=$propertyId")
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Log.e("HAVEN_FAV", "removeFavourite FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to remove favourite")
+        }
+    }
+
+    suspend fun getFavouriteIds(userId: String): Resource<List<String>> {
+        return try {
+            val snapshot = usersCollection.document(userId).collection("favourites").get().await()
+            val ids = snapshot.documents.map { it.id }
+            Log.d("HAVEN_FAV", "getFavouriteIds: userId=$userId ids=$ids")
+            Resource.Success(ids)
+        } catch (e: Exception) {
+            Log.e("HAVEN_FAV", "getFavouriteIds FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to fetch favourite IDs")
+        }
+    }
+
+    // ✅ FIX: whereIn("__name__") kaam nahi karta — direct .document(id).get() use karo
+    suspend fun getFavouriteProperties(userId: String): Resource<List<Property>> {
+        return try {
+            val idsResult = getFavouriteIds(userId)
+            if (idsResult is Resource.Error) return Resource.Error(idsResult.message)
+            val ids = (idsResult as Resource.Success).data
+            if (ids.isEmpty()) return Resource.Success(emptyList())
+
+            val allProperties = mutableListOf<Property>()
+            for (propertyId in ids) {
+                try {
+                    val doc = propertiesCollection.document(propertyId).get().await()
+                    if (doc.exists()) {
+                        parseProperty(doc)?.let { allProperties.add(it) }
+                    } else {
+                        Log.w("HAVEN_FAV", "Property $propertyId exist nahi karti — orphan")
+                    }
+                } catch (e: Exception) {
+                    Log.e("HAVEN_FAV", "Property $propertyId fetch fail: ${e.localizedMessage}")
+                }
+            }
+            Log.d("HAVEN_FAV", "getFavouriteProperties result: ${allProperties.size} properties")
+            Resource.Success(allProperties)
+        } catch (e: Exception) {
+            Log.e("HAVEN_FAV", "getFavouriteProperties FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to fetch favourite properties")
+        }
+    }
+
+    suspend fun isFavourite(userId: String, propertyId: String): Boolean {
+        return try {
+            usersCollection.document(userId).collection("favourites").document(propertyId)
+                .get().await().exists()
+        } catch (e: Exception) { false }
     }
 
     // ── Booking ──────────────────────────────────────────────────────────────
 
     suspend fun createBooking(booking: Booking): Resource<String> {
         return try {
-            val docRef     = bookingsCollection.document()
-            val newBooking = booking.copy(bookingId = docRef.id)
-            docRef.set(newBooking).await()
+            val docRef = bookingsCollection.document()
+            docRef.set(booking.copy(bookingId = docRef.id)).await()
             Resource.Success(docRef.id)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to create booking")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to create booking") }
     }
 
     suspend fun getBookingById(bookingId: String): Resource<Booking> {
         return try {
             val snapshot = bookingsCollection.document(bookingId).get().await()
-            val booking  = snapshot.toObject(Booking::class.java)
-                ?: return Resource.Error("Booking not found")
-            Resource.Success(booking)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to fetch booking")
-        }
+            Resource.Success(snapshot.toObject(Booking::class.java) ?: return Resource.Error("Booking not found"))
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch booking") }
     }
 
     suspend fun getAllBookings(): Resource<List<Booking>> {
         return try {
             val snapshot = bookingsCollection.get().await()
-            val bookings = snapshot.toObjects(Booking::class.java)
-                .sortedByDescending { it.createdAt }
-            Resource.Success(bookings)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to fetch all bookings")
-        }
+            Resource.Success(snapshot.toObjects(Booking::class.java).sortedByDescending { it.createdAt })
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch all bookings") }
     }
 
     suspend fun getBookingsByTenantId(tenantId: String): List<Booking> {
         return try {
-            val snapshot = bookingsCollection
-                .whereEqualTo("tenantId", tenantId)
-                .get()
-                .await()
-            snapshot.toObjects(Booking::class.java)
-                .sortedByDescending { it.createdAt }
-        } catch (e: Exception) {
-            emptyList()
-        }
+            bookingsCollection.whereEqualTo("tenantId", tenantId).get().await()
+                .toObjects(Booking::class.java).sortedByDescending { it.createdAt }
+        } catch (e: Exception) { emptyList() }
     }
 
     suspend fun getBookingsByLandlordId(landlordId: String): List<Booking> {
         return try {
-            val snapshot = bookingsCollection
-                .whereEqualTo("landlordId", landlordId)
-                .get()
-                .await()
-            snapshot.toObjects(Booking::class.java)
-                .sortedByDescending { it.createdAt }
-        } catch (e: Exception) {
-            emptyList()
-        }
+            bookingsCollection.whereEqualTo("landlordId", landlordId).get().await()
+                .toObjects(Booking::class.java).sortedByDescending { it.createdAt }
+        } catch (e: Exception) { emptyList() }
     }
 
     suspend fun updateBookingStatus(bookingId: String, status: String): Resource<Unit> {
         return try {
-            bookingsCollection.document(bookingId)
-                .update("status", status)
-                .await()
+            bookingsCollection.document(bookingId).update("status", status).await()
             Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to update booking status")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to update booking status") }
     }
 
     // ── Notifications ─────────────────────────────────────────────────────────
 
     suspend fun sendNotification(notificationData: Map<String, Any>): Resource<Unit> {
         return try {
-            val dataWithTime = notificationData.toMutableMap()
-            dataWithTime["createdAt"] = FieldValue.serverTimestamp()
-            notificationsCollection.add(dataWithTime).await()
+            notificationsCollection.add(notificationData.toMutableMap().apply {
+                put("createdAt", FieldValue.serverTimestamp())
+            }).await()
             Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to send notification")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to send notification") }
     }
 
     // ── Review ────────────────────────────────────────────────────────────────
 
     suspend fun addReview(review: Review): Resource<String> {
         return try {
-            val docRef    = reviewsCollection.document()
-            val newReview = review.copy(reviewId = docRef.id)
-            docRef.set(newReview).await()
+            val docRef = reviewsCollection.document()
+            docRef.set(review.copy(reviewId = docRef.id)).await()
             Resource.Success(docRef.id)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to add review")
-        }
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to add review") }
     }
 
     suspend fun getReviewsByProperty(propertyId: String): Resource<List<Review>> {
         return try {
-            val snapshot = reviewsCollection
-                .whereEqualTo("propertyId", propertyId)
-                .get()
-                .await()
-            val reviews = snapshot.toObjects(Review::class.java)
-                .sortedByDescending { it.createdAt }
-            Resource.Success(reviews)
-        } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to fetch reviews")
-        }
+            val snapshot = reviewsCollection.whereEqualTo("propertyId", propertyId).get().await()
+            Resource.Success(snapshot.toObjects(Review::class.java).sortedByDescending { it.createdAt })
+        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch reviews") }
     }
 }

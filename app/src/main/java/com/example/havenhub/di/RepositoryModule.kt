@@ -62,4 +62,5 @@ object RepositoryModule {
         firestore: FirebaseFirestore,
         fcm      : FirebaseMessaging
     ): FirebaseMessagingManager = FirebaseMessagingManager(firestore, fcm)
+
 }

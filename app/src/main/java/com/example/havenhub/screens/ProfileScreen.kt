@@ -19,7 +19,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -37,6 +39,17 @@ fun ProfileScreen(
     profileViewModel: ProfileViewModel = hiltViewModel(),
     authViewModel   : AuthViewModel    = hiltViewModel()
 ) {
+    val configuration = LocalConfiguration.current
+    val screenWidth   = configuration.screenWidthDp       // Float
+    val screenHeight  = configuration.screenHeightDp      // Float
+
+    // ── Responsive values (all Float → then .dp / .sp) ──────────────────────
+    val avatarSize        = (screenWidth * 0.22f).coerceIn(72f,  110f).dp
+    val nameFontSize      = (screenWidth * 0.052f).coerceIn(16f, 22f).sp
+    val horizontalPadding = (screenWidth * 0.04f).coerceIn(12f,  20f).dp
+    val statFontSize      = (screenWidth * 0.045f).coerceIn(14f, 20f).sp
+    val heroPadV          = (screenHeight * 0.035f).coerceIn(20f, 36f).dp
+
     val uiState     by profileViewModel.uiState.collectAsState()
     val authUiState by authViewModel.uiState.collectAsState()
 
@@ -59,7 +72,9 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Profile", color = Color.White) },
+                title = {
+                    Text("Profile", color = Color.White, fontWeight = FontWeight.Bold)
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack,
@@ -79,18 +94,18 @@ fun ProfileScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // ── Header ───────────────────────────────────────────────────────
+            // ── Profile Header ───────────────────────────────────────────────
             Column(
                 modifier            = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFFE4E8EF))
-                    .padding(vertical = 28.dp),
+                    .padding(vertical = heroPadV),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // ✅ Profile Image — URL hai toh image, warna initials
+                // Avatar
                 Box(
                     modifier         = Modifier
-                        .size(90.dp)
+                        .size(avatarSize)
                         .clip(CircleShape)
                         .background(PrimaryBlue),
                     contentAlignment = Alignment.Center
@@ -99,7 +114,7 @@ fun ProfileScreen(
                         uiState.isLoading -> {
                             CircularProgressIndicator(
                                 color       = Color.White,
-                                modifier    = Modifier.size(32.dp),
+                                modifier    = Modifier.size(avatarSize * 0.35f),
                                 strokeWidth = 3.dp
                             )
                         }
@@ -116,7 +131,7 @@ fun ProfileScreen(
                         else -> {
                             Text(
                                 text       = uiState.user?.initials ?: "?",
-                                fontSize   = 34.sp,
+                                fontSize   = (avatarSize.value * 0.37f).sp,
                                 fontWeight = FontWeight.Bold,
                                 color      = Color.White
                             )
@@ -129,20 +144,20 @@ fun ProfileScreen(
                 Text(
                     text       = if (uiState.isLoading) "Loading..."
                     else uiState.user?.fullName ?: "—",
-                    fontSize   = 20.sp,
+                    fontSize   = nameFontSize,
                     fontWeight = FontWeight.Bold,
                     color      = PrimaryBlue
                 )
 
                 Text(
                     text     = uiState.user?.email ?: "",
-                    fontSize = 13.sp,
+                    fontSize = (screenWidth * 0.032f).coerceIn(11f, 14f).sp,
                     color    = Color.Gray
                 )
 
                 Spacer(Modifier.height(8.dp))
 
-                // ✅ Verification status badge
+                // Verification Badge
                 val verStatus = uiState.user?.verificationStatus?.uppercase() ?: "PENDING"
                 val (badgeColor, badgeText) = when (verStatus) {
                     "VERIFIED", "APPROVED" -> Color(0xFF4CAF50) to "Verified"
@@ -164,6 +179,7 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(8.dp))
 
+                // Role Badge
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = if (isAdmin) Color(0xFFFFD700) else Color(0xFFCDD4DF)
@@ -188,24 +204,26 @@ fun ProfileScreen(
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 ProfileStat(
-                    value = when {
+                    value    = when {
                         isAdmin    -> "N/A"
                         isLandlord -> "${uiState.user?.landlordReviewCount ?: 0}"
                         else       -> "0"
                     },
-                    label = "Reviews"
+                    label    = "Reviews",
+                    fontSize = statFontSize
                 )
                 VerticalDivider()
                 ProfileStat(
-                    value = when {
+                    value    = when {
                         isAdmin    -> "N/A"
                         isLandlord -> "%.1f".format(uiState.user?.landlordRating ?: 0f)
                         else       -> "0.0"
                     },
-                    label = "Rating"
+                    label    = "Rating",
+                    fontSize = statFontSize
                 )
                 VerticalDivider()
-                ProfileStat(value = roleText, label = "Role")
+                ProfileStat(value = roleText, label = "Role", fontSize = statFontSize)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -215,13 +233,12 @@ fun ProfileScreen(
                 onClick  = { navController.navigate(Screen.EditProfile.route) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = horizontalPadding)
                     .height(46.dp),
                 shape  = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue)
             ) {
-                Icon(Icons.Default.Edit, null,
-                    modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Edit Profile", fontWeight = FontWeight.SemiBold)
             }
@@ -258,7 +275,6 @@ fun ProfileScreen(
                     onClick = { navController.navigate(Screen.MyBookings.route) }
                 )
             }
-
             if (isLandlord) {
                 ProfileMenuItem(
                     icon    = Icons.Default.Home,
@@ -266,7 +282,6 @@ fun ProfileScreen(
                     onClick = { navController.navigate(Screen.MyProperties.route) }
                 )
             }
-
             ProfileMenuItem(
                 icon    = Icons.Default.Settings,
                 label   = "Settings",
@@ -280,13 +295,13 @@ fun ProfileScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Logout ───────────────────────────────────────────────────────
+            // ── Logout Button ────────────────────────────────────────────────
             Button(
                 onClick  = { authViewModel.signOut() },
                 colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = horizontalPadding),
                 shape    = RoundedCornerShape(10.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color.White)
@@ -298,6 +313,8 @@ fun ProfileScreen(
         }
     }
 }
+
+// ── Helper Composables ────────────────────────────────────────────────────────
 
 @Composable
 private fun SectionHeader(title: String) {
@@ -313,20 +330,42 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun ProfileStat(value: String, label: String) {
+private fun ProfileStat(
+    value   : String,
+    label   : String,
+    fontSize: TextUnit
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
-        Text(text = label, fontSize = 12.sp, color = Color.Gray)
+        Text(
+            text       = value,
+            fontSize   = fontSize,
+            fontWeight = FontWeight.Bold,
+            color      = PrimaryBlue
+        )
+        Text(
+            text     = label,
+            fontSize = 12.sp,
+            color    = Color.Gray
+        )
     }
 }
 
 @Composable
 private fun VerticalDivider() {
-    Box(modifier = Modifier.width(1.dp).height(30.dp).background(Color.LightGray))
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(30.dp)
+            .background(Color.LightGray)
+    )
 }
 
 @Composable
-private fun ProfileMenuItem(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun ProfileMenuItem(
+    icon   : ImageVector,
+    label  : String,
+    onClick: () -> Unit
+) {
     Surface(
         onClick  = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -339,12 +378,17 @@ private fun ProfileMenuItem(icon: ImageVector, label: String, onClick: () -> Uni
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(icon, null, tint = PrimaryBlue, modifier = Modifier.size(22.dp))
+                Icon(icon, null,
+                    tint     = PrimaryBlue,
+                    modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(16.dp))
-                Text(label, fontSize = 15.sp, color = Color.DarkGray,
+                Text(label,
+                    fontSize = 15.sp,
+                    color    = Color.DarkGray,
                     modifier = Modifier.weight(1f))
                 Icon(Icons.Default.ChevronRight, null,
-                    tint = Color.LightGray, modifier = Modifier.size(20.dp))
+                    tint     = Color.LightGray,
+                    modifier = Modifier.size(20.dp))
             }
             HorizontalDivider(color = Color(0xFFF1F1F1), thickness = 1.dp)
         }

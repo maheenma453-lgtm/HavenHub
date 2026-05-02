@@ -17,18 +17,17 @@ import androidx.core.view.WindowCompat
 
 // ─── Dark Color Scheme ────────────────────────────────────────────
 private val DarkColorScheme = darkColorScheme(
-    primary            = PrimaryBlueLight,
+    primary            = PrimaryNavyLight,       // lighter navy on dark
     onPrimary          = BackgroundDark,
-    primaryContainer   = PrimaryBlueDark,
+    primaryContainer   = PrimaryNavyDark,
 
-    secondary          = SecondaryBlueLight,
+    secondary          = SecondaryBlue,
     onSecondary        = BackgroundDark,
     secondaryContainer = SecondaryBlueDark,
 
-    // ✅ AccentAmber → AccentGold
-    tertiary           = AccentGoldLight,
+    tertiary           = GoldAccentLight,        // lighter gold on dark
     onTertiary         = BackgroundDark,
-    tertiaryContainer  = AccentGoldDark,
+    tertiaryContainer  = GoldAccentDark,
 
     background         = BackgroundDark,
     onBackground       = TextPrimaryDark,
@@ -43,18 +42,17 @@ private val DarkColorScheme = darkColorScheme(
 
 // ─── Light Color Scheme ───────────────────────────────────────────
 private val LightColorScheme = lightColorScheme(
-    primary            = PrimaryBlue,
-    onPrimary          = OnPrimaryBlue,
-    primaryContainer   = PrimaryBlueLight,
+    primary            = PrimaryNavy,            // #1B2B5B — HAVEN navy
+    onPrimary          = TextOnPrimary,
+    primaryContainer   = PrimaryNavyLight,
 
     secondary          = SecondaryBlue,
     onSecondary        = OnSecondary,
     secondaryContainer = SecondaryBlueLight,
 
-    // ✅ AccentAmber → AccentGold
-    tertiary           = AccentGold,
+    tertiary           = GoldAccent,             // #C9A84C — HUB gold
     onTertiary         = OnAccentGold,
-    tertiaryContainer  = AccentGoldLight,
+    tertiaryContainer  = GoldAccentLight,
 
     background         = BackgroundLight,
     onBackground       = TextPrimary,
@@ -87,47 +85,17 @@ fun HavenHubTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // ✅ Status bar color — deep navy blue
-            window.statusBarColor = PrimaryBlue.toArgb()
+            // Status bar — HavenHub navy
+            window.statusBarColor = PrimaryNavy.toArgb()
             WindowCompat.getInsetsController(window, view)
                 .isAppearanceLightStatusBars = false
         }
     }
 
+
     MaterialTheme(
-        colorScheme = colorScheme,
+      colorScheme = colorScheme,
+      typography  = HavenTypography,
         content     = content
-    )
+  )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

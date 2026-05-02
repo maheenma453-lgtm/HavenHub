@@ -12,9 +12,10 @@ sealed class Screen(val route: String) {
     object RoleSelection  : Screen("role_selection")
     object ForgotPassword : Screen("forgot_password")
 
-    object Home   : Screen("home")
-    object Search : Screen("search")
-    object Filter : Screen("filter")
+    object Home       : Screen("home")
+    object Search     : Screen("search")
+    object Filter     : Screen("filter")
+    object Favourites : Screen("favourites")   // ✦ NEW
 
     object PropertyList : Screen("property_list")
     object PropertyDetail : Screen("property_detail/{propertyId}") {
@@ -36,8 +37,6 @@ sealed class Screen(val route: String) {
         const val ARG_BOOKING_ID = "bookingId"
         fun createRoute(bookingId: String) = "booking_confirmation/$bookingId"
     }
-
-    // ── MyBookings — initialTab add kiya (0=Pending, 1=Confirmed, default=0) ──
     object MyBookings : Screen("my_bookings?tab={tab}") {
         fun createRoute(tab: Int = 0) = "my_bookings?tab=$tab"
     }
@@ -88,7 +87,6 @@ sealed class Screen(val route: String) {
     }
 
     object MessageList : Screen("message_list")
-
     object Chat : Screen("chat/{userId}/{ownerName}/{propertyId}") {
         const val ARG_USER_ID     = "userId"
         const val ARG_OWNER_NAME  = "ownerName"
