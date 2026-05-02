@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,39 +34,42 @@ fun ReportsScreen(
     navController: NavController,
     viewModel    : ReportsViewModel = hiltViewModel()
 ) {
-    val uiState       by viewModel.uiState.collectAsState()
+    val uiState        by viewModel.uiState.collectAsState()
     var selectedPeriod by remember { mutableStateOf("All Time") }
-
     val periods = listOf("All Time", "Today", "This Month")
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Reports", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text("Reports", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryNavy)
             )
         },
-        containerColor = Color(0xFFF4F6FB)
+        containerColor = Color(0xFFF0F2F5)
     ) { padding ->
 
         LazyColumn(
-            modifier        = Modifier
+            modifier       = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding  = PaddingValues(bottom = 32.dp)
+            contentPadding = PaddingValues(bottom = 32.dp)
         ) {
 
-            // ── Period Filter Banner ───────────────────────────
+            // ── Period Filter Banner ───────────────────────────────────────────
             item {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(PrimaryBlue, Color(0xFF1565C0))))
+                        .background(
+                            Brush.verticalGradient(listOf(PrimaryNavy, PrimaryNavyLight))
+                        )
                         .padding(horizontal = 16.dp, vertical = 14.dp)
                 ) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -77,18 +81,26 @@ fun ReportsScreen(
                                     selectedPeriod = period
                                     viewModel.loadAllReportsData()
                                 },
-                                label    = { Text(period, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
-                                colors   = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color.White,
-                                    selectedLabelColor     = PrimaryBlue,
-                                    containerColor         = Color.White.copy(.15f),
+                                label = {
+                                    Text(
+                                        period,
+                                        fontSize   = 12.sp,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = GoldAccent,
+                                    selectedLabelColor     = Color.White,
+                                    containerColor         = Color.White.copy(0.15f),
                                     labelColor             = Color.White
                                 ),
-                                border   = FilterChipDefaults.filterChipBorder(
+                                border = FilterChipDefaults.filterChipBorder(
                                     enabled             = true,
                                     selected            = selected,
-                                    selectedBorderColor = Color.Transparent,
-                                    borderColor         = Color.White.copy(.3f)
+                                    selectedBorderColor = GoldAccent,
+                                    borderColor         = Color.White.copy(0.3f),
+                                    selectedBorderWidth = 1.5.dp,
+                                    borderWidth         = 1.dp
                                 )
                             )
                         }
@@ -96,27 +108,14 @@ fun ReportsScreen(
                 }
             }
 
-            // ── Summary Section ────────────────────────────────
+            // ── Summary Section Header ─────────────────────────────────────────
             item {
                 Spacer(Modifier.height(20.dp))
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height(18.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(PrimaryBlue)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Summary", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E))
-                }
+                SectionHeader("Summary", modifier = Modifier.padding(horizontal = 16.dp))
                 Spacer(Modifier.height(12.dp))
             }
 
-            // ── Stats Grid ─────────────────────────────────────
+            // ── Stats Grid ─────────────────────────────────────────────────────
             item {
                 if (uiState.isLoading) {
                     Box(
@@ -124,7 +123,9 @@ fun ReportsScreen(
                             .fillMaxWidth()
                             .height(160.dp),
                         Alignment.Center
-                    ) { CircularProgressIndicator(color = PrimaryBlue) }
+                    ) {
+                        CircularProgressIndicator(color = GoldAccent)
+                    }
                 } else {
                     Column(
                         modifier            = Modifier.padding(horizontal = 16.dp),
@@ -151,14 +152,14 @@ fun ReportsScreen(
                                 icon     = Icons.Default.People,
                                 label    = "Total Users",
                                 value    = "${uiState.stats.totalUsers}",
-                                gradient = listOf(Color(0xFF1A3A6B), Color(0xFF4A90D9)),
+                                gradient = listOf(PrimaryNavy, PrimaryNavyLight),
                                 modifier = Modifier.weight(1f)
                             )
                             ReportStatCard(
                                 icon     = Icons.Default.Home,
                                 label    = "Active Props",
                                 value    = "${uiState.stats.activeProperties}",
-                                gradient = listOf(Color(0xFFE65100), Color(0xFFFFB300)),
+                                gradient = listOf(GoldAccentDark, GoldAccent),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -166,23 +167,13 @@ fun ReportsScreen(
                 }
             }
 
-            // ── Booking Status Breakdown ───────────────────────
+            // ── Booking Status Breakdown ───────────────────────────────────────
             item {
                 Spacer(Modifier.height(24.dp))
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height(18.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(PrimaryBlue)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Booking Status Breakdown", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E))
-                }
+                SectionHeader(
+                    "Booking Status Breakdown",
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
                 Spacer(Modifier.height(12.dp))
 
                 val total = uiState.stats.totalBookings.toFloat()
@@ -197,10 +188,14 @@ fun ReportsScreen(
                         color      = SuccessGreen
                     )
                     ModernStatusRow(
-                        label      = "Pending",
-                        count      = uiState.stats.totalBookings - uiState.stats.completedBookings - uiState.stats.cancelledBookings,
-                        percentage = if (total > 0) ((uiState.stats.totalBookings - uiState.stats.completedBookings - uiState.stats.cancelledBookings) / total) * 100f else 0f,
-                        color      = WarningOrange
+                        label = "Pending",
+                        count = uiState.stats.totalBookings
+                                - uiState.stats.completedBookings
+                                - uiState.stats.cancelledBookings,
+                        percentage = if (total > 0)
+                            ((uiState.stats.totalBookings - uiState.stats.completedBookings - uiState.stats.cancelledBookings) / total) * 100f
+                        else 0f,
+                        color = WarningOrange
                     )
                     ModernStatusRow(
                         label      = "Cancelled",
@@ -211,23 +206,13 @@ fun ReportsScreen(
                 }
             }
 
-            // ── Detailed Reports Section ───────────────────────
+            // ── Detailed Reports ───────────────────────────────────────────────
             item {
                 Spacer(Modifier.height(24.dp))
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height(18.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(PrimaryBlue)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Detailed Reports", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E))
-                }
+                SectionHeader(
+                    "Detailed Reports",
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
                 Spacer(Modifier.height(12.dp))
 
                 Card(
@@ -236,40 +221,43 @@ fun ReportsScreen(
                         .padding(horizontal = 16.dp),
                     shape     = RoundedCornerShape(16.dp),
                     colors    = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(2.dp)
+                    elevation = CardDefaults.cardElevation(0.dp),
+                    border    = BorderStroke(1.5.dp, GoldAccent.copy(0.7f))
                 ) {
                     val navItems = listOf(
-                        Triple(Icons.Default.Payment,      "Payment Transactions",  "View all ${uiState.payments.size} transactions"),
-                        Triple(Icons.Default.Home,         "Property Analytics",    "Performance overview"),
-                        Triple(Icons.Default.People,       "User Activity",         "Registration & engagement"),
-                        Triple(Icons.Default.BarChart,     "Revenue Breakdown",     "Monthly & category split"),
+                        Triple(Icons.Default.Payment,  "Payment Transactions", "View all ${uiState.payments.size} transactions"),
+                        Triple(Icons.Default.Home,     "Property Analytics",   "Performance overview"),
+                        Triple(Icons.Default.People,   "User Activity",        "Registration & engagement"),
+                        Triple(Icons.Default.BarChart, "Revenue Breakdown",    "Monthly & category split"),
                     )
-
                     navItems.forEachIndexed { idx, (icon, title, sub) ->
                         Row(
-                            modifier          = Modifier
+                            modifier              = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Box(
-                                modifier         = Modifier
+                                modifier = Modifier
                                     .size(38.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(PrimaryBlue.copy(.1f)),
+                                    .background(PrimaryNavy.copy(0.1f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(icon, null, tint = PrimaryBlue, modifier = Modifier.size(18.dp))
+                                Icon(icon, null, tint = PrimaryNavy, modifier = Modifier.size(18.dp))
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A1A2E))
                                 Text(sub, fontSize = 11.sp, color = Color(0xFF888888))
                             }
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFCCCCCC))
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = GoldAccent)
                         }
                         if (idx < navItems.lastIndex) {
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color(0xFFF0F0F0))
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                color    = GoldAccent.copy(0.2f)
+                            )
                         }
                     }
                 }
@@ -278,7 +266,23 @@ fun ReportsScreen(
     }
 }
 
-// ── Report Stat Card ──────────────────────────────────────────────
+// ── Section Header (gold accent bar) ──────────────────────────────────────────
+@Composable
+private fun SectionHeader(text: String, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(GoldAccent)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E))
+    }
+}
+
+// ── Report Stat Card ───────────────────────────────────────────────────────────
 @Composable
 private fun ReportStatCard(
     icon    : ImageVector,
@@ -291,11 +295,12 @@ private fun ReportStatCard(
         modifier  = modifier,
         shape     = RoundedCornerShape(14.dp),
         colors    = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(0.dp),
+        border    = BorderStroke(1.5.dp, GoldAccent.copy(0.7f))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Box(
-                modifier         = Modifier
+                modifier = Modifier
                     .size(38.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(Brush.linearGradient(gradient)),
@@ -311,7 +316,7 @@ private fun ReportStatCard(
     }
 }
 
-// ── Status Progress Row ───────────────────────────────────────────
+// ── Status Progress Row ────────────────────────────────────────────────────────
 @Composable
 private fun ModernStatusRow(
     label     : String,
@@ -323,15 +328,22 @@ private fun ModernStatusRow(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(12.dp),
         colors    = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(0.dp),
+        border    = BorderStroke(1.5.dp, GoldAccent.copy(0.7f))
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier            = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Box(
                         modifier = Modifier
                             .size(10.dp)
@@ -340,39 +352,32 @@ private fun ModernStatusRow(
                     )
                     Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A1A2E))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(color.copy(.12f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            "$count (${String.format("%.1f", percentage)}%)",
-                            fontSize   = 11.sp,
-                            color      = color,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(color.copy(0.12f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        "$count (${String.format("%.1f", percentage)}%)",
+                        fontSize   = 11.sp,
+                        color      = color,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
             LinearProgressIndicator(
-                progress          = { (percentage / 100f).coerceIn(0f, 1f) },
-                modifier          = Modifier
+                progress  = { (percentage / 100f).coerceIn(0f, 1f) },
+                modifier  = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
-                color             = color,
-                trackColor        = color.copy(.12f)
+                color      = color,
+                trackColor = color.copy(0.12f)
             )
         }
     }
 }
-
-
-
-
-
 
 
 

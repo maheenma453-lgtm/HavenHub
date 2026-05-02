@@ -12,6 +12,8 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -20,19 +22,29 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.*
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.havenhub.ui.theme.BackgroundWhite
-import com.example.havenhub.ui.theme.PrimaryBlue
+import com.example.havenhub.ui.theme.GoldAccent
+import com.example.havenhub.ui.theme.PrimaryNavy
 import com.example.havenhub.ui.theme.TextSecondary
 
 // ── Admin Bottom Navbar ───────────────────────────────────────────
@@ -43,8 +55,10 @@ fun AdminBottomNavBar(navController: NavController) {
 
     NavigationBar(
         containerColor = BackgroundWhite,
-        tonalElevation = 8.dp,
-        modifier       = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+        tonalElevation = 0.dp,
+        modifier = Modifier
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .height(68.dp)
     ) {
         val items = listOf(
             Triple(Screen.AdminDashboard.route,   "Dashboard", Icons.Filled.Dashboard),
@@ -67,27 +81,30 @@ fun AdminBottomNavBar(navController: NavController) {
                         }
                     }
                 },
-                icon   = {
+                icon = {
                     Icon(
                         imageVector        = icon,
                         contentDescription = label,
-                        modifier           = Modifier.size(24.dp)
+                        modifier           = Modifier.size(22.dp)
                     )
                 },
-                label  = {
+                label = {
                     Text(
                         text       = label,
                         fontSize   = 10.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor   = PrimaryBlue,
-                    selectedTextColor   = PrimaryBlue,
-                    unselectedIconColor = TextSecondary,
-                    unselectedTextColor = TextSecondary,
-                    indicatorColor      = PrimaryBlue.copy(alpha = 0.1f)
-                )
+                    selectedIconColor   = GoldAccent,
+                    selectedTextColor   = GoldAccent,
+                    unselectedIconColor = PrimaryNavy.copy(alpha = 0.5f),
+                    unselectedTextColor = PrimaryNavy.copy(alpha = 0.5f),
+                    indicatorColor      = GoldAccent.copy(alpha = 0.15f)
+                ),
+                alwaysShowLabel = true
             )
         }
     }
@@ -101,16 +118,16 @@ data class BottomNavItem(
     val unselectedIcon: ImageVector
 )
 
-// ── Tenant Nav Items ──────────────────────────────────────────────
+// ── Tenant Nav Items — Profile hata ke Favourites add kiya ✦ ─────
 val tenantNavItems = listOf(
-    BottomNavItem(Screen.Home.route,        "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
-    BottomNavItem(Screen.Search.route,      "Search",     Icons.Filled.Search,               Icons.Outlined.Search),
-    BottomNavItem(Screen.MyBookings.route,  "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
-    BottomNavItem(Screen.MessageList.route, "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
-    BottomNavItem(Screen.Profile.route,     "Profile",    Icons.Filled.Person,               Icons.Outlined.Person)
+    BottomNavItem(Screen.Home.route,        "Home",      Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.Search.route,      "Search",    Icons.Filled.Search,               Icons.Outlined.Search),
+    BottomNavItem(Screen.MyBookings.route,  "Bookings",  Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
+    BottomNavItem(Screen.MessageList.route, "Messages",  Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
+    BottomNavItem(Screen.Favourites.route,  "Favourites",Icons.Filled.Favorite,             Icons.Filled.FavoriteBorder)  // ✦ NEW
 )
 
-// ── Landlord Nav Items (Search ki jagah MyProperties) ─────────────
+// ── Landlord Nav Items — unchanged ────────────────────────────────
 val landlordNavItems = listOf(
     BottomNavItem(Screen.Home.route,         "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
     BottomNavItem(Screen.MyProperties.route, "Properties", Icons.Filled.Home,                 Icons.Outlined.Home),
@@ -119,7 +136,6 @@ val landlordNavItems = listOf(
     BottomNavItem(Screen.Profile.route,      "Profile",    Icons.Filled.Person,               Icons.Outlined.Person)
 )
 
-// Backward-compat alias — purana code break na ho
 val bottomNavItems = tenantNavItems
 
 // ── User Bottom Navbar ────────────────────────────────────────────
@@ -127,20 +143,19 @@ val bottomNavItems = tenantNavItems
 fun BottomNavBar(
     navController     : NavController,
     unreadMessageCount: Int    = 0,
-    userRole          : String = "tenant"   // ✅ NEW: role-based tabs
+    userRole          : String = "tenant"
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // ✅ Role ke hisaab se items choose karo
     val items = if (userRole == "landlord") landlordNavItems else tenantNavItems
 
     NavigationBar(
         containerColor = BackgroundWhite,
-        tonalElevation = 8.dp,
+        tonalElevation = 0.dp,
         modifier = Modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .height(64.dp)
+            .height(68.dp)
     ) {
         items.forEach { item ->
             val isSelected = currentRoute == item.route
@@ -166,7 +181,7 @@ fun BottomNavBar(
                                     Text(
                                         text     = if (unreadMessageCount > 9) "9+" else "$unreadMessageCount",
                                         fontSize = 9.sp,
-                                        color    = BackgroundWhite
+                                        color    = Color.White
                                     )
                                 }
                             }
@@ -174,33 +189,54 @@ fun BottomNavBar(
                             Icon(
                                 imageVector        = if (isSelected) item.selectedIcon else item.unselectedIcon,
                                 contentDescription = item.label,
-                                modifier           = Modifier.size(24.dp)
+                                modifier           = Modifier.size(22.dp)
                             )
                         }
                     } else {
                         Icon(
                             imageVector        = if (isSelected) item.selectedIcon else item.unselectedIcon,
                             contentDescription = item.label,
-                            modifier           = Modifier.size(24.dp)
+                            modifier           = Modifier.size(22.dp)
                         )
                     }
                 },
                 label = {
                     Text(
                         text       = item.label,
-                        fontSize   = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        fontSize   = 10.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor   = PrimaryBlue,
-                    selectedTextColor   = PrimaryBlue,
-                    unselectedIconColor = TextSecondary,
-                    unselectedTextColor = TextSecondary,
-                    indicatorColor      = PrimaryBlue.copy(alpha = 0.1f)
+                    selectedIconColor   = GoldAccent,
+                    selectedTextColor   = GoldAccent,
+                    unselectedIconColor = PrimaryNavy.copy(alpha = 0.5f),
+                    unselectedTextColor = PrimaryNavy.copy(alpha = 0.5f),
+                    indicatorColor      = GoldAccent.copy(alpha = 0.15f)
                 ),
                 alwaysShowLabel = true
             )
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

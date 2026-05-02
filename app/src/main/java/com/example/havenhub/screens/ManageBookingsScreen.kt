@@ -29,7 +29,6 @@ import com.example.havenhub.viewmodel.ManagementViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ── Design tokens (same as rest of app) ──────────────────────
 private val WarningAmber = Color(0xFFD97706)
 private val PendingBlue  = Color(0xFF3B82F6)
 
@@ -39,11 +38,9 @@ fun ManageBookingsScreen(
     navController: NavController,
     viewModel    : ManagementViewModel = hiltViewModel()
 ) {
-    val uiState        by viewModel.uiState.collectAsState()
-    var selectedStatus by remember { mutableStateOf("All") }
-    val dateFormatter  = remember { SimpleDateFormat("dd MMM yy", Locale.getDefault()) }
-
-    // ✅ Success / Error Snackbar
+    val uiState           by viewModel.uiState.collectAsState()
+    var selectedStatus    by remember { mutableStateOf("All") }
+    val dateFormatter     = remember { SimpleDateFormat("dd MMM yy", Locale.getDefault()) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.successMessage) {
@@ -59,15 +56,14 @@ fun ManageBookingsScreen(
         }
     }
 
+    val statusList = listOf("All", "Pending", "Pending_Approval", "Confirmed", "Completed", "Cancelled")
+
     val filteredBookings = remember(uiState.bookings, selectedStatus) {
         if (selectedStatus == "All") uiState.bookings
         else uiState.bookings.filter {
             it.status.equals(selectedStatus, ignoreCase = true)
         }
     }
-
-    // ✅ Status filter list mein PENDING_APPROVAL bhi add kiya
-    val statusList = listOf("All", "Pending", "Pending_Approval", "Confirmed", "Completed", "Cancelled")
 
     val statusCounts = remember(uiState.bookings) {
         mapOf(
@@ -88,7 +84,8 @@ fun ManageBookingsScreen(
                     Text(
                         "Manage Bookings",
                         color      = Color.White,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp
                     )
                 },
                 navigationIcon = {
@@ -96,10 +93,10 @@ fun ManageBookingsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryNavy)
             )
         },
-        containerColor = Color(0xFFF4F6FB)
+        containerColor = Color(0xFFF0F2F5)
     ) { padding ->
 
         Column(
@@ -108,12 +105,12 @@ fun ManageBookingsScreen(
                 .padding(padding)
         ) {
 
-            // ── Filter Banner ──────────────────────────────────
+            // ── Filter Banner ──────────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        Brush.verticalGradient(listOf(PrimaryBlue, Color(0xFF1565C0)))
+                        Brush.verticalGradient(listOf(PrimaryNavy, PrimaryNavyLight))
                     )
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
@@ -121,7 +118,10 @@ fun ManageBookingsScreen(
                     items(statusList) { status ->
                         val selected = selectedStatus == status
                         val count    = statusCounts[status] ?: 0
-                        val label    = if (status == "Pending_Approval") "Awaiting" else status
+                        val label    = when (status) {
+                            "Pending_Approval" -> "Awaiting"
+                            else               -> status
+                        }
 
                         FilterChip(
                             selected = selected,
@@ -138,10 +138,10 @@ fun ManageBookingsScreen(
                                     )
                                     if (count > 0) {
                                         Box(
-                                            modifier         = Modifier
+                                            modifier = Modifier
                                                 .clip(CircleShape)
                                                 .background(
-                                                    if (selected) PrimaryBlue
+                                                    if (selected) PrimaryNavy
                                                     else Color.White.copy(0.3f)
                                                 )
                                                 .padding(horizontal = 5.dp, vertical = 1.dp),
@@ -158,16 +158,18 @@ fun ManageBookingsScreen(
                                 }
                             },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color.White,
-                                selectedLabelColor     = PrimaryBlue,
+                                selectedContainerColor = GoldAccent,
+                                selectedLabelColor     = Color.White,
                                 containerColor         = Color.White.copy(0.15f),
                                 labelColor             = Color.White
                             ),
                             border = FilterChipDefaults.filterChipBorder(
                                 enabled             = true,
                                 selected            = selected,
-                                selectedBorderColor = Color.Transparent,
-                                borderColor         = Color.White.copy(0.3f)
+                                selectedBorderColor = GoldAccent,
+                                borderColor         = Color.White.copy(0.3f),
+                                selectedBorderWidth = 1.5.dp,
+                                borderWidth         = 1.dp
                             )
                         )
                     }
@@ -176,7 +178,7 @@ fun ManageBookingsScreen(
 
             if (uiState.isLoading) {
                 Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    CircularProgressIndicator(color = PrimaryBlue)
+                    CircularProgressIndicator(color = GoldAccent)
                 }
             } else {
                 LazyColumn(
@@ -187,14 +189,14 @@ fun ManageBookingsScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(PrimaryBlue.copy(0.1f))
+                                .background(PrimaryNavy.copy(0.1f))
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 "${filteredBookings.size} bookings found",
                                 fontSize   = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color      = PrimaryBlue
+                                color      = PrimaryNavy
                             )
                         }
                     }
@@ -202,13 +204,14 @@ fun ManageBookingsScreen(
                     items(filteredBookings, key = { it.bookingId }) { booking ->
                         val checkIn  = booking.checkInDate?.toDate()?.let  { dateFormatter.format(it) } ?: "N/A"
                         val checkOut = booking.checkOutDate?.toDate()?.let { dateFormatter.format(it) } ?: "N/A"
-
-                        // ✅ isPendingApproval check — landlord ko Accept/Reject dikhane ke liye
                         val isPendingApproval = booking.status.equals("PENDING_APPROVAL", ignoreCase = true)
 
+                        val displayTenantName = booking.tenantName
+                            .takeIf { it.isNotBlank() } ?: "Unknown Tenant"
+
                         ModernBookingCard(
-                            propertyTitle     = booking.propertyTitle,
-                            tenantName        = booking.tenantName,
+                            propertyTitle     = booking.propertyTitle.ifBlank { "Property" },
+                            tenantName        = displayTenantName,
                             dateRange         = "$checkIn – $checkOut",
                             totalAmount       = booking.formattedTotal,
                             status            = booking.status,
@@ -225,27 +228,27 @@ fun ManageBookingsScreen(
     }
 }
 
-// ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 // MODERN BOOKING CARD
-// ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun ModernBookingCard(
-    propertyTitle     : String,
-    tenantName        : String,
-    dateRange         : String,
-    totalAmount       : String,
-    status            : String,
-    isCancellable     : Boolean,
-    isPendingApproval : Boolean,          // ✅ NEW
-    onCancel          : () -> Unit,
-    onApprove         : () -> Unit,       // ✅ NEW
-    onReject          : () -> Unit        // ✅ NEW
+    propertyTitle    : String,
+    tenantName       : String,
+    dateRange        : String,
+    totalAmount      : String,
+    status           : String,
+    isCancellable    : Boolean,
+    isPendingApproval: Boolean,
+    onCancel         : () -> Unit,
+    onApprove        : () -> Unit,
+    onReject         : () -> Unit
 ) {
-    var menuExpanded        by remember { mutableStateOf(false) }
-    var showApproveDialog   by remember { mutableStateOf(false) }
-    var showRejectDialog    by remember { mutableStateOf(false) }
+    var menuExpanded      by remember { mutableStateOf(false) }
+    var showApproveDialog by remember { mutableStateOf(false) }
+    var showRejectDialog  by remember { mutableStateOf(false) }
 
-    // ── Approve confirmation dialog ────────────────────────────
+    // ── Approve Dialog ─────────────────────────────────────────────────────────
     if (showApproveDialog) {
         AlertDialog(
             onDismissRequest = { showApproveDialog = false },
@@ -259,35 +262,25 @@ private fun ModernBookingCard(
                         .background(SuccessGreen.copy(0.12f)),
                     Alignment.Center
                 ) {
-                    Icon(Icons.Default.CheckCircle, null,
-                        tint = SuccessGreen, modifier = Modifier.size(26.dp))
+                    Icon(Icons.Default.CheckCircle, null, tint = SuccessGreen, modifier = Modifier.size(26.dp))
                 }
             },
             title = {
-                Text(
-                    "Approve Booking?",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize   = 17.sp,
-                    color      = Color(0xFF0D1B3E)
-                )
+                Text("Approve Booking?", fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = Color(0xFF0D1B3E))
             },
             text = {
                 Text(
                     "Tenant ki booking confirm kar doge?\nPayment already receive ho chuki hai.",
-                    fontSize   = 13.sp,
-                    color      = Color(0xFF8899AA),
-                    lineHeight = 20.sp
+                    fontSize = 13.sp, color = Color(0xFF8899AA), lineHeight = 20.sp
                 )
             },
             confirmButton = {
                 Button(
-                    onClick = { showApproveDialog = false; onApprove() },
-                    shape   = RoundedCornerShape(10.dp),
-                    colors  = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                    onClick  = { showApproveDialog = false; onApprove() },
+                    shape    = RoundedCornerShape(10.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Yes, Approve", fontWeight = FontWeight.Bold)
-                }
+                ) { Text("Yes, Approve", fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 OutlinedButton(
@@ -295,14 +288,12 @@ private fun ModernBookingCard(
                     shape    = RoundedCornerShape(10.dp),
                     border   = BorderStroke(1.dp, Color(0xFF0D1B3E)),
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Cancel", color = Color(0xFF0D1B3E), fontWeight = FontWeight.Medium)
-                }
+                ) { Text("Cancel", color = Color(0xFF0D1B3E), fontWeight = FontWeight.Medium) }
             }
         )
     }
 
-    // ── Reject confirmation dialog ─────────────────────────────
+    // ── Reject Dialog ──────────────────────────────────────────────────────────
     if (showRejectDialog) {
         AlertDialog(
             onDismissRequest = { showRejectDialog = false },
@@ -316,24 +307,16 @@ private fun ModernBookingCard(
                         .background(ErrorRed.copy(0.12f)),
                     Alignment.Center
                 ) {
-                    Icon(Icons.Default.Cancel, null,
-                        tint = ErrorRed, modifier = Modifier.size(26.dp))
+                    Icon(Icons.Default.Cancel, null, tint = ErrorRed, modifier = Modifier.size(26.dp))
                 }
             },
             title = {
-                Text(
-                    "Reject Booking?",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize   = 17.sp,
-                    color      = Color(0xFF0D1B3E)
-                )
+                Text("Reject Booking?", fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = Color(0xFF0D1B3E))
             },
             text = {
                 Text(
                     "Kya aap yeh booking reject karna chahte ho?\nTenant ko refund process karna hoga.",
-                    fontSize   = 13.sp,
-                    color      = Color(0xFF8899AA),
-                    lineHeight = 20.sp
+                    fontSize = 13.sp, color = Color(0xFF8899AA), lineHeight = 20.sp
                 )
             },
             confirmButton = {
@@ -342,9 +325,7 @@ private fun ModernBookingCard(
                     shape    = RoundedCornerShape(10.dp),
                     colors   = ButtonDefaults.buttonColors(containerColor = ErrorRed),
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Yes, Reject", fontWeight = FontWeight.Bold)
-                }
+                ) { Text("Yes, Reject", fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 OutlinedButton(
@@ -352,48 +333,49 @@ private fun ModernBookingCard(
                     shape    = RoundedCornerShape(10.dp),
                     border   = BorderStroke(1.dp, Color(0xFF0D1B3E)),
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Go Back", color = Color(0xFF0D1B3E), fontWeight = FontWeight.Medium)
-                }
+                ) { Text("Go Back", color = Color(0xFF0D1B3E), fontWeight = FontWeight.Medium) }
             }
         )
     }
 
-    // ── Status color mapping ───────────────────────────────────
+    // ── Status colors ──────────────────────────────────────────────────────────
     val (statusColor, statusBg, statusLabel) = when {
         status.equals("PENDING_APPROVAL", ignoreCase = true) ->
-            Triple(WarningAmber, WarningAmber.copy(0.12f), "Awaiting Approval")
-        status.equals("CONFIRMED",  ignoreCase = true) ->
-            Triple(SuccessGreen, SuccessGreen.copy(0.12f), "Confirmed")
-        status.equals("PENDING",    ignoreCase = true) ->
-            Triple(PendingBlue,  PendingBlue.copy(0.12f),  "Pending")
-        status.equals("CANCELLED",  ignoreCase = true) ->
-            Triple(ErrorRed,     ErrorRed.copy(0.12f),     "Cancelled")
-        status.equals("COMPLETED",  ignoreCase = true) ->
-            Triple(Color(0xFF1565C0), Color(0xFF1565C0).copy(0.12f), "Completed")
-        else -> Triple(Color(0xFF888888), Color(0xFFF0F0F0), status)
+            Triple(WarningAmber,     WarningAmber.copy(0.12f),     "Awaiting Approval")
+        status.equals("CONFIRMED",        ignoreCase = true) ->
+            Triple(SuccessGreen,     SuccessGreen.copy(0.12f),     "Confirmed")
+        status.equals("PENDING",          ignoreCase = true) ->
+            Triple(PendingBlue,      PendingBlue.copy(0.12f),      "Pending")
+        status.equals("CANCELLED",        ignoreCase = true) ->
+            Triple(ErrorRed,         ErrorRed.copy(0.12f),         "Cancelled")
+        status.equals("COMPLETED",        ignoreCase = true) ->
+            Triple(PrimaryNavyLight, PrimaryNavyLight.copy(0.12f), "Completed")
+        else ->
+            Triple(Color(0xFF888888), Color(0xFFF0F0F0), status)
     }
 
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(14.dp),
         colors    = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(0.dp),
+        border    = BorderStroke(1.5.dp, GoldAccent.copy(0.7f))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
 
-            // ── Top Row: icon + title + status badge + menu ────
+            // ── Top row ────────────────────────────────────────────────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
+
                 Box(
-                    modifier         = Modifier
+                    modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(11.dp))
-                        .background(PrimaryBlue.copy(0.1f)),
+                        .background(PrimaryNavy.copy(0.1f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Default.CalendarMonth, null,
-                        tint     = PrimaryBlue,
+                        tint     = PrimaryNavy,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -412,7 +394,7 @@ private fun ModernBookingCard(
                     Text(
                         "Tenant: $tenantName",
                         fontSize = 12.sp,
-                        color    = Color(0xFF888888),
+                        color    = Color(0xFF666666),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -433,7 +415,7 @@ private fun ModernBookingCard(
                     )
                 }
 
-                // Cancel menu (sirf cancellable bookings ke liye — yani PENDING wali)
+                // Cancel menu
                 if (isCancellable) {
                     Box {
                         IconButton(
@@ -452,17 +434,13 @@ private fun ModernBookingCard(
                             containerColor   = Color.White
                         ) {
                             DropdownMenuItem(
-                                text        = {
-                                    Text(
-                                        "Cancel Booking",
-                                        color      = ErrorRed,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                text = {
+                                    Text("Cancel Booking", color = ErrorRed, fontWeight = FontWeight.Medium)
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Default.Cancel, null, tint = ErrorRed)
                                 },
-                                onClick     = {
+                                onClick = {
                                     menuExpanded = false
                                     onCancel()
                                 }
@@ -476,7 +454,7 @@ private fun ModernBookingCard(
             HorizontalDivider(color = Color(0xFFF0F0F0))
             Spacer(Modifier.height(10.dp))
 
-            // ── Date + Amount Row ──────────────────────────────
+            // ── Date + Amount ──────────────────────────────────────────────────
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -497,31 +475,26 @@ private fun ModernBookingCard(
                     totalAmount,
                     fontSize   = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color      = PrimaryBlue
+                    color      = PrimaryNavy
                 )
             }
 
-            // ✅ PENDING_APPROVAL: Accept / Reject buttons dikhao
+            // ── Pending Approval: Accept / Reject ──────────────────────────────
             if (isPendingApproval) {
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(color = Color(0xFFF0F0F0))
                 Spacer(Modifier.height(10.dp))
 
-                // Info strip
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(WarningAmber.copy(0.08f))
                         .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Info, null,
-                        tint     = WarningAmber,
-                        modifier = Modifier.size(13.dp)
-                    )
+                    Icon(Icons.Default.Info, null, tint = WarningAmber, modifier = Modifier.size(13.dp))
                     Text(
                         "Tenant ne payment kar di hai. Approve ya reject karo.",
                         fontSize = 11.sp,
@@ -535,50 +508,34 @@ private fun ModernBookingCard(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // ── Reject button ──────────────────────────
                     OutlinedButton(
                         onClick  = { showRejectDialog = true },
                         modifier = Modifier
                             .weight(1f)
                             .height(40.dp),
-                        shape    = RoundedCornerShape(10.dp),
-                        border   = BorderStroke(1.5.dp, ErrorRed),
-                        colors   = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
+                        shape  = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.5.dp, ErrorRed),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
                     ) {
-                        Icon(
-                            Icons.Default.Close, null,
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Icon(Icons.Default.Close, null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(
-                            "Reject",
-                            fontSize   = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text("Reject", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
 
-                    // ── Accept button ──────────────────────────
                     Button(
                         onClick  = { showApproveDialog = true },
                         modifier = Modifier
                             .weight(1f)
                             .height(40.dp),
-                        shape    = RoundedCornerShape(10.dp),
-                        colors   = ButtonDefaults.buttonColors(
+                        shape  = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
                             containerColor = SuccessGreen,
                             contentColor   = Color.White
                         )
                     ) {
-                        Icon(
-                            Icons.Default.Check, null,
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(
-                            "Accept",
-                            fontSize   = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text("Accept", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,7 +23,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.data.User
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.PrimaryBlue
+import com.example.havenhub.ui.theme.GoldAccent
+import com.example.havenhub.ui.theme.GoldAccentDark
+import com.example.havenhub.ui.theme.PrimaryNavy
 import com.example.havenhub.ui.theme.SuccessGreen
 import com.example.havenhub.ui.theme.WarningOrange
 import com.example.havenhub.viewmodel.VerificationViewModel
@@ -38,7 +41,6 @@ fun VerifyUsersScreen(
     val uiState           by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // ✅ FIX: errorMessage aaye to snackbar dikhao, phir reset karo
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
@@ -46,7 +48,6 @@ fun VerifyUsersScreen(
         }
     }
 
-    // ✅ FIX: actionSuccess true ho to successMessage ke saath snackbar dikhao
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             val msg = uiState.successMessage ?: "Action completed successfully"
@@ -55,7 +56,6 @@ fun VerifyUsersScreen(
         }
     }
 
-    // ✅ Screen open hone pe pending users load karo
     LaunchedEffect(Unit) {
         viewModel.loadPendingUsers()
     }
@@ -68,7 +68,8 @@ fun VerifyUsersScreen(
                     Text(
                         "Verify Users",
                         color      = Color.White,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp
                     )
                 },
                 navigationIcon = {
@@ -80,10 +81,10 @@ fun VerifyUsersScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryNavy)
             )
         },
-        containerColor = Color(0xFFF4F6FB)
+        containerColor = Color(0xFFF0F2F5)
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -94,19 +95,18 @@ fun VerifyUsersScreen(
                 uiState.isLoading -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
-                        color    = PrimaryBlue
+                        color    = GoldAccent
                     )
                 }
 
                 uiState.pendingUsers.isEmpty() -> {
-                    // ── Empty State ─────────────────────────────
                     Column(
                         modifier            = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Box(
-                            modifier         = Modifier
+                            modifier = Modifier
                                 .size(80.dp)
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(SuccessGreen.copy(.12f)),
@@ -140,19 +140,19 @@ fun VerifyUsersScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item {
-                            // ── Pending Banner ──────────────────
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(WarningOrange.copy(.12f))
-                                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                            // Pending Banner with gold outline
+                            Card(
+                                modifier  = Modifier.fillMaxWidth(),
+                                shape     = RoundedCornerShape(12.dp),
+                                colors    = CardDefaults.cardColors(containerColor = GoldAccent.copy(0.08f)),
+                                border    = BorderStroke(1.5.dp, GoldAccent)
                             ) {
                                 Text(
                                     "${uiState.pendingUsers.size} Users Pending Verification",
                                     fontWeight = FontWeight.Bold,
                                     fontSize   = 13.sp,
-                                    color      = WarningOrange
+                                    color      = GoldAccentDark,
+                                    modifier   = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                                 )
                             }
                         }
@@ -188,25 +188,26 @@ private fun AdminPendingUserCard(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(14.dp),
         colors    = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(0.dp),
+        border    = BorderStroke(1.5.dp, GoldAccent)
     ) {
         Row(
-            modifier          = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier              = Modifier.padding(16.dp),
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Avatar
             Box(
-                modifier         = Modifier
+                modifier = Modifier
                     .size(50.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(PrimaryBlue.copy(.1f)),
+                    .background(PrimaryNavy.copy(.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Person,
                     contentDescription = null,
-                    tint               = PrimaryBlue,
+                    tint               = PrimaryNavy,
                     modifier           = Modifier.size(26.dp)
                 )
             }
@@ -224,7 +225,6 @@ private fun AdminPendingUserCard(
                     color    = Color(0xFF888888)
                 )
 
-                // ✅ FIX: role.toString() use karo — enum ka name lata hai
                 val roleDisplay = user.role
                     .toString()
                     .lowercase()
@@ -242,14 +242,16 @@ private fun AdminPendingUserCard(
                 )
             }
 
-            // Review button
-            Button(
-                onClick         = onClick,
-                contentPadding  = PaddingValues(horizontal = 14.dp),
-                modifier        = Modifier.height(34.dp),
-                colors          = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+            // Review button — gold outlined
+            OutlinedButton(
+                onClick        = onClick,
+                contentPadding = PaddingValues(horizontal = 14.dp),
+                modifier       = Modifier.height(36.dp),
+                shape          = RoundedCornerShape(10.dp),
+                border         = BorderStroke(1.5.dp, GoldAccent),
+                colors         = ButtonDefaults.outlinedButtonColors(contentColor = GoldAccentDark)
             ) {
-                Text("Review", fontSize = 12.sp, color = Color.White)
+                Text("Review", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }

@@ -54,6 +54,7 @@ private val sharedRoutes = listOf(
     Screen.HelpAndSupport.route,
     Screen.Profile.route,
     Screen.EditProfile.route,
+    Screen.Favourites.route,          // ← ADDED: Favourites shared route
 )
 
 @Composable
@@ -80,7 +81,7 @@ fun HavenHubNavGraph(
         strictAdminRoutes.any { currentRoute == it }                               -> true
         currentRoute?.startsWith("property_verification_detail") == true           -> true
         currentRoute?.startsWith("user_verification_detail") == true               -> true
-        // Shared screens (notifications, settings, profile) — role se decide karo
+        // Shared screens (notifications, settings, profile, favourites) — role se decide karo
         sharedRoutes.any { currentRoute == it }                                    -> isCurrentUserAdmin
         currentRoute?.startsWith("notification_detail") == true                    -> isCurrentUserAdmin
         else                                                                       -> false
@@ -285,6 +286,9 @@ fun HavenHubNavGraph(
 // ── Profile ───────────────────────────────────────────────────────
             composable(Screen.Profile.route)     { ProfileScreen(navController) }
             composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
+
+// ── Favourites ────────────────────────────────────────────────────
+            composable(Screen.Favourites.route) { FavouritesScreen(navController) }
 
 // ── Settings ──────────────────────────────────────────────────────
             composable(Screen.Settings.route)             { SettingsScreen(navController) }

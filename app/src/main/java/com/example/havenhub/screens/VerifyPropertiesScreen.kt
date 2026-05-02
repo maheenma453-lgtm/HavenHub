@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,27 +36,19 @@ fun VerifyPropertiesScreen(
     val uiState           by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // ✅ FIX: errorMessage aaye to snackbar dikhao, phir reset karo
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.resetActionState()
         }
     }
-
-    // ✅ FIX: actionSuccess true ho to snackbar dikhao (successMessage ke saath), phir reset karo
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
-            val msg = uiState.successMessage ?: "Action completed successfully"
-            snackbarHostState.showSnackbar(msg)
+            snackbarHostState.showSnackbar(uiState.successMessage ?: "Action completed successfully")
             viewModel.resetActionState()
         }
     }
-
-    // ✅ Screen open hone pe pending properties load karo
-    LaunchedEffect(Unit) {
-        viewModel.loadPendingProperties()
-    }
+    LaunchedEffect(Unit) { viewModel.loadPendingProperties() }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -65,7 +58,8 @@ fun VerifyPropertiesScreen(
                     Text(
                         "Verify Properties",
                         color      = Color.White,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 18.sp
                     )
                 },
                 navigationIcon = {
@@ -73,10 +67,10 @@ fun VerifyPropertiesScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryNavy)
             )
         },
-        containerColor = Color(0xFFF4F6FB)
+        containerColor = Color(0xFFF0F2F5)
     ) { padding ->
 
         Column(
@@ -87,12 +81,11 @@ fun VerifyPropertiesScreen(
             when {
                 uiState.isLoading -> {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        CircularProgressIndicator(color = PrimaryBlue)
+                        CircularProgressIndicator(color = GoldAccent)
                     }
                 }
 
                 uiState.pendingProperties.isEmpty() -> {
-                    // ── Empty State ────────────────────────────
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -102,12 +95,11 @@ fun VerifyPropertiesScreen(
                                 modifier         = Modifier
                                     .size(80.dp)
                                     .clip(RoundedCornerShape(20.dp))
-                                    .background(SuccessGreen.copy(.12f)),
+                                    .background(SuccessGreen.copy(0.12f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.Default.CheckCircle,
-                                    null,
+                                    Icons.Default.CheckCircle, null,
                                     tint     = SuccessGreen,
                                     modifier = Modifier.size(40.dp)
                                 )
@@ -128,12 +120,12 @@ fun VerifyPropertiesScreen(
                 }
 
                 else -> {
-                    // ── Pending Banner ─────────────────────────
+                    // ── Pending Banner ─────────────────────────────────────────
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                Brush.verticalGradient(listOf(PrimaryBlue, Color(0xFF1565C0)))
+                                Brush.verticalGradient(listOf(PrimaryNavy, PrimaryNavyLight))
                             )
                             .padding(horizontal = 16.dp, vertical = 14.dp)
                     ) {
@@ -144,14 +136,13 @@ fun VerifyPropertiesScreen(
                             Box(
                                 modifier         = Modifier
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(WarningOrange.copy(.2f))
+                                    .background(GoldAccent.copy(0.2f))
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.Default.HourglassEmpty,
-                                    null,
-                                    tint     = WarningOrange,
+                                    Icons.Default.HourglassEmpty, null,
+                                    tint     = GoldAccent,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -164,7 +155,7 @@ fun VerifyPropertiesScreen(
                                 )
                                 Text(
                                     "Tap a property to review details",
-                                    color    = Color.White.copy(.7f),
+                                    color    = Color.White.copy(0.7f),
                                     fontSize = 12.sp
                                 )
                             }
@@ -192,7 +183,7 @@ fun VerifyPropertiesScreen(
     }
 }
 
-// ── Property Card ─────────────────────────────────────────────────────────────
+// ── Property Card ──────────────────────────────────────────────────────────────
 @Composable
 fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
     Card(
@@ -200,26 +191,21 @@ fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
         onClick   = onClick,
         shape     = RoundedCornerShape(14.dp),
         colors    = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(0.dp),
+        border    = BorderStroke(1.5.dp, GoldAccent.copy(0.7f))
     ) {
         Row(
             modifier          = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Property icon
             Box(
                 modifier         = Modifier
                     .size(50.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(PrimaryBlue.copy(.1f)),
+                    .background(PrimaryNavy.copy(0.1f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Default.Home,
-                    null,
-                    tint     = PrimaryBlue,
-                    modifier = Modifier.size(24.dp)
-                )
+                Icon(Icons.Default.Home, null, tint = PrimaryNavy, modifier = Modifier.size(24.dp))
             }
 
             Spacer(Modifier.width(12.dp))
@@ -243,40 +229,35 @@ fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Type badge
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .background(PrimaryBlue.copy(.1f))
+                            .background(PrimaryNavy.copy(0.1f))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            property.propertyType
-                                .lowercase()
-                                .replaceFirstChar { it.uppercase() },
+                            property.propertyType.lowercase().replaceFirstChar { it.uppercase() },
                             fontSize   = 11.sp,
-                            color      = PrimaryBlue,
+                            color      = PrimaryNavy,
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    // Price badge
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .background(AccentGold.copy(.12f))
+                            .background(GoldAccent.copy(0.12f))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
                             property.formattedPrice,
                             fontSize   = 11.sp,
-                            color      = AccentGoldDark,
+                            color      = GoldAccentDark,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
 
-            // Pending badge + arrow
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -284,7 +265,7 @@ fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(WarningOrange.copy(.12f))
+                        .background(WarningOrange.copy(0.12f))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
@@ -295,12 +276,28 @@ fun ModernPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                     )
                 }
                 Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    null,
-                    tint     = Color(0xFFCCCCCC),
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight, null,
+                    tint     = GoldAccent,
                     modifier = Modifier.size(20.dp)
                 )
             }
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
