@@ -40,10 +40,9 @@ fun ProfileScreen(
     authViewModel   : AuthViewModel    = hiltViewModel()
 ) {
     val configuration = LocalConfiguration.current
-    val screenWidth   = configuration.screenWidthDp       // Float
-    val screenHeight  = configuration.screenHeightDp      // Float
+    val screenWidth   = configuration.screenWidthDp
+    val screenHeight  = configuration.screenHeightDp
 
-    // ── Responsive values (all Float → then .dp / .sp) ──────────────────────
     val avatarSize        = (screenWidth * 0.22f).coerceIn(72f,  110f).dp
     val nameFontSize      = (screenWidth * 0.052f).coerceIn(16f, 22f).sp
     val horizontalPadding = (screenWidth * 0.04f).coerceIn(12f,  20f).dp
@@ -70,6 +69,7 @@ fun ProfileScreen(
     val roleText   = userRole.replaceFirstChar { it.uppercase() }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),  // ✅ insets zero
         topBar = {
             TopAppBar(
                 title = {
@@ -77,8 +77,11 @@ fun ProfileScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back", tint = Color.White)
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
@@ -86,23 +89,22 @@ fun ProfileScreen(
         }
     ) { padding ->
         Column(
-            modifier            = Modifier
+            modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())  // ✅ sirf top padding
                 .background(Color(0xFFF2F4F7))
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // ── Profile Header ───────────────────────────────────────────────
+            // ── Profile Header ────────────────────────────────────
             Column(
-                modifier            = Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFFE4E8EF))
                     .padding(vertical = heroPadV),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Avatar
                 Box(
                     modifier         = Modifier
                         .size(avatarSize)
@@ -157,7 +159,6 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Verification Badge
                 val verStatus = uiState.user?.verificationStatus?.uppercase() ?: "PENDING"
                 val (badgeColor, badgeText) = when (verStatus) {
                     "VERIFIED", "APPROVED" -> Color(0xFF4CAF50) to "Verified"
@@ -179,7 +180,6 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Role Badge
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = if (isAdmin) Color(0xFFFFD700) else Color(0xFFCDD4DF)
@@ -194,7 +194,7 @@ fun ProfileScreen(
                 }
             }
 
-            // ── Stats Row ────────────────────────────────────────────────────
+            // ── Stats Row ─────────────────────────────────────────
             Row(
                 modifier              = Modifier
                     .fillMaxWidth()
@@ -204,7 +204,7 @@ fun ProfileScreen(
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 ProfileStat(
-                    value    = when {
+                    value = when {
                         isAdmin    -> "N/A"
                         isLandlord -> "${uiState.user?.landlordReviewCount ?: 0}"
                         else       -> "0"
@@ -214,7 +214,7 @@ fun ProfileScreen(
                 )
                 VerticalDivider()
                 ProfileStat(
-                    value    = when {
+                    value = when {
                         isAdmin    -> "N/A"
                         isLandlord -> "%.1f".format(uiState.user?.landlordRating ?: 0f)
                         else       -> "0.0"
@@ -228,7 +228,7 @@ fun ProfileScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // ── Edit Profile Button ──────────────────────────────────────────
+            // ── Edit Profile Button ───────────────────────────────
             OutlinedButton(
                 onClick  = { navController.navigate(Screen.EditProfile.route) },
                 modifier = Modifier
@@ -245,7 +245,7 @@ fun ProfileScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // ── Admin Menu ───────────────────────────────────────────────────
+            // ── Admin Menu ────────────────────────────────────────
             if (isAdmin) {
                 SectionHeader("Administration")
                 ProfileMenuItem(
@@ -265,7 +265,7 @@ fun ProfileScreen(
                 )
             }
 
-            // ── Account Settings ─────────────────────────────────────────────
+            // ── Account Settings ──────────────────────────────────
             SectionHeader("Account Settings")
 
             if (!isAdmin) {
@@ -293,28 +293,29 @@ fun ProfileScreen(
                 onClick = { navController.navigate(Screen.HelpAndSupport.route) }
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
 
-            // ── Logout Button ────────────────────────────────────────────────
+            // ── Logout Button ─────────────────────────────────────
             Button(
                 onClick  = { authViewModel.signOut() },
                 colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = horizontalPadding),
-                shape    = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(10.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color.White)
                 Spacer(Modifier.width(8.dp))
                 Text("Logout", color = Color.White, fontWeight = FontWeight.SemiBold)
             }
 
-            Spacer(Modifier.height(32.dp))
+            // ✅ Bottom nav bar ke liye space
+            Spacer(Modifier.height(80.dp))
         }
     }
 }
 
-// ── Helper Composables ────────────────────────────────────────────────────────
+// ── Helper Composables ────────────────────────────────────────────
 
 @Composable
 private fun SectionHeader(title: String) {
@@ -378,17 +379,23 @@ private fun ProfileMenuItem(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(icon, null,
+                Icon(
+                    icon, null,
                     tint     = PrimaryBlue,
-                    modifier = Modifier.size(22.dp))
+                    modifier = Modifier.size(22.dp)
+                )
                 Spacer(Modifier.width(16.dp))
-                Text(label,
+                Text(
+                    label,
                     fontSize = 15.sp,
                     color    = Color.DarkGray,
-                    modifier = Modifier.weight(1f))
-                Icon(Icons.Default.ChevronRight, null,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    Icons.Default.ChevronRight, null,
                     tint     = Color.LightGray,
-                    modifier = Modifier.size(20.dp))
+                    modifier = Modifier.size(20.dp)
+                )
             }
             HorizontalDivider(color = Color(0xFFF1F1F1), thickness = 1.dp)
         }

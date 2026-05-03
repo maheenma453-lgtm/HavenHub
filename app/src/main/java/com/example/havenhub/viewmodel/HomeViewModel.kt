@@ -21,28 +21,28 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class HomeUiState(
-    val featuredProperties   : List<Property> = emptyList(),
-    val nearbyProperties     : List<Property> = emptyList(),
-    val allProperties        : List<Property> = emptyList(),
-    val isLoading            : Boolean        = false,
-    val errorMessage         : String?        = null,
-    val totalProperties      : Int            = 0,
-    val activeBookingsCount  : Int            = 0,
-    val pendingRequestsCount : Int            = 0,
-    val totalRevenue         : Double         = 0.0,
-    val averageRating        : Float          = 0f,
+    val featuredProperties      : List<Property> = emptyList(),
+    val nearbyProperties        : List<Property> = emptyList(),
+    val allProperties           : List<Property> = emptyList(),
+    val isLoading               : Boolean        = false,
+    val errorMessage            : String?        = null,
+    val totalProperties         : Int            = 0,
+    val activeBookingsCount     : Int            = 0,
+    val pendingRequestsCount    : Int            = 0,
+    val totalRevenue            : Double         = 0.0,
+    val averageRating           : Float          = 0f,
     // ✦ Favourites state
-    val favouriteProperties  : List<Property> = emptyList(),
-    val favouriteIds         : Set<String>    = emptySet(),
-    val isFavouritesLoading  : Boolean        = false
+    val favouriteProperties     : List<Property> = emptyList(),
+    val favouriteIds            : Set<String>    = emptySet(),
+    val isFavouritesLoading     : Boolean        = false
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val propertyRepository: PropertyRepository,
-    private val bookingRepository : BookingRepository,
-    private val paymentRepository : PaymentRepository,
-    private val firebaseDataManager: FirebaseDataManager   // ✦ NEW
+    private val propertyRepository : PropertyRepository,
+    private val bookingRepository  : BookingRepository,
+    private val paymentRepository  : PaymentRepository,
+    private val firebaseDataManager: FirebaseDataManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -59,7 +59,7 @@ class HomeViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // User info + favourite IDs load karo
+    // Load user info and favourite IDs
     // ─────────────────────────────────────────────────────────────
     private fun loadUserInfo() {
         viewModelScope.launch {
@@ -79,7 +79,6 @@ class HomeViewModel @Inject constructor(
                     .await()
                 _userRole.value = doc.getString("role") ?: "tenant"
 
-                // ✦ Favourite IDs bhi load karo taake heart icon sahi dikhe
                 loadFavouriteIds(firebaseUser.uid)
 
             } catch (e: Exception) {
@@ -90,7 +89,7 @@ class HomeViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ✦ FAVOURITES — IDs load (for heart icon state in cards)
+    // ✦ FAVOURITES — IDs load
     // ─────────────────────────────────────────────────────────────
     private fun loadFavouriteIds(userId: String) {
         if (userId.isEmpty()) return
@@ -100,14 +99,14 @@ class HomeViewModel @Inject constructor(
                 if (result is Resource.Success) {
                     _uiState.update { it.copy(favouriteIds = result.data.toSet()) }
                 }
-            } catch (e: Exception) {
-                // Silent — heart icons sirf default state mein rahenge
+            } catch (_: Exception) {
+                // silent — heart icons stay in default state
             }
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ✦ FAVOURITES — Full list load (FavouritesScreen ke liye)
+    // ✦ FAVOURITES — Full list load
     // ─────────────────────────────────────────────────────────────
     fun loadFavouriteProperties() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
@@ -123,14 +122,10 @@ class HomeViewModel @Inject constructor(
                             isFavouritesLoading = false
                         )
                     }
-                    is Resource.Error   -> _uiState.update {
-                        it.copy(isFavouritesLoading = false)
-                    }
-                    else                -> _uiState.update {
-                        it.copy(isFavouritesLoading = false)
-                    }
+                    is Resource.Error   -> _uiState.update { it.copy(isFavouritesLoading = false) }
+                    else                -> _uiState.update { it.copy(isFavouritesLoading = false) }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _uiState.update { it.copy(isFavouritesLoading = false) }
             }
         }
@@ -143,7 +138,6 @@ class HomeViewModel @Inject constructor(
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
             val isFav = _uiState.value.favouriteIds.contains(propertyId)
-            // Optimistic UI update — turant dikhe
             if (isFav) {
                 _uiState.update {
                     it.copy(
@@ -153,49 +147,38 @@ class HomeViewModel @Inject constructor(
                 }
                 firebaseDataManager.removeFavourite(uid, propertyId)
             } else {
-                _uiState.update {
-                    it.copy(favouriteIds = it.favouriteIds + propertyId)
-                }
+                _uiState.update { it.copy(favouriteIds = it.favouriteIds + propertyId) }
                 firebaseDataManager.addFavourite(uid, propertyId)
-                // Nai property fetch karke list refresh karo
                 loadFavouriteProperties()
             }
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // TENANT: Saari approved properties load karo
+    // TENANT: load all approved properties
     // ─────────────────────────────────────────────────────────────
     fun loadHomeData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val featuredResult = propertyRepository.getFeaturedProperties()
-                val featured: List<Property> = when (featuredResult) {
-                    is Resource.Success -> featuredResult.data
-                    is Resource.Error   -> emptyList()
-                    Resource.Loading    -> emptyList()
-                }
+                val featured: List<Property> =
+                    if (featuredResult is Resource.Success) featuredResult.data else emptyList()
 
                 val nearbyResult = propertyRepository.getNearbyProperties()
-                val nearby: List<Property> = when (nearbyResult) {
-                    is Resource.Success -> nearbyResult.data
-                    is Resource.Error   -> emptyList()
-                    Resource.Loading    -> emptyList()
-                }
+                val nearby: List<Property> =
+                    if (nearbyResult is Resource.Success) nearbyResult.data else emptyList()
 
                 val combined = (featured + nearby).distinctBy { it.propertyId }
 
-                val finalAll     : List<Property>
-                val finalFeatured: List<Property>
-                val finalNearby  : List<Property>
+                val finalAll      : List<Property>
+                val finalFeatured : List<Property>
+                val finalNearby   : List<Property>
 
                 if (combined.isEmpty()) {
                     val allResult = propertyRepository.getAllProperties()
-                    val allList: List<Property> = when (allResult) {
-                        is Resource.Success -> allResult.data
-                        else                -> emptyList()
-                    }
+                    val allList: List<Property> =
+                        if (allResult is Resource.Success) allResult.data else emptyList()
                     finalAll      = allList
                     finalFeatured = allList.filter {  it.isFeatured }
                     finalNearby   = allList.filter { !it.isFeatured }
@@ -230,16 +213,15 @@ class HomeViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // LANDLORD: Stats + apni properties load karo
+    // LANDLORD: load stats and own properties
     // ─────────────────────────────────────────────────────────────
     fun loadLandlordStats(landlordId: String) {
         viewModelScope.launch {
             try {
                 val propertiesResult = propertyRepository.getMyProperties(landlordId)
-                val properties: List<Property> = when (propertiesResult) {
-                    is Resource.Success -> propertiesResult.data
-                    else                -> emptyList()
-                }
+                val properties: List<Property> =
+                    if (propertiesResult is Resource.Success) propertiesResult.data
+                    else emptyList()
 
                 val totalProps = properties.size
                 val avgRating  = if (properties.isNotEmpty())
@@ -251,10 +233,9 @@ class HomeViewModel @Inject constructor(
                 val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
                 val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
-                val revenue: Double = when (paymentsResult) {
-                    is Resource.Success -> paymentsResult.data.sumOf { it.amount }
-                    else                -> 0.0
-                }
+                val revenue: Double =
+                    if (paymentsResult is Resource.Success) paymentsResult.data.sumOf { it.amount }
+                    else 0.0
 
                 _uiState.update { state ->
                     state.copy(
@@ -268,8 +249,8 @@ class HomeViewModel @Inject constructor(
                     )
                 }
 
-            } catch (e: Exception) {
-                // Silent fail
+            } catch (_: Exception) {
+                // silent fail
             }
         }
     }
