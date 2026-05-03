@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,8 +20,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -142,16 +145,31 @@ private fun LandlordHomeScreen(
         }
     }
 
+    // Pulse animation for pending badge
+    val pulseAnim = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by pulseAnim.animateFloat(
+        initialValue   = 0.6f,
+        targetValue    = 1f,
+        animationSpec  = infiniteRepeatable(
+            animation  = tween(900, easing = EaseInOut),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
     LazyColumn(
         modifier       = Modifier.fillMaxSize().background(PageBg),
-        contentPadding = PaddingValues(bottom = 80.dp)
+        contentPadding = PaddingValues(bottom = 90.dp)
     ) {
+
+        // ── 1. HEADER ──────────────────────────────────────────────
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(NavyDeep, NavyPrime, NavyMid)))
             ) {
+                // Decorative circles
                 Box(
                     modifier = Modifier.size(170.dp).align(Alignment.TopEnd)
                         .offset(x = 55.dp, y = (-55).dp).clip(CircleShape)
@@ -162,13 +180,10 @@ private fun LandlordHomeScreen(
                         .offset(x = (-25).dp, y = 35.dp).clip(CircleShape)
                         .background(GoldPrime.copy(alpha = 0.05f))
                 )
+                // Gold shimmer bottom line
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter)
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color.Transparent, GoldPrime, GoldLight, GoldPrime, Color.Transparent)
-                            )
-                        )
+                    Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter)
+                        .background(GoldBorderBrush)
                 )
                 Column(
                     Modifier
@@ -177,8 +192,9 @@ private fun LandlordHomeScreen(
                         .padding(horizontal = 20.dp)
                         .padding(top = 16.dp, bottom = 24.dp)
                 ) {
+                    // ── Title row + Bell ──
                     Row(
-                        modifier              = Modifier.fillMaxWidth(),
+                        Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
@@ -325,12 +341,141 @@ private fun LandlordHomeScreen(
                                 Text("${uiState.totalProperties}", color = NavyPrime, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                                 Text("My Properties", color = TextMuted, fontSize = 10.sp)
                             }
+                        )
+                        // Avg Rating
+                        LandlordStatCard(
+                            icon      = Icons.Default.Star,
+                            iconTint  = GoldPrime,
+                            bgColor   = GoldPrime.copy(0.12f),
+                            label     = "Avg Rating",
+                            value     = if (uiState.averageRating > 0f)
+                                "%.1f".format(uiState.averageRating) else "—",
+                            valueColor = GoldLight,
+                            modifier  = Modifier.weight(1f),
+                            isWorking = true
+                        )
+                        // Pending Requests — click karo toh MyBookings Pending tab khulta hai
+                        LandlordStatCard(
+                            icon       = Icons.Default.Notifications,
+                            iconTint   = if (uiState.pendingRequestsCount > 0) OrangePend else TextMuted,
+                            bgColor    = if (uiState.pendingRequestsCount > 0)
+                                OrangePend.copy(0.18f) else Color.White.copy(0.07f),
+                            label      = "Pending Req",
+                            value      = "${uiState.pendingRequestsCount}",
+                            valueColor = if (uiState.pendingRequestsCount > 0)
+                                OrangePend.copy(pulseAlpha) else Color.White,
+                            modifier   = Modifier.weight(1f),
+                            isWorking  = true,
+                            highlight  = uiState.pendingRequestsCount > 0,
+                            onClick    = {
+                                navController.navigate(
+                                    Screen.MyBookings.createRoute(tab = 0) // tab=0 = Pending
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── 2. REVENUE CARD ────────────────────────────────────────
+        item {
+            Spacer(Modifier.height(18.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .shadow(12.dp, RoundedCornerShape(22.dp))
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(NavyLinear)
+                    .border(1.5.dp, GoldBorderBrush, RoundedCornerShape(22.dp))
+            ) {
+                // Decorative glow
+                Box(
+                    Modifier.size(130.dp).align(Alignment.CenterEnd)
+                        .offset(x = 40.dp).clip(CircleShape)
+                        .background(GoldPrime.copy(0.08f))
+                )
+                Box(
+                    Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter)
+                        .background(GoldBorderBrush)
+                )
+
+                Row(
+                    modifier              = Modifier.fillMaxWidth().padding(20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "TOTAL REVENUE",
+                            color         = Color.White.copy(0.5f),
+                            fontSize      = 10.sp,
+                            fontWeight    = FontWeight.Bold,
+                            letterSpacing = 1.5.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            formattedRevenue,
+                            color      = GoldPrime,
+                            fontSize   = 32.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Spacer(Modifier.height(5.dp))
+                        // FIX: Use proper Text, no arrow character issues
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier.size(16.dp).clip(CircleShape)
+                                    .background(GreenOk.copy(0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.TrendingUp,
+                                    contentDescription = null,
+                                    tint               = GreenOk,
+                                    modifier           = Modifier.size(10.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                "Updated in real-time",
+                                color    = GreenOk.copy(0.9f),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // Earnings Button
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(GoldGradient)
+                            .shadow(6.dp, RoundedCornerShape(18.dp))
+                            .clickable { navController.navigate(Screen.PaymentReports.route) }
+                            .padding(horizontal = 18.dp, vertical = 14.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.AccountBalanceWallet,
+                                contentDescription = "Earnings",
+                                tint               = NavyDeep,
+                                modifier           = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                "Earnings",
+                                color      = NavyDeep,
+                                fontSize   = 11.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
                         }
                     }
                 }
             }
         }
 
+        // ── 3. QUICK ACTIONS ───────────────────────────────────────
         item {
             Spacer(Modifier.height(26.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -342,7 +487,202 @@ private fun LandlordHomeScreen(
                     Text("See All →", fontSize = 12.sp, color = GoldPrime, fontWeight = FontWeight.Bold)
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
+
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+
+                // ── Add New Property (primary CTA) ──
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .shadow(8.dp, RoundedCornerShape(18.dp))
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(GoldLinear)
+                        .clickable { navController.navigate(Screen.AddProperty.route) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.size(44.dp).clip(CircleShape)
+                                .background(NavyDeep.copy(0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                tint               = NavyDeep,
+                                modifier           = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                "Add New Property",
+                                color      = NavyDeep,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize   = 16.sp
+                            )
+                            Text(
+                                "List your property for rent",
+                                color    = NavyDeep.copy(0.65f),
+                                fontSize = 11.sp
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Icon(
+                            Icons.Default.ArrowForwardIos,
+                            contentDescription = null,
+                            tint               = NavyDeep.copy(0.5f),
+                            modifier           = Modifier.size(14.dp)
+                        )
+                    }
+                }
+
+                // ── Active Bookings + My Properties (row) ──
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Active Bookings
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(110.dp)
+                            .shadow(6.dp, RoundedCornerShape(18.dp))
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(NavyLinear)
+                            .border(1.5.dp, GoldBorderBrush, RoundedCornerShape(18.dp))
+                            .clickable { navController.navigate(Screen.MyBookings.route) }
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter)
+                                .background(GoldBorderBrush)
+                        )
+                        Column(
+                            Modifier.fillMaxSize().padding(14.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint               = GoldPrime,
+                                modifier           = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "${uiState.activeBookingsCount}",
+                                color      = GoldPrime,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize   = 26.sp
+                            )
+                            Text(
+                                "Active Bookings",
+                                color    = Color.White.copy(0.65f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // My Properties
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(110.dp)
+                            .shadow(6.dp, RoundedCornerShape(18.dp))
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(GoldFaint)
+                            .border(1.5.dp, GoldPrime.copy(0.35f), RoundedCornerShape(18.dp))
+                            .clickable { navController.navigate(Screen.MyProperties.route) }
+                    ) {
+                        Column(
+                            Modifier.fillMaxSize().padding(14.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Home,
+                                contentDescription = null,
+                                tint               = NavyDeep,
+                                modifier           = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "${uiState.totalProperties}",
+                                color      = NavyDeep,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize   = 26.sp
+                            )
+                            Text(
+                                "My Properties",
+                                color    = TextMuted,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+
+            }
+        }
+
+        // ── 4. MY PROPERTIES LIST ──────────────────────────────────
+        item {
+            Spacer(Modifier.height(28.dp))
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "My Properties",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize   = 20.sp,
+                        color      = NavyDeep
+                    )
+                    Text(
+                        "${uiState.featuredProperties.size} listed properties",
+                        fontSize = 12.sp,
+                        color    = TextMuted
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(GoldFaint)
+                        .border(1.dp, GoldPrime.copy(0.5f), RoundedCornerShape(12.dp))
+                        .clickable { navController.navigate(Screen.MyProperties.route) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "See All",
+                            fontSize   = 12.sp,
+                            color      = GoldDim,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            Icons.Default.ArrowForwardIos,
+                            contentDescription = null,
+                            tint               = GoldDim,
+                            modifier           = Modifier.size(10.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
         }
 
         when {
@@ -429,7 +769,135 @@ private fun RevenueMiniStat(value: String, label: String, icon: String) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// TENANT HOME SCREEN
+// LANDLORD PROPERTY CARD — Enhanced
+// ═══════════════════════════════════════════════════════════════════
+@Composable
+private fun PremiumLandlordPropertyCard(property: Property, onClick: () -> Unit) {
+    Card(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .shadow(6.dp, RoundedCornerShape(18.dp))
+            .clickable { onClick() }
+            .border(1.dp, GoldPrime.copy(0.18f), RoundedCornerShape(18.dp)),
+        shape     = RoundedCornerShape(18.dp),
+        colors    = CardDefaults.cardColors(containerColor = CardBg),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Property image with availability dot
+            Box {
+                Box(
+                    Modifier.width(4.dp).height(88.dp).align(Alignment.CenterStart)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(
+                            if (property.isAvailable)
+                                Brush.verticalGradient(listOf(GreenOk, GreenOk.copy(0.5f)))
+                            else
+                                Brush.verticalGradient(listOf(TextMuted, TextMuted.copy(0.5f)))
+                        )
+                )
+                Box(
+                    Modifier.padding(start = 8.dp)
+                        .size(88.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                ) {
+                    PropertyImage(
+                        property = property,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    // Availability badge
+                    Box(
+                        Modifier.align(Alignment.TopStart).padding(6.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                if (property.isAvailable) GreenOk else OrangePend
+                            )
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            if (property.isAvailable) "Active" else "Inactive",
+                            color      = Color.White,
+                            fontSize   = 7.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(Modifier.weight(1f)) {
+                Text(
+                    property.title,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize   = 15.sp,
+                    maxLines   = 1,
+                    overflow   = TextOverflow.Ellipsis,
+                    color      = TextDark
+                )
+                Spacer(Modifier.height(5.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LocationOn, null, tint = GoldPrime, modifier = Modifier.size(12.dp))
+                    Text(
+                        " ${property.city}",
+                        color    = TextMuted,
+                        fontSize = 11.sp
+                    )
+                }
+                Spacer(Modifier.height(5.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.KingBed, null, tint = TextMuted.copy(0.7f), modifier = Modifier.size(12.dp))
+                    Text(" ${property.bedrooms} beds", fontSize = 11.sp, color = TextMuted)
+                    Spacer(Modifier.width(10.dp))
+                    Icon(Icons.Default.People, null, tint = TextMuted.copy(0.7f), modifier = Modifier.size(12.dp))
+                    Text(" ${property.maxGuests} guests", fontSize = 11.sp, color = TextMuted)
+                }
+                Spacer(Modifier.height(10.dp))
+
+                // Price + Rating row
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "Price/month",
+                            fontSize = 9.sp,
+                            color    = TextMuted
+                        )
+                        Text(
+                            property.formattedPrice,
+                            fontWeight = FontWeight.ExtraBold,
+                            color      = NavyDeep,
+                            fontSize   = 14.sp
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier          = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(GoldFaint)
+                            .border(1.dp, GoldPrime.copy(0.3f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Star, null, tint = GoldPrime, modifier = Modifier.size(12.dp))
+                        Text(
+                            " ${property.averageRating}",
+                            fontSize   = 12.sp,
+                            color      = NavyDeep,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TENANT HOME SCREEN — UNCHANGED (untouched logic)
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun TenantHomeScreen(

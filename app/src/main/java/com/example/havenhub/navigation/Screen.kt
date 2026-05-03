@@ -15,7 +15,7 @@ sealed class Screen(val route: String) {
     object Home       : Screen("home")
     object Search     : Screen("search")
     object Filter     : Screen("filter")
-    object Favourites : Screen("favourites")   // ✦ NEW
+    object Favourites : Screen("favourites")
 
     object PropertyList : Screen("property_list")
     object PropertyDetail : Screen("property_detail/{propertyId}") {
@@ -43,6 +43,12 @@ sealed class Screen(val route: String) {
     object BookingDetails : Screen("booking_details/{bookingId}") {
         const val ARG_BOOKING_ID = "bookingId"
         fun createRoute(bookingId: String) = "booking_details/$bookingId"
+    }
+
+    // ✦ NEW — Landlord: Active Tenants list screen
+    object ActiveTenants : Screen("active_tenants/{landlordId}") {
+        const val ARG_LANDLORD_ID = "landlordId"
+        fun createRoute(landlordId: String) = "active_tenants/$landlordId"
     }
 
     object Payment : Screen("payment/{bookingId}/{payerId}/{payeeId}/{payerName}/{payeeName}/{amount}") {

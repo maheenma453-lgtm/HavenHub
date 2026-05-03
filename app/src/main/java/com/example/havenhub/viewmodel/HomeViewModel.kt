@@ -232,6 +232,13 @@ class HomeViewModel @Inject constructor(
                 val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
                 val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
+                // ✦ FIX: activeTenantsCount = unique tenants across confirmed bookings
+                val activeTenantsCount = bookings
+                    .filter { it.status == BookingStatus.CONFIRMED.name }
+                    .map { it.tenantId }
+                    .distinct()
+                    .size
+
                 val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
                 val revenue: Double =
                     if (paymentsResult is Resource.Success) paymentsResult.data.sumOf { it.amount }
@@ -243,6 +250,7 @@ class HomeViewModel @Inject constructor(
                         allProperties        = properties,
                         totalProperties      = totalProps,
                         activeBookingsCount  = activeCount,
+                        activeTenantsCount   = activeTenantsCount,  // ✦ FIX: now properly set
                         pendingRequestsCount = pendingCount,
                         totalRevenue         = revenue,
                         averageRating        = avgRating

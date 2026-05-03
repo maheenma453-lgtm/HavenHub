@@ -2,10 +2,12 @@ package com.example.havenhub.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -15,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +28,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.ManagementViewModel
+
+// ── Brand Colors ──────────────────────────────────────────────────────────────
+private val NavyBlue   = Color(0xFF1B2A4A)
+private val NavyLight  = Color(0xFF243658)
+private val Gold       = Color(0xFFC9A227)
+private val GoldDark   = Color(0xFFA07D10)
+private val PageBg     = Color(0xFFF4F6FA)
+private val GreenOk    = Color(0xFF27AE60)
+private val RedErr     = Color(0xFFE74C3C)
 
 private const val SUPER_ADMIN_EMAIL = "admin@havenhub.com"
 
@@ -49,25 +61,51 @@ fun ManageUsersScreen(
     }
 
     Scaffold(
+        containerColor = PageBg,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Manage Users",
-                        color      = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 18.sp
-                    )
-                },
-                navigationIcon = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Brush.horizontalGradient(listOf(NavyBlue, NavyLight)))
+                    .statusBarsPadding()
+            ) {
+                Row(
+                    modifier          = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Gold)
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryNavy)
-            )
-        },
-        containerColor = Color(0xFFF0F2F5)
+                    Spacer(Modifier.width(4.dp))
+                    Column {
+                        Text(
+                            "Manage Users",
+                            color         = Color.White,
+                            fontSize      = 20.sp,
+                            fontWeight    = FontWeight.Bold,
+                            letterSpacing = 0.3.sp
+                        )
+                        Text(
+                            "${uiState.users.size} total users",
+                            color    = Gold.copy(alpha = 0.85f),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+                // Gold shimmer line
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(
+                            Brush.horizontalGradient(listOf(Color.Transparent, Gold, Color.Transparent))
+                        )
+                        .align(Alignment.BottomCenter)
+                )
+            }
+        }
     ) { padding ->
 
         Column(
@@ -75,14 +113,11 @@ fun ManageUsersScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-
             // ── Search + Filter Banner ─────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(listOf(PrimaryNavy, PrimaryNavyLight))
-                    )
+                    .background(Brush.verticalGradient(listOf(NavyBlue, NavyLight)))
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -94,21 +129,23 @@ fun ManageUsersScreen(
                             Text(
                                 "Search by name or email...",
                                 fontSize = 13.sp,
-                                color    = Color.White.copy(0.6f)
+                                color    = Color.White.copy(0.5f)
                             )
                         },
                         leadingIcon = {
-                            Icon(Icons.Default.Search, null, tint = Color.White.copy(0.8f))
+                            Icon(Icons.Default.Search, null, tint = Gold)
                         },
                         singleLine = true,
                         modifier   = Modifier.fillMaxWidth(),
-                        shape      = RoundedCornerShape(12.dp),
+                        shape      = RoundedCornerShape(14.dp),
                         colors     = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor   = GoldAccent,
-                            unfocusedBorderColor = Color.White.copy(0.3f),
-                            focusedTextColor     = Color.White,
-                            unfocusedTextColor   = Color.White,
-                            cursorColor          = GoldAccent
+                            focusedBorderColor      = Gold,
+                            unfocusedBorderColor    = Color.White.copy(0.25f),
+                            focusedContainerColor   = Color.White.copy(0.08f),
+                            unfocusedContainerColor = Color.White.copy(0.05f),
+                            focusedTextColor        = Color.White,
+                            unfocusedTextColor      = Color.White,
+                            cursorColor             = Gold
                         )
                     )
 
@@ -123,20 +160,20 @@ fun ManageUsersScreen(
                                     Text(
                                         role,
                                         fontSize   = 12.sp,
-                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                                     )
                                 },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = GoldAccent,
+                                    selectedContainerColor = Gold,
                                     selectedLabelColor     = Color.White,
-                                    containerColor         = Color.White.copy(0.15f),
+                                    containerColor         = Color.White.copy(0.12f),
                                     labelColor             = Color.White
                                 ),
                                 border = FilterChipDefaults.filterChipBorder(
                                     enabled             = true,
                                     selected            = selected,
-                                    selectedBorderColor = GoldAccent,
-                                    borderColor         = Color.White.copy(0.3f),
+                                    selectedBorderColor = GoldDark,
+                                    borderColor         = Color.White.copy(0.25f),
                                     selectedBorderWidth = 1.5.dp,
                                     borderWidth         = 1.dp
                                 )
@@ -150,7 +187,7 @@ fun ManageUsersScreen(
             when {
                 uiState.isLoading -> {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        CircularProgressIndicator(color = GoldAccent)
+                        CircularProgressIndicator(color = Gold, strokeWidth = 3.dp)
                     }
                 }
 
@@ -160,13 +197,13 @@ fun ManageUsersScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(Icons.Default.ErrorOutline, null, tint = ErrorRed, modifier = Modifier.size(48.dp))
-                            Text("Error: ${uiState.errorMessage}", color = ErrorRed, fontSize = 14.sp)
+                            Icon(Icons.Default.ErrorOutline, null, tint = RedErr, modifier = Modifier.size(48.dp))
+                            Text("Error: ${uiState.errorMessage}", color = RedErr, fontSize = 14.sp)
                             Button(
                                 onClick = { viewModel.loadAllUsers() },
-                                colors  = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                                border  = BorderStroke(1.5.dp, GoldAccent)
-                            ) { Text("Retry") }
+                                colors  = ButtonDefaults.buttonColors(containerColor = NavyBlue),
+                                shape   = RoundedCornerShape(12.dp)
+                            ) { Text("Retry", color = Gold, fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
@@ -174,28 +211,44 @@ fun ManageUsersScreen(
                 else -> {
                     LazyColumn(
                         contentPadding      = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-
                         item {
+                            // Count Banner — same style as other screens
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(PrimaryNavy.copy(0.1f))
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Brush.horizontalGradient(listOf(NavyBlue, NavyLight)))
+                                    .border(
+                                        width = 1.dp,
+                                        brush = Brush.horizontalGradient(listOf(Gold.copy(0.6f), GoldDark.copy(0.4f))),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
                             ) {
-                                Text(
-                                    "${filteredUsers.size} users found",
-                                    fontSize   = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color      = PrimaryNavy
-                                )
+                                Row(
+                                    verticalAlignment     = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(Gold)
+                                    )
+                                    Text(
+                                        "${filteredUsers.size} user${if (filteredUsers.size != 1) "s" else ""} found",
+                                        fontSize   = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color      = Gold
+                                    )
+                                }
                             }
                         }
 
                         items(filteredUsers, key = { it.userId }) { user ->
                             val isSuperAdmin = user.email.equals(SUPER_ADMIN_EMAIL, ignoreCase = true)
-                            ModernUserCard(
+                            PremiumUserCard(
                                 fullName     = user.fullName,
                                 email        = user.email,
                                 role         = user.userRole.displayName(),
@@ -213,9 +266,9 @@ fun ManageUsersScreen(
     }
 }
 
-// ── User Card ──────────────────────────────────────────────────────────────────
+// ── Premium User Card ──────────────────────────────────────────────────────────
 @Composable
-private fun ModernUserCard(
+private fun PremiumUserCard(
     fullName    : String,
     email       : String,
     role        : String,
@@ -229,37 +282,55 @@ private fun ModernUserCard(
 
     val roleColor = when (role.lowercase()) {
         "admin"    -> Color(0xFF6A1B9A)
-        "landlord" -> PrimaryNavy
-        else       -> Color(0xFF00695C)
+        "landlord" -> NavyBlue
+        else       -> Color(0xFF00796B)
     }
 
     Card(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(14.dp),
-        colors    = CardDefaults.cardColors(
-            containerColor = if (isSuperAdmin) Color(0xFFFFF8E1) else Color.White
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation    = 4.dp,
+                shape        = RoundedCornerShape(16.dp),
+                ambientColor = NavyBlue.copy(alpha = 0.08f),
+                spotColor    = NavyBlue.copy(alpha = 0.12f)
+            ),
+        shape  = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSuperAdmin) Color(0xFFFFFBF0) else Color.White
         ),
-        elevation = CardDefaults.cardElevation(0.dp),
-        border    = BorderStroke(
-            width = 1.5.dp,
-            color = if (isSuperAdmin) GoldAccent else GoldAccent.copy(0.7f)
-        )
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
+        // Top accent bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(
+                    if (isSuperAdmin)
+                        Brush.horizontalGradient(listOf(Gold, GoldDark))
+                    else
+                        Brush.horizontalGradient(listOf(NavyBlue, Gold))
+                )
+        )
+
         Row(
             modifier              = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-
             // Avatar
             Box(
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(50.dp)
+                    .clip(CircleShape)
                     .background(
-                        if (isSuperAdmin) GoldAccent.copy(0.3f) else PrimaryNavy.copy(0.12f)
+                        if (isSuperAdmin)
+                            Brush.radialGradient(listOf(Gold, GoldDark))
+                        else
+                            Brush.radialGradient(listOf(NavyBlue, NavyLight))
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -267,21 +338,21 @@ private fun ModernUserCard(
                     Icon(
                         Icons.Default.Shield,
                         null,
-                        tint     = GoldAccent,
-                        modifier = Modifier.size(26.dp)
+                        tint     = Color.White,
+                        modifier = Modifier.size(24.dp)
                     )
                 } else {
                     Text(
                         fullName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
                         fontSize   = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color      = PrimaryNavy
+                        fontWeight = FontWeight.ExtraBold,
+                        color      = Gold
                     )
                 }
             }
 
             Column(modifier = Modifier.weight(1f)) {
-
+                // Name + Super Admin badge
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -289,149 +360,173 @@ private fun ModernUserCard(
                     Text(
                         fullName,
                         fontWeight = FontWeight.Bold,
-                        fontSize   = 14.sp,
-                        color      = Color(0xFF1A1A2E),
+                        fontSize   = 15.sp,
+                        color      = NavyBlue,
                         maxLines   = 1,
                         overflow   = TextOverflow.Ellipsis,
                         modifier   = Modifier.weight(1f, fill = false)
                     )
                     if (isSuperAdmin) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(GoldAccent.copy(0.15f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        Surface(
+                            color = Gold.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(1.dp, Gold.copy(0.4f), RoundedCornerShape(20.dp))
                         ) {
                             Text(
                                 "Super Admin",
                                 fontSize   = 9.sp,
-                                color      = GoldAccentDark,
-                                fontWeight = FontWeight.Bold
+                                color      = GoldDark,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier   = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
                     }
                 }
 
+                Spacer(Modifier.height(2.dp))
                 Text(
                     email,
                     fontSize = 12.sp,
-                    color    = Color(0xFF888888),
+                    color    = NavyBlue.copy(alpha = 0.5f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
 
+                // Badges row
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Role badge
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(roleColor.copy(0.12f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    // Role
+                    Surface(
+                        color = roleColor.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.border(1.dp, roleColor.copy(0.3f), RoundedCornerShape(20.dp))
                     ) {
                         Text(
                             role,
                             fontSize   = 11.sp,
                             color      = roleColor,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            modifier   = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                         )
                     }
 
-                    // Verified / Unverified badge
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(
-                                if (isVerified) SuccessGreen.copy(0.12f) else ErrorRed.copy(0.12f)
-                            )
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    // Verified
+                    val verifiedColor = if (isVerified) GreenOk else RedErr
+                    Surface(
+                        color = verifiedColor.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.border(1.dp, verifiedColor.copy(0.3f), RoundedCornerShape(20.dp))
                     ) {
-                        Text(
-                            if (isVerified) "Verified" else "Unverified",
-                            fontSize   = 11.sp,
-                            color      = if (isVerified) SuccessGreen else ErrorRed,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Row(
+                            modifier          = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .clip(CircleShape)
+                                    .background(verifiedColor)
+                            )
+                            Text(
+                                if (isVerified) "Verified" else "Unverified",
+                                fontSize   = 11.sp,
+                                color      = verifiedColor,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
 
-                    // Banned badge
+                    // Banned
                     if (isBanned) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Color(0xFF37474F).copy(0.15f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        val bannedColor = Color(0xFF546E7A)
+                        Surface(
+                            color = bannedColor.copy(alpha = 0.10f),
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(1.dp, bannedColor.copy(0.3f), RoundedCornerShape(20.dp))
                         ) {
                             Text(
                                 "Banned",
                                 fontSize   = 11.sp,
-                                color      = Color(0xFF37474F),
-                                fontWeight = FontWeight.SemiBold
+                                color      = bannedColor,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier   = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                             )
                         }
                     }
                 }
             }
 
-            // 3-dots menu (not for super admin)
+            // 3-dot menu
             if (!isSuperAdmin) {
                 Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, null, tint = Color(0xFF888888))
+                    IconButton(
+                        onClick  = { menuExpanded = true },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(NavyBlue.copy(alpha = 0.06f))
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert, null,
+                            tint     = NavyBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                     DropdownMenu(
                         expanded         = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
-                        containerColor   = Color.White
+                        modifier         = Modifier
+                            .background(Color.White)
+                            .width(160.dp)
                     ) {
                         if (isBanned) {
                             DropdownMenuItem(
+                                leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(GreenOk)
+                                    )
+                                },
                                 text = {
                                     Text(
                                         "Unban User",
-                                        color      = SuccessGreen,
-                                        fontWeight = FontWeight.Medium
+                                        color      = GreenOk,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize   = 14.sp
                                     )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.CheckCircle, null, tint = SuccessGreen)
                                 },
                                 onClick = { menuExpanded = false; onUnban() }
                             )
                         } else {
                             DropdownMenuItem(
+                                leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(RedErr)
+                                    )
+                                },
                                 text = {
                                     Text(
                                         "Ban User",
-                                        color      = ErrorRed,
-                                        fontWeight = FontWeight.Medium
+                                        color      = RedErr,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize   = 14.sp
                                     )
                                 },
-                                leadingIcon = { Icon(Icons.Default.Block, null, tint = ErrorRed) },
                                 onClick = { menuExpanded = false; onBan() }
                             )
                         }
                     }
                 }
             } else {
-                Spacer(Modifier.size(48.dp))
+                Spacer(Modifier.size(36.dp))
             }
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

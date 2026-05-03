@@ -30,9 +30,16 @@ fun UserVerificationDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // ✅ FIX: User object find karo — ye hi functions ko pass hoga
-    val user = remember(uiState.pendingUsers, userId) {
+    // ✅ FIX: Pehle pendingUsers mein dhundo, warna selectedUser use karo
+    // (selectedUser tab set hota hai jab loadUserById Firestore se fetch kare)
+    val user = remember(uiState.pendingUsers, uiState.selectedUser, userId) {
         uiState.pendingUsers.find { it.userId == userId }
+            ?: uiState.selectedUser?.takeIf { it.userId == userId }
+    }
+
+    // ✅ FIX: Agar user pendingUsers mein nahi mila toh directly Firestore se load karo
+    LaunchedEffect(userId) {
+        viewModel.loadUserById(userId)
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -71,7 +78,6 @@ fun UserVerificationDetailScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        // ✅ FIX: String ki jagah User object + reason pass karo
                         viewModel.rejectUser(
                             user   = user,
                             reason = rejectReason.ifEmpty { "Does not meet criteria" }
@@ -118,7 +124,6 @@ fun UserVerificationDetailScreen(
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // ✅ FIX: rejectUser(userId) → showRejectDialog = true (dialog se user object pass hoga)
                         OutlinedButton(
                             onClick  = { showRejectDialog = true },
                             modifier = Modifier
@@ -131,7 +136,6 @@ fun UserVerificationDetailScreen(
                             )
                         ) { Text("Reject", fontWeight = FontWeight.SemiBold) }
 
-                        // ✅ FIX: approveUser(userId) → verifyUser(user) — sahi function naam
                         Button(
                             onClick  = { viewModel.verifyUser(user) },
                             modifier = Modifier
@@ -164,12 +168,37 @@ fun UserVerificationDetailScreen(
                 .padding(pad)
         ) {
             when {
+                // ✅ Loading state — data aa raha hai
                 uiState.isLoading && user == null -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    CircularProgressIndicator(
+                        modifier    = Modifier.align(Alignment.Center),
+                        color       = Color(0xFF0D1B3E),
+                        strokeWidth = 3.dp
+                    )
                 }
-                user == null -> {
-                    Text("User not found", modifier = Modifier.align(Alignment.Center))
+
+                // ✅ Sirf tab "User not found" dikhao jab loading bhi band ho
+                // aur dono sources (pendingUsers + selectedUser) mein na ho
+                !uiState.isLoading && user == null -> {
+                    Column(
+                        modifier            = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "User not found",
+                            fontSize   = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = Color(0xFF0D1B3E)
+                        )
+                        Text(
+                            "User ID: $userId",
+                            fontSize = 12.sp,
+                            color    = Color.Gray
+                        )
+                    }
                 }
+
                 else -> {
                     LazyColumn(
                         modifier            = Modifier
@@ -195,8 +224,8 @@ fun UserVerificationDetailScreen(
                                         color      = Color(0xFF0D1B3E)
                                     )
                                     HorizontalDivider(thickness = 0.5.dp)
-                                    UserDetailRow("Name",   user.fullName)
-                                    UserDetailRow("Email",  user.email)
+                                    UserDetailRow("Name",  user!!.fullName)
+                                    UserDetailRow("Email", user.email)
                                     UserDetailRow(
                                         "Role",
                                         user.role.toString()
@@ -215,7 +244,7 @@ fun UserVerificationDetailScreen(
                         }
 
                         // ── CNIC Image Card ──────────────────────────────────
-                        if (user.cnicImageUrl.isNotEmpty()) {
+                        if (user!!.cnicImageUrl.isNotEmpty()) {
                             item {
                                 Card(
                                     modifier  = Modifier.fillMaxWidth(),

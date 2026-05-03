@@ -1,6 +1,8 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -56,44 +59,76 @@ fun NotificationsScreen(
         }
     }
 
+    // ── Property Note Dialog ───────────────────────────────────────────────────
     if (showNoteDialog) {
         AlertDialog(
             onDismissRequest = { showNoteDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            containerColor   = Color.White,
+            shape            = RoundedCornerShape(20.dp),
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (dialogIsApproved) SuccessGreen.copy(0.12f)
+                            else ErrorRed.copy(0.12f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         if (dialogIsApproved) Icons.Default.CheckCircle else Icons.Default.Cancel,
                         null,
-                        tint     = if (dialogIsApproved) Color(0xFF4CAF50) else Color.Red,
-                        modifier = Modifier.size(22.dp)
+                        tint     = if (dialogIsApproved) SuccessGreen else ErrorRed,
+                        modifier = Modifier.size(26.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text(dialogTitle, fontWeight = FontWeight.Bold)
                 }
+            },
+            title = {
+                Text(
+                    dialogTitle,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 17.sp,
+                    color      = PrimaryNavy
+                )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         if (dialogIsApproved)
-                            "Mubarak! Aapki property admin ne approve kar di hai! 🎉"
+                            "Congratulations! Your property has been approved by the admin."
                         else
-                            "Aapki property admin ne reject kar di hai.",
-                        fontSize = 14.sp
+                            "Your property has been rejected by the admin.",
+                        fontSize = 14.sp,
+                        color    = TextSecondary
                     )
                     if (dialogNote.isNotEmpty()) {
-                        HorizontalDivider()
-                        Text("Admin Note:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextSecondary)
+                        HorizontalDivider(color = GoldAccent.copy(0.2f))
+                        Text(
+                            "Admin Note:",
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 13.sp,
+                            color      = TextSecondary
+                        )
                         Card(
-                            shape  = RoundedCornerShape(8.dp),
+                            shape  = RoundedCornerShape(10.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (dialogIsApproved) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                                containerColor = if (dialogIsApproved)
+                                    SuccessGreen.copy(0.08f)
+                                else
+                                    ErrorRed.copy(0.08f)
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (dialogIsApproved) SuccessGreen.copy(0.3f)
+                                else ErrorRed.copy(0.3f)
                             )
                         ) {
                             Text(
                                 text     = dialogNote,
                                 modifier = Modifier.padding(12.dp),
                                 fontSize = 14.sp,
-                                color    = if (dialogIsApproved) Color(0xFF2E7D32) else Color(0xFFC62828)
+                                color    = if (dialogIsApproved) SuccessGreen else ErrorRed
                             )
                         }
                     }
@@ -101,11 +136,15 @@ fun NotificationsScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { showNoteDialog = false },
-                    colors  = ButtonDefaults.buttonColors(
-                        containerColor = if (dialogIsApproved) Color(0xFF4CAF50) else Color.Red
-                    )
-                ) { Text("OK") }
+                    onClick  = { showNoteDialog = false },
+                    shape    = RoundedCornerShape(12.dp),
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = if (dialogIsApproved) SuccessGreen else ErrorRed
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("OK", fontWeight = FontWeight.SemiBold)
+                }
             }
         )
     }
@@ -115,20 +154,27 @@ fun NotificationsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Notifications", fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Notifications",
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 18.sp,
+                            color      = Color.White
+                        )
                         if (uiState.unreadCount > 0) {
-                            Spacer(Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.25f))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(GoldAccent)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Text(
                                     "${uiState.unreadCount}",
-                                    color      = Color.White,
-                                    fontSize   = 12.sp,
+                                    color      = PrimaryNavy,
+                                    fontSize   = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -137,28 +183,37 @@ fun NotificationsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            "Back",
+                            tint = Color.White
+                        )
                     }
                 },
                 actions = {
                     if (uiState.unreadCount > 0) {
                         TextButton(onClick = { viewModel.markAllAsRead(userId) }) {
-                            Text("Mark all read", fontSize = 12.sp, color = Color.White)
+                            Text(
+                                "Mark all read",
+                                fontSize   = 12.sp,
+                                color      = GoldAccent,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = PrimaryBlue,
-                    titleContentColor          = Color.White,
-                    navigationIconContentColor = Color.White
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryNavy)
             )
-        }
+        },
+        containerColor = Color(0xFFF0F2F8)
     ) { padding ->
 
         if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = PrimaryBlue)
+            Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = PrimaryNavy)
             }
             return@Scaffold
         }
@@ -168,19 +223,34 @@ fun NotificationsScreen(
                 modifier         = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.NotificationsNone,
-                        null,
-                        modifier = Modifier.size(72.dp),
-                        tint     = TextSecondary
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("No notifications yet", color = TextSecondary, fontSize = 16.sp)
-                    Spacer(Modifier.height(4.dp))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(PrimaryNavy.copy(0.08f))
+                            .border(1.5.dp, GoldAccent.copy(0.4f), RoundedCornerShape(20.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.NotificationsNone,
+                            null,
+                            modifier = Modifier.size(40.dp),
+                            tint     = PrimaryNavy.copy(0.5f)
+                        )
+                    }
                     Text(
-                        "Aapki notifications yahan dikhengi",
-                        color    = TextSecondary.copy(alpha = 0.6f),
+                        "No notifications yet",
+                        fontSize   = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color      = PrimaryNavy
+                    )
+                    Text(
+                        "Your notifications will appear here",
+                        color    = TextSecondary,
                         fontSize = 13.sp
                     )
                 }
@@ -188,11 +258,11 @@ fun NotificationsScreen(
         } else {
             LazyColumn(
                 modifier       = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(vertical = 8.dp)
+                contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(
                     items = uiState.notifications,
-                    // ✅ FIX: duplicate key crash fix — index fallback add kiya
                     key   = { notification ->
                         notification.notificationId
                             .ifEmpty { notification.hashCode().toString() }
@@ -207,12 +277,14 @@ fun NotificationsScreen(
                     NotificationCard(
                         item     = notification,
                         enumType = enumType,
-                        onDelete = { viewModel.deleteNotification(notification.notificationId, userId) },
+                        onDelete = {
+                            viewModel.deleteNotification(notification.notificationId, userId)
+                        },
                         onClick  = {
                             viewModel.markAsRead(notification.notificationId, userId)
                             when (enumType) {
                                 NotificationType.PROPERTY_APPROVED -> {
-                                    dialogTitle      = "Property Approved ✓"
+                                    dialogTitle      = "Property Approved"
                                     dialogNote       = notification.adminNote.ifEmpty { notification.body }
                                     dialogIsApproved = true
                                     showNoteDialog   = true
@@ -249,6 +321,9 @@ fun NotificationsScreen(
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATION CARD — Premium Navy + Gold UI
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun NotificationCard(
     item    : Notification,
@@ -256,112 +331,163 @@ fun NotificationCard(
     onClick : () -> Unit,
     onDelete: () -> Unit
 ) {
-    val bgColor = if (item.isRead) Color.Transparent else PrimaryBlue.copy(alpha = 0.05f)
+    val notifColor = screenNotificationColor(enumType)
+    val notifIcon  = screenNotificationIcon(enumType)
+    val isUnread   = !item.isRead
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(bgColor)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.Top
+    Card(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(
+            containerColor = if (isUnread) Color.White else Color(0xFFF8F9FC)
+        ),
+        elevation = CardDefaults.cardElevation(if (isUnread) 2.dp else 0.dp),
+        border    = BorderStroke(
+            width = if (isUnread) 1.5.dp else 1.dp,
+            color = if (isUnread) PrimaryNavy.copy(0.25f) else GoldAccent.copy(0.25f)
+        )
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(screenNotificationColor(enumType).copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(14.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector        = screenNotificationIcon(enumType),
-                contentDescription = null,
-                tint               = screenNotificationColor(enumType),
-                modifier           = Modifier.size(22.dp)
-            )
-        }
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text       = item.title.ifEmpty { enumType.name.replace("_", " ") },
-                    fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Medium,
-                    fontSize   = 14.sp,
-                    color      = TextPrimary,
-                    modifier   = Modifier.weight(1f)
+            // ── Left: Unread indicator bar ─────────────────────────────────
+            if (isUnread) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(PrimaryNavy)
                 )
-                Text(
-                    text     = item.createdAt?.toDate()?.let {
-                        java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault()).format(it)
-                    } ?: "-",
-                    fontSize = 11.sp,
-                    color    = TextSecondary
+            } else {
+                Spacer(Modifier.width(3.dp))
+            }
+
+            // ── Icon ──────────────────────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(notifColor.copy(0.12f))
+                    .border(1.dp, notifColor.copy(0.25f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector        = notifIcon,
+                    contentDescription = null,
+                    tint               = notifColor,
+                    modifier           = Modifier.size(22.dp)
                 )
             }
-            Spacer(Modifier.height(3.dp))
-            Text(
-                text     = item.body,
-                fontSize = 13.sp,
-                color    = if (!item.isRead) TextPrimary else TextSecondary,
-                maxLines = 2
-            )
-            if (item.adminNote.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Info, null,
-                        modifier = Modifier.size(12.dp),
-                        tint     = when (enumType) {
-                            NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)
-                            NotificationType.PROPERTY_REJECTED -> Color.Red
-                            else                               -> TextSecondary
-                        }
-                    )
-                    Spacer(Modifier.width(3.dp))
+
+            // ── Content ────────────────────────────────────────────────────
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier              = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        text     = item.adminNote,
-                        fontSize = 12.sp,
-                        color    = when (enumType) {
-                            NotificationType.PROPERTY_APPROVED -> Color(0xFF4CAF50)
-                            NotificationType.PROPERTY_REJECTED -> Color.Red
-                            else                               -> TextSecondary
-                        },
-                        maxLines = 1
+                        text       = item.title.ifEmpty { enumType.name.replace("_", " ") },
+                        fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
+                        fontSize   = 13.sp,
+                        color      = PrimaryNavy,
+                        modifier   = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text     = item.createdAt?.toDate()?.let {
+                            java.text.SimpleDateFormat(
+                                "MMM dd",
+                                java.util.Locale.getDefault()
+                            ).format(it)
+                        } ?: "-",
+                        fontSize = 10.sp,
+                        color    = TextSecondary
+                    )
+                }
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text     = item.body,
+                    fontSize = 12.sp,
+                    color    = if (isUnread) TextPrimary else TextSecondary,
+                    maxLines = 2,
+                    lineHeight = 17.sp
+                )
+                if (item.adminNote.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                when (enumType) {
+                                    NotificationType.PROPERTY_APPROVED -> SuccessGreen.copy(0.08f)
+                                    NotificationType.PROPERTY_REJECTED  -> ErrorRed.copy(0.08f)
+                                    else                                -> GoldAccent.copy(0.08f)
+                                }
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Info, null,
+                            modifier = Modifier.size(11.dp),
+                            tint     = when (enumType) {
+                                NotificationType.PROPERTY_APPROVED -> SuccessGreen
+                                NotificationType.PROPERTY_REJECTED  -> ErrorRed
+                                else                                -> GoldAccentDark
+                            }
+                        )
+                        Text(
+                            text     = item.adminNote,
+                            fontSize = 11.sp,
+                            color    = when (enumType) {
+                                NotificationType.PROPERTY_APPROVED -> SuccessGreen
+                                NotificationType.PROPERTY_REJECTED  -> ErrorRed
+                                else                                -> GoldAccentDark
+                            },
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            // ── Right: Unread dot + Delete ─────────────────────────────────
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (isUnread) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(GoldAccent)
+                    )
+                }
+                IconButton(
+                    onClick  = onDelete,
+                    modifier = Modifier.size(22.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        "Delete",
+                        tint     = TextSecondary.copy(0.5f),
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
         }
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (!item.isRead) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryBlue)
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-            IconButton(
-                onClick  = onDelete,
-                modifier = Modifier.size(20.dp)
-            ) {
-                Icon(
-                    Icons.Default.Close, "Delete",
-                    tint     = TextSecondary.copy(alpha = 0.5f),
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-        }
     }
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        color    = BorderGray.copy(alpha = 0.4f)
-    )
 }
 
+// ── Icon + Color helpers ───────────────────────────────────────────────────────
 fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED,
     NotificationType.BOOKING_CONFIRMED,
@@ -382,14 +508,46 @@ fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
 }
 
 fun screenNotificationColor(type: NotificationType): Color = when (type) {
-    NotificationType.BOOKING_REQUESTED,
-    NotificationType.BOOKING_CONFIRMED  -> PrimaryBlue
-    NotificationType.BOOKING_CANCELLED  -> Color.Red
-    NotificationType.PAYMENT_RECEIVED   -> Color(0xFF4CAF50)
-    NotificationType.PROPERTY_APPROVED  -> Color(0xFF4CAF50)
-    NotificationType.PROPERTY_REJECTED  -> Color.Red
-    NotificationType.PROPERTY_PENDING   -> Color(0xFFFF9800)
-    NotificationType.USER_VERIFIED      -> Color(0xFF4CAF50)
-    NotificationType.USER_REJECTED      -> Color.Red
-    else                                -> Color.Gray
+    NotificationType.BOOKING_REQUESTED  -> PrimaryNavy
+    NotificationType.BOOKING_CONFIRMED  -> SuccessGreen
+    NotificationType.BOOKING_CANCELLED  -> ErrorRed
+    NotificationType.BOOKING_COMPLETED  -> Color(0xFF00897B)
+    NotificationType.BOOKING_REMINDER   -> GoldAccentDark
+    NotificationType.PAYMENT_RECEIVED   -> SuccessGreen
+    NotificationType.PAYMENT_FAILED     -> ErrorRed
+    NotificationType.REFUND_ISSUED      -> WarningOrange
+    NotificationType.NEW_MESSAGE        -> PrimaryNavyLight
+    NotificationType.PROPERTY_APPROVED  -> SuccessGreen
+    NotificationType.PROPERTY_REJECTED  -> ErrorRed
+    NotificationType.PROPERTY_PENDING   -> WarningOrange
+    NotificationType.USER_VERIFIED      -> SuccessGreen
+    NotificationType.USER_REJECTED      -> ErrorRed
+    else                                -> GoldAccentDark
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
