@@ -21,20 +21,20 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class HomeUiState(
-    val featuredProperties      : List<Property> = emptyList(),
-    val nearbyProperties        : List<Property> = emptyList(),
-    val allProperties           : List<Property> = emptyList(),
-    val isLoading               : Boolean        = false,
-    val errorMessage            : String?        = null,
-    val totalProperties         : Int            = 0,
-    val activeBookingsCount     : Int            = 0,
-    val pendingRequestsCount    : Int            = 0,
-    val totalRevenue            : Double         = 0.0,
-    val averageRating           : Float          = 0f,
-    // ✦ Favourites state
-    val favouriteProperties     : List<Property> = emptyList(),
-    val favouriteIds            : Set<String>    = emptySet(),
-    val isFavouritesLoading     : Boolean        = false
+    val featuredProperties   : List<Property> = emptyList(),
+    val nearbyProperties     : List<Property> = emptyList(),
+    val allProperties        : List<Property> = emptyList(),
+    val isLoading            : Boolean        = false,
+    val errorMessage         : String?        = null,
+    val totalProperties      : Int            = 0,
+    val activeBookingsCount  : Int            = 0,
+    val activeTenantsCount   : Int            = 0,   // ✦ added
+    val pendingRequestsCount : Int            = 0,
+    val totalRevenue         : Double         = 0.0,
+    val averageRating        : Float          = 0f,
+    val favouriteProperties  : List<Property> = emptyList(),
+    val favouriteIds         : Set<String>    = emptySet(),
+    val isFavouritesLoading  : Boolean        = false
 )
 
 @HiltViewModel
@@ -89,7 +89,7 @@ class HomeViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ✦ FAVOURITES — IDs load
+    // FAVOURITES — IDs load
     // ─────────────────────────────────────────────────────────────
     private fun loadFavouriteIds(userId: String) {
         if (userId.isEmpty()) return
@@ -100,13 +100,13 @@ class HomeViewModel @Inject constructor(
                     _uiState.update { it.copy(favouriteIds = result.data.toSet()) }
                 }
             } catch (_: Exception) {
-                // silent — heart icons stay in default state
+                // silent
             }
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ✦ FAVOURITES — Full list load
+    // FAVOURITES — Full list load
     // ─────────────────────────────────────────────────────────────
     fun loadFavouriteProperties() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
@@ -132,7 +132,7 @@ class HomeViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ✦ FAVOURITES — Toggle (add/remove)
+    // FAVOURITES — Toggle (add/remove)
     // ─────────────────────────────────────────────────────────────
     fun toggleFavourite(propertyId: String) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
@@ -232,7 +232,6 @@ class HomeViewModel @Inject constructor(
                 val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
                 val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
-                // ✦ FIX: activeTenantsCount = unique tenants across confirmed bookings
                 val activeTenantsCount = bookings
                     .filter { it.status == BookingStatus.CONFIRMED.name }
                     .map { it.tenantId }
@@ -250,7 +249,7 @@ class HomeViewModel @Inject constructor(
                         allProperties        = properties,
                         totalProperties      = totalProps,
                         activeBookingsCount  = activeCount,
-                        activeTenantsCount   = activeTenantsCount,  // ✦ FIX: now properly set
+                        activeTenantsCount   = activeTenantsCount,
                         pendingRequestsCount = pendingCount,
                         totalRevenue         = revenue,
                         averageRating        = avgRating
