@@ -28,6 +28,7 @@ data class HomeUiState(
     val errorMessage         : String?        = null,
     val totalProperties      : Int            = 0,
     val activeBookingsCount  : Int            = 0,
+    val activeTenantsCount   : Int            = 0,   // ✦ FIX: added missing field
     val pendingRequestsCount : Int            = 0,
     val totalRevenue         : Double         = 0.0,
     val averageRating        : Float          = 0f,
@@ -39,10 +40,10 @@ data class HomeUiState(
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val propertyRepository: PropertyRepository,
-    private val bookingRepository : BookingRepository,
-    private val paymentRepository : PaymentRepository,
-    private val firebaseDataManager: FirebaseDataManager   // ✦ NEW
+    private val propertyRepository : PropertyRepository,
+    private val bookingRepository  : BookingRepository,
+    private val paymentRepository  : PaymentRepository,
+    private val firebaseDataManager: FirebaseDataManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -250,6 +251,13 @@ class HomeViewModel @Inject constructor(
                 val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
                 val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
+                // ✦ FIX: activeTenantsCount = unique tenants across confirmed bookings
+                val activeTenantsCount = bookings
+                    .filter { it.status == BookingStatus.CONFIRMED.name }
+                    .map { it.tenantId }
+                    .distinct()
+                    .size
+
                 val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
                 val revenue: Double = when (paymentsResult) {
                     is Resource.Success -> paymentsResult.data.sumOf { it.amount }
@@ -262,6 +270,7 @@ class HomeViewModel @Inject constructor(
                         allProperties        = properties,
                         totalProperties      = totalProps,
                         activeBookingsCount  = activeCount,
+                        activeTenantsCount   = activeTenantsCount,  // ✦ FIX: now properly set
                         pendingRequestsCount = pendingCount,
                         totalRevenue         = revenue,
                         averageRating        = avgRating
@@ -274,3 +283,8 @@ class HomeViewModel @Inject constructor(
         }
     }
 }
+
+
+
+
+

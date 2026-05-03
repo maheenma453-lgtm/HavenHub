@@ -25,7 +25,6 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -42,19 +41,17 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
-import com.example.havenhub.ui.theme.BackgroundWhite
 import com.example.havenhub.ui.theme.GoldAccent
 import com.example.havenhub.ui.theme.PrimaryNavy
-import com.example.havenhub.ui.theme.TextSecondary
 
-// ── Admin Bottom Navbar ───────────────────────────────────────────
+// ── Admin Bottom Navbar — Navy background, Gold active ───────────────────────
 @Composable
 fun AdminBottomNavBar(navController: NavController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
     NavigationBar(
-        containerColor = BackgroundWhite,
+        containerColor = PrimaryNavy,          // ✅ Navy background
         tonalElevation = 0.dp,
         modifier = Modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
@@ -100,9 +97,9 @@ fun AdminBottomNavBar(navController: NavController) {
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor   = GoldAccent,
                     selectedTextColor   = GoldAccent,
-                    unselectedIconColor = PrimaryNavy.copy(alpha = 0.5f),
-                    unselectedTextColor = PrimaryNavy.copy(alpha = 0.5f),
-                    indicatorColor      = GoldAccent.copy(alpha = 0.15f)
+                    unselectedIconColor = Color.White.copy(alpha = 0.45f),  // ✅ White muted
+                    unselectedTextColor = Color.White.copy(alpha = 0.45f),
+                    indicatorColor      = Color.White.copy(alpha = 0.10f)   // ✅ Subtle indicator
                 ),
                 alwaysShowLabel = true
             )
@@ -110,7 +107,7 @@ fun AdminBottomNavBar(navController: NavController) {
     }
 }
 
-// ── Nav Item Data Class ───────────────────────────────────────────
+// ── Nav Item Data Class ───────────────────────────────────────────────────────
 data class BottomNavItem(
     val route         : String,
     val label         : String,
@@ -118,16 +115,16 @@ data class BottomNavItem(
     val unselectedIcon: ImageVector
 )
 
-// ── Tenant Nav Items — Profile hata ke Favourites add kiya ✦ ─────
+// ── Tenant Nav Items ──────────────────────────────────────────────────────────
 val tenantNavItems = listOf(
-    BottomNavItem(Screen.Home.route,        "Home",      Icons.Filled.Home,                 Icons.Outlined.Home),
-    BottomNavItem(Screen.Search.route,      "Search",    Icons.Filled.Search,               Icons.Outlined.Search),
-    BottomNavItem(Screen.MyBookings.route,  "Bookings",  Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
-    BottomNavItem(Screen.MessageList.route, "Messages",  Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
-    BottomNavItem(Screen.Favourites.route,  "Favourites",Icons.Filled.Favorite,             Icons.Filled.FavoriteBorder)  // ✦ NEW
+    BottomNavItem(Screen.Home.route,        "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.Search.route,      "Search",     Icons.Filled.Search,               Icons.Outlined.Search),
+    BottomNavItem(Screen.MyBookings.route,  "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
+    BottomNavItem(Screen.MessageList.route, "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
+    BottomNavItem(Screen.Favourites.route,  "Favourites", Icons.Filled.Favorite,             Icons.Filled.FavoriteBorder)
 )
 
-// ── Landlord Nav Items — unchanged ────────────────────────────────
+// ── Landlord Nav Items ────────────────────────────────────────────────────────
 val landlordNavItems = listOf(
     BottomNavItem(Screen.Home.route,         "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
     BottomNavItem(Screen.MyProperties.route, "Properties", Icons.Filled.Home,                 Icons.Outlined.Home),
@@ -138,7 +135,7 @@ val landlordNavItems = listOf(
 
 val bottomNavItems = tenantNavItems
 
-// ── User Bottom Navbar ────────────────────────────────────────────
+// ── User Bottom Navbar — Navy background, Gold active ────────────────────────
 @Composable
 fun BottomNavBar(
     navController     : NavController,
@@ -151,7 +148,7 @@ fun BottomNavBar(
     val items = if (userRole == "landlord") landlordNavItems else tenantNavItems
 
     NavigationBar(
-        containerColor = BackgroundWhite,
+        containerColor = PrimaryNavy,          // ✅ Navy background
         tonalElevation = 0.dp,
         modifier = Modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
@@ -177,11 +174,11 @@ fun BottomNavBar(
                     if (item.route == Screen.MessageList.route && unreadMessageCount > 0) {
                         BadgedBox(
                             badge = {
-                                Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                Badge(containerColor = GoldAccent) {
                                     Text(
                                         text     = if (unreadMessageCount > 9) "9+" else "$unreadMessageCount",
                                         fontSize = 9.sp,
-                                        color    = Color.White
+                                        color    = PrimaryNavy
                                     )
                                 }
                             }
@@ -212,15 +209,23 @@ fun BottomNavBar(
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor   = GoldAccent,
                     selectedTextColor   = GoldAccent,
-                    unselectedIconColor = PrimaryNavy.copy(alpha = 0.5f),
-                    unselectedTextColor = PrimaryNavy.copy(alpha = 0.5f),
-                    indicatorColor      = GoldAccent.copy(alpha = 0.15f)
+                    unselectedIconColor = Color.White.copy(alpha = 0.45f),  // ✅ White muted
+                    unselectedTextColor = Color.White.copy(alpha = 0.45f),
+                    indicatorColor      = Color.White.copy(alpha = 0.10f)
                 ),
                 alwaysShowLabel = true
             )
         }
     }
 }
+
+
+
+
+
+
+
+
 
 
 

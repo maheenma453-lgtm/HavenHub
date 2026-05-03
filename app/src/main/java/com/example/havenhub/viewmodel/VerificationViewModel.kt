@@ -25,6 +25,7 @@ data class VerificationUiState(
     val isLoading         : Boolean        = false,
     val pendingProperties : List<Property> = emptyList(),
     val pendingUsers      : List<User>     = emptyList(),
+    val selectedUser      : User?          = null,   // ✅ NEW: direct fetch ka result
     val errorMessage      : String?        = null,
     val successMessage    : String?        = null,
     val actionSuccess     : Boolean        = false
@@ -34,7 +35,7 @@ data class VerificationUiState(
 class VerificationViewModel @Inject constructor(
     private val propertyRepository     : PropertyRepository,
     private val notificationRepository : NotificationRepository,
-    private val notificationHelper     : NotificationHelper,   // ✅ KEPT — device bell notification ke liye
+    private val notificationHelper     : NotificationHelper,
     private val firestore              : FirebaseFirestore
 ) : ViewModel() {
 
@@ -93,6 +94,47 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    // ✅ NEW: Single user ko userId se directly Firestore se fetch karo
+    // Yeh tab call hota hai jab detail screen directly open ho aur pendingUsers empty ho
+    fun loadUserById(userId: String) {
+        // Pehle check karo — shayad already pendingUsers mein ho
+        val existing = _uiState.value.pendingUsers.find { it.userId == userId }
+        if (existing != null) {
+            _uiState.update { it.copy(selectedUser = existing) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val doc = usersCol.document(userId).get().await()
+                val user = doc.toObject(User::class.java)
+                if (user != null) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading    = false,
+                            selectedUser = user
+                        )
+                    }
+                    Log.d("VERIFY_VM", "✅ loadUserById success: $userId")
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isLoading    = false,
+                            errorMessage = "User document not found in Firestore"
+                        )
+                    }
+                    Log.e("VERIFY_VM", "❌ loadUserById: document exists but toObject returned null")
+                }
+            } catch (e: Exception) {
+                Log.e("VERIFY_VM", "loadUserById error: ${e.localizedMessage}")
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.localizedMessage)
+                }
+            }
+        }
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // PROPERTY VERIFICATION
     // ══════════════════════════════════════════════════════════════════════════
@@ -101,7 +143,6 @@ class VerificationViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Step 1: Firestore status update
                 val updateResult = propertyRepository.approveProperty(property.propertyId, adminNote)
                 if (updateResult is Resource.Error) {
                     _uiState.update {
@@ -110,8 +151,6 @@ class VerificationViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Step 2: Landlord ko in-app Firestore notification
-                // ✅ FIX: Property.kt mein sirf 'ownerId' hai — 'landlordId' exist nahi karta
                 val ownerId = property.ownerId
                 if (ownerId.isNotEmpty()) {
                     notificationRepository.sendPropertyApprovedNotification(
@@ -125,15 +164,12 @@ class VerificationViewModel @Inject constructor(
                     Log.e("VERIFY_VM", "❌ ownerId empty — in-app notification not sent")
                 }
 
-                // Step 3: Device bell notification (landlord ka device)
-                // ✅ KEPT: notificationHelper use ho raha hai — unused warning fix
                 notificationHelper.showPropertyApproved(
                     propertyTitle = property.title,
                     propertyId    = property.propertyId,
                     adminNote     = adminNote
                 )
 
-                // Step 4: UI update
                 _uiState.update { state ->
                     state.copy(
                         isLoading         = false,
@@ -156,7 +192,6 @@ class VerificationViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Step 1: Firestore status update
                 val updateResult = propertyRepository.rejectProperty(property.propertyId, adminNote)
                 if (updateResult is Resource.Error) {
                     _uiState.update {
@@ -165,8 +200,6 @@ class VerificationViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Step 2: Landlord ko in-app notification
-                // ✅ FIX: sirf ownerId — landlordId nahi
                 val ownerId = property.ownerId
                 if (ownerId.isNotEmpty()) {
                     notificationRepository.sendPropertyRejectedNotification(
@@ -178,14 +211,12 @@ class VerificationViewModel @Inject constructor(
                     Log.d("VERIFY_VM", "✅ In-app rejection notification sent to: $ownerId")
                 }
 
-                // Step 3: Device bell notification
                 notificationHelper.showPropertyRejected(
                     propertyTitle = property.title,
                     propertyId    = property.propertyId,
                     adminNote     = adminNote
                 )
 
-                // Step 4: UI update
                 _uiState.update { state ->
                     state.copy(
                         isLoading         = false,
@@ -208,14 +239,11 @@ class VerificationViewModel @Inject constructor(
     // USER VERIFICATION
     // ══════════════════════════════════════════════════════════════════════════
 
-    // ✅ NOTE: "verifyUser is never used" — ye sirf IDE warning hai (yellow, error nahi).
-    //    UserVerificationDetailScreen se call hota hai. Suppress karo ya ignore karo.
     @Suppress("unused")
     fun verifyUser(user: User) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Step 1: Firestore update
                 usersCol.document(user.userId).update(
                     mapOf(
                         "verificationStatus" to "VERIFIED",
@@ -224,22 +252,20 @@ class VerificationViewModel @Inject constructor(
                     )
                 ).await()
 
-                // Step 2: In-app notification
                 notificationRepository.sendUserVerifiedNotification(
                     userId   = user.userId,
                     userName = user.fullName
                 )
                 Log.d("VERIFY_VM", "✅ User verified notification sent: ${user.userId}")
 
-                // Step 3: Device bell notification
                 notificationHelper.showUserVerified(userName = user.fullName)
 
-                // Step 4: UI update
                 _uiState.update { state ->
                     state.copy(
                         isLoading      = false,
                         actionSuccess  = true,
                         successMessage = "${user.fullName} verified! User ko notification bhej di.",
+                        selectedUser   = null,
                         pendingUsers   = state.pendingUsers.filter { it.userId != user.userId }
                     )
                 }
@@ -255,7 +281,6 @@ class VerificationViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Step 1: Firestore update
                 usersCol.document(user.userId).update(
                     mapOf(
                         "verificationStatus" to "REJECTED",
@@ -264,25 +289,23 @@ class VerificationViewModel @Inject constructor(
                     )
                 ).await()
 
-                // Step 2: In-app notification
                 notificationRepository.sendUserRejectedNotification(
                     userId = user.userId,
                     reason = reason
                 )
                 Log.d("VERIFY_VM", "✅ User rejected notification sent: ${user.userId}")
 
-                // Step 3: Device bell notification
                 notificationHelper.showUserRejected(
                     userName = user.fullName,
                     reason   = reason
                 )
 
-                // Step 4: UI update
                 _uiState.update { state ->
                     state.copy(
                         isLoading      = false,
                         actionSuccess  = true,
                         successMessage = "${user.fullName} ka verification reject kiya.",
+                        selectedUser   = null,
                         pendingUsers   = state.pendingUsers.filter { it.userId != user.userId }
                     )
                 }
