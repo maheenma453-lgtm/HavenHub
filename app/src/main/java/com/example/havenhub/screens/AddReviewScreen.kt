@@ -31,11 +31,11 @@ fun AddReviewScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    var rating      by remember { mutableIntStateOf(0) }
-    var reviewText  by remember { mutableStateOf("") }
-    var cleanliness by remember { mutableIntStateOf(0) }
-    var location    by remember { mutableIntStateOf(0) }
-    var value       by remember { mutableIntStateOf(0) }
+    var rating         by remember { mutableIntStateOf(0) }
+    var reviewText     by remember { mutableStateOf("") }
+    var cleanliness    by remember { mutableIntStateOf(0) }
+    var location       by remember { mutableIntStateOf(0) }
+    var value          by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
@@ -111,7 +111,6 @@ fun AddReviewScreen(
                         Icon(
                             imageVector        = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = null,
-                            // ✅ AccentAmber → AccentGold
                             tint     = if (star <= rating) AccentGold else TextSecondary,
                             modifier = Modifier.size(36.dp)
                         )
@@ -122,7 +121,6 @@ fun AddReviewScreen(
                         "$rating/5",
                         fontSize   = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        // ✅ AccentAmber → AccentGold
                         color      = AccentGold,
                         modifier   = Modifier.align(Alignment.CenterVertically)
                     )
@@ -132,7 +130,7 @@ fun AddReviewScreen(
             // ── Category Ratings ───────────────────────────────────
             Text("Category Ratings", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
             CategoryRating("Cleanliness", cleanliness) { cleanliness = it }
-            CategoryRating("Location", location)       { location    = it }
+            CategoryRating("Location",    location)    { location    = it }
             CategoryRating("Value for Money", value)   { value       = it }
 
             // ── Review Text ────────────────────────────────────────
@@ -163,10 +161,14 @@ fun AddReviewScreen(
             Button(
                 onClick = {
                     viewModel.addReview(
-                        propertyId = propertyId,
-                        bookingId  = bookingId,
-                        rating     = rating.toFloat(),
-                        comment    = reviewText
+                        propertyId        = propertyId,
+                        bookingId         = bookingId,
+                        rating            = rating.toFloat(),
+                        comment           = reviewText,
+                        // ✦ FIX: Category ratings bhi pass karo
+                        cleanlinessRating = cleanliness.toFloat(),
+                        locationRating    = location.toFloat(),
+                        valueRating       = value.toFloat()
                     )
                 },
                 modifier = Modifier
@@ -217,7 +219,6 @@ fun CategoryRating(label: String, value: Int, onSelect: (Int) -> Unit) {
                     Icon(
                         imageVector        = if (star <= value) Icons.Default.Star else Icons.Default.StarBorder,
                         contentDescription = null,
-                        // ✅ AccentAmber → AccentGold
                         tint     = if (star <= value) AccentGold else TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
@@ -226,39 +227,3 @@ fun CategoryRating(label: String, value: Int, onSelect: (Int) -> Unit) {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

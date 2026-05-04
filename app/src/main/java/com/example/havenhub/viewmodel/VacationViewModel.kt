@@ -3,6 +3,8 @@ package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Property
+import com.example.havenhub.data.RentalPackage
+import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.repository.BookingRepository
 import com.example.havenhub.repository.PropertyRepository
 import com.example.havenhub.utils.Resource
@@ -20,72 +22,74 @@ data class VacationUiState(
     val isLoading: Boolean = false,
     val properties: List<Property> = emptyList(),
     val unavailableDates: List<Date> = emptyList(),
-    val errorMessage: String? = null
+    val allPackages: List<RentalPackage> = emptyList(),
+    val propertyPackages: List<RentalPackage> = emptyList(),
+    val selectedPackage: RentalPackage? = null,
+    val selectedPropertyId: String = "",
+    val selectedPropertyTitle: String = "",
+    val checkInDay: Int = -1,
+    val checkOutDay: Int = -1,
+    val guestCount: Int = 2,
+    val errorMessage: String? = null,
+    val successMessage: String? = null
 )
 
 @HiltViewModel
 class VacationViewModel @Inject constructor(
     private val propertyRepository: PropertyRepository,
-    private val bookingRepository: BookingRepository
+    private val bookingRepository: BookingRepository,
+    private val firebaseDataManager: FirebaseDataManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VacationUiState())
     val uiState: StateFlow<VacationUiState> = _uiState.asStateFlow()
 
-    // SRS Goal 2: Northern tourist destination cities
     private val northernCities = listOf(
         "Kaghan", "Naran", "Skardu", "Swat", "Hunza", "Murree",
         "Islamabad", "Gilgit", "Chitral", "Neelum", "Azad Kashmir"
     )
 
-    // prop_007 = Murree, prop_008 = Naran, prop_009 = Kaghan valley,
-    // prop_010 = Swat, prop_011 = Hunza, prop_012 = Skardu
     private val northernPropertyIds = listOf(
-        "prop_007", "prop_008", "prop_009", "prop_010", "prop_011", "prop_012"
+        "prop_003",
+        "prop_007",
+        "prop_008",
+        "prop_009",
+        "prop_010",
+        "prop_011",
+        "prop_012"
     )
 
     init {
         loadVacationProperties()
+        loadAllActivePackages()
     }
+
+    // ── Properties ───────────────────────────────────────────────────────────
 
     fun loadVacationProperties() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            val result: Resource<List<Property>> = propertyRepository.getAllProperties()
-
-            when (result) {
+            when (val result = propertyRepository.getAllProperties()) {
                 is Resource.Success -> {
                     val filteredList = result.data
                         ?.filter { prop ->
-                            // Match by known northern property IDs (trim spaces for safety)
                             val trimmedId = prop.propertyId.trim()
                             val matchById = trimmedId in northernPropertyIds
-
-                            // OR match by city/title containing a northern area name
                             val matchByCity = northernCities.any { city ->
                                 prop.city.contains(city, ignoreCase = true) ||
                                         prop.title.contains(city, ignoreCase = true)
                             }
-
                             matchById || matchByCity
                         }
                         ?: emptyList()
 
-                    _uiState.update {
-                        it.copy(isLoading = false, properties = filteredList)
-                    }
+                    _uiState.update { it.copy(isLoading = false, properties = filteredList) }
                 }
-
                 is Resource.Error -> {
-                    _uiState.update {
-                        it.copy(isLoading = false, errorMessage = result.message)
-                    }
+                    _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
                 }
-
-                else -> {
-                    _uiState.update { it.copy(isLoading = false) }
-                }
+                else -> { _uiState.update { it.copy(isLoading = false) } }
             }
         }
     }
@@ -95,7 +99,6 @@ class VacationViewModel @Inject constructor(
         viewModelScope.launch {
             bookingRepository.getBookingsFlow(currentUserId).collect { bookings ->
                 val allDates = mutableListOf<Date>()
-
                 bookings
                     .filter { it.propertyId == propertyId }
                     .forEach { booking ->
@@ -113,9 +116,102 @@ class VacationViewModel @Inject constructor(
                             }
                         }
                     }
-
                 _uiState.update { it.copy(unavailableDates = allDates) }
             }
         }
+    }
+
+    // ── Rental Packages ───────────────────────────────────────────────────────
+
+    fun loadAllActivePackages() {
+        viewModelScope.launch {
+            when (val result = firebaseDataManager.getActiveRentalPackages()) {
+                is Resource.Success -> {
+                    _uiState.update { it.copy(allPackages = result.data ?: emptyList()) }
+                }
+                is Resource.Error -> {
+                    _uiState.update { it.copy(errorMessage = result.message) }
+                }
+                else -> {}
+            }
+        }
+    }
+
+    fun loadPackagesForProperty(propertyId: String) {
+        viewModelScope.launch {
+            // ✦ FIX: pehle stale data clear karo
+            _uiState.update {
+                it.copy(
+                    isLoading        = true,
+                    propertyPackages = emptyList(),
+                    selectedPackage  = null
+                )
+            }
+            when (val result = firebaseDataManager.getPackagesByProperty(propertyId)) {
+                is Resource.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading        = false,
+                            propertyPackages = result.data ?: emptyList()
+                        )
+                    }
+                }
+                is Resource.Error -> {
+                    _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                }
+                else -> { _uiState.update { it.copy(isLoading = false) } }
+            }
+        }
+    }
+
+    fun selectPackage(pkg: RentalPackage) {
+        _uiState.update { it.copy(selectedPackage = pkg) }
+    }
+
+    fun clearSelectedPackage() {
+        _uiState.update { it.copy(selectedPackage = null) }
+    }
+
+    // ── Pre-Booking Form State ────────────────────────────────────────────────
+
+    fun setSelectedProperty(propertyId: String, propertyTitle: String) {
+        // ✦ FIX: pehle state clear karo, phir load karo
+        _uiState.update {
+            it.copy(
+                selectedPropertyId    = propertyId,
+                selectedPropertyTitle = propertyTitle,
+                propertyPackages      = emptyList(),
+                selectedPackage       = null
+            )
+        }
+        loadPackagesForProperty(propertyId)
+    }
+
+    fun setGuestCount(count: Int) {
+        _uiState.update { it.copy(guestCount = count.coerceIn(1, 20)) }
+    }
+
+    fun setCheckInDay(day: Int) {
+        _uiState.update { it.copy(checkInDay = day, checkOutDay = -1) }
+    }
+
+    fun setCheckOutDay(day: Int) {
+        _uiState.update { it.copy(checkOutDay = day) }
+    }
+
+    fun calculateTotalAmount(): Double {
+        val pkg = _uiState.value.selectedPackage ?: return 0.0
+        val nights = when {
+            _uiState.value.checkInDay != -1 && _uiState.value.checkOutDay != -1 ->
+                (_uiState.value.checkOutDay - _uiState.value.checkInDay).coerceAtLeast(1)
+            else -> pkg.minNights.coerceAtLeast(1)
+        }
+        return pkg.discountedPricePerNight * nights
+    }
+
+    fun calculateDepositAmount(): Double = calculateTotalAmount() * 0.20
+
+    fun clearMessages() {
+        _uiState.update { it.copy(errorMessage = null, successMessage = null) }
     }
 }

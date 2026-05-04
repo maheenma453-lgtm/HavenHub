@@ -57,7 +57,6 @@ fun PropertyDetailScreen(
     var currentUserRole by remember { mutableStateOf("") }
     val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    // ✅ .trim() — trailing space se bachao
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
             try {
@@ -450,91 +449,138 @@ fun PropertyDetailScreen(
                     }
                 }
 
-                // STICKY BOTTOM BAR
+                // ── STICKY BOTTOM BAR ─────────────────────────────────────────────
                 Surface(
                     modifier        = Modifier.align(Alignment.BottomCenter),
                     shadowElevation = 12.dp,
                     color           = White
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .padding(bottom = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment     = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Per night", fontSize = 9.sp, color = Muted)
-                            Text(
-                                property.formattedPrice,
-                                fontSize   = 15.sp,
-                                fontWeight = FontWeight.Black,
-                                color      = Navy,
-                                maxLines   = 1
-                            )
-                        }
-
-                        // ✅ Message button — tenant only
-                        if (roleLoaded && isTenant && property.ownerId.isNotEmpty() && !isOwner) {
-                            OutlinedButton(
-                                onClick        = {
-                                    navController.navigate(
-                                        Screen.Chat.createRoute(
-                                            userId    = property.ownerId,
-                                            ownerName = property.ownerName.ifEmpty { "Owner" }
-                                            // ✅ propertyId pass nahi — simple chatId guarantee
-                                        )
-                                    )
-                                },
-                                modifier       = Modifier.height(38.dp),
-                                shape          = RoundedCornerShape(10.dp),
-                                border         = BorderStroke(1.dp, Navy),
-                                colors         = ButtonDefaults.outlinedButtonColors(contentColor = Navy),
-                                contentPadding = PaddingValues(horizontal = 12.dp)
+                    // ✦ Tenant ke liye 2 rows: Message+BookNow upar, BookWithPackage neeche
+                    if (roleLoaded && isTenant && !isOwner) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .padding(bottom = 6.dp)
+                        ) {
+                            // Row 1: Price + Message + Book Now
+                            Row(
+                                modifier              = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment     = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Message, null, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("Per night", fontSize = 9.sp, color = Muted)
+                                    Text(
+                                        property.formattedPrice,
+                                        fontSize   = 15.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color      = Navy,
+                                        maxLines   = 1
+                                    )
+                                }
+
+                                // Message button
+                                if (property.ownerId.isNotEmpty()) {
+                                    OutlinedButton(
+                                        onClick        = {
+                                            navController.navigate(
+                                                Screen.Chat.createRoute(
+                                                    userId    = property.ownerId,
+                                                    ownerName = property.ownerName.ifEmpty { "Owner" }
+                                                )
+                                            )
+                                        },
+                                        modifier       = Modifier.height(38.dp),
+                                        shape          = RoundedCornerShape(10.dp),
+                                        border         = BorderStroke(1.dp, Navy),
+                                        colors         = ButtonDefaults.outlinedButtonColors(contentColor = Navy),
+                                        contentPadding = PaddingValues(horizontal = 12.dp)
+                                    ) {
+                                        Icon(Icons.Default.Message, null, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            property.ownerName.ifEmpty { "Owner" }.split(" ").first(),
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize   = 12.sp
+                                        )
+                                    }
+                                }
+
+                                // Book Now button
+                                Button(
+                                    onClick        = { navController.navigate(Screen.Booking.createRoute(propertyId)) },
+                                    modifier       = Modifier.height(38.dp),
+                                    shape          = RoundedCornerShape(10.dp),
+                                    colors         = ButtonDefaults.buttonColors(
+                                        containerColor = Navy,
+                                        contentColor   = White
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 18.dp),
+                                    elevation      = ButtonDefaults.buttonElevation(2.dp)
+                                ) {
+                                    Text("Book Now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+
+                            // ✦ Row 2: Book with Package — full width gold button
+                            Button(
+                                onClick = {
+                                    navController.navigate(Screen.PreBooking.createRoute(propertyId))
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(42.dp),
+                                shape  = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Gold,
+                                    contentColor   = Navy
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(2.dp)
+                            ) {
+                                Icon(Icons.Default.LocalOffer, null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Book with Package", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                            }
+                        }
+                    } else {
+                        // Landlord / Admin row — unchanged
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .padding(bottom = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment     = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Per night", fontSize = 9.sp, color = Muted)
                                 Text(
-                                    property.ownerName.ifEmpty { "Owner" }.split(" ").first(),
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize   = 12.sp
+                                    property.formattedPrice,
+                                    fontSize   = 15.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color      = Navy,
+                                    maxLines   = 1
                                 )
                             }
-                        }
 
-                        // Book Now — tenant only
-                        if (roleLoaded && isTenant && !isOwner) {
-                            Button(
-                                onClick        = { navController.navigate(Screen.Booking.createRoute(propertyId)) },
-                                modifier       = Modifier.height(38.dp),
-                                shape          = RoundedCornerShape(10.dp),
-                                colors         = ButtonDefaults.buttonColors(
-                                    containerColor = Navy,
-                                    contentColor   = White
-                                ),
-                                contentPadding = PaddingValues(horizontal = 18.dp),
-                                elevation      = ButtonDefaults.buttonElevation(2.dp)
-                            ) {
-                                Text("Book Now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
-                        }
-
-                        // Edit — landlord + owner only
-                        if (roleLoaded && isLandlord && isOwner) {
-                            Button(
-                                onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
-                                modifier       = Modifier.height(38.dp),
-                                shape          = RoundedCornerShape(10.dp),
-                                colors         = ButtonDefaults.buttonColors(
-                                    containerColor = Navy,
-                                    contentColor   = Gold
-                                ),
-                                contentPadding = PaddingValues(horizontal = 16.dp)
-                            ) {
-                                Icon(Icons.Default.Edit, null, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(5.dp))
-                                Text("Edit Property", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            if (roleLoaded && isLandlord && isOwner) {
+                                Button(
+                                    onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
+                                    modifier       = Modifier.height(38.dp),
+                                    shape          = RoundedCornerShape(10.dp),
+                                    colors         = ButtonDefaults.buttonColors(
+                                        containerColor = Navy,
+                                        contentColor   = Gold
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 16.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text("Edit Property", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
                             }
                         }
                     }

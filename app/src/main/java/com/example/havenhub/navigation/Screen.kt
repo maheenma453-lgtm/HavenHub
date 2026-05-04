@@ -45,7 +45,6 @@ sealed class Screen(val route: String) {
         fun createRoute(bookingId: String) = "booking_details/$bookingId"
     }
 
-    // ✦ NEW — Landlord: Active Tenants list screen
     object ActiveTenants : Screen("active_tenants/{landlordId}") {
         const val ARG_LANDLORD_ID = "landlordId"
         fun createRoute(landlordId: String) = "active_tenants/$landlordId"
@@ -108,9 +107,15 @@ sealed class Screen(val route: String) {
         }
     }
 
-    object VacationRentals  : Screen("vacation_rentals")
-    object PreBooking        : Screen("pre_booking")
-    object VacationCalendar  : Screen("vacation_calendar/{propertyId}") {
+    object VacationRentals : Screen("vacation_rentals")
+
+    // ✦ UPDATED: propertyId argument add kiya
+    object PreBooking : Screen("pre_booking/{propertyId}") {
+        const val ARG_PROPERTY_ID = "propertyId"
+        fun createRoute(propertyId: String) = "pre_booking/$propertyId"
+    }
+
+    object VacationCalendar : Screen("vacation_calendar/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "vacation_calendar/$propertyId"
     }

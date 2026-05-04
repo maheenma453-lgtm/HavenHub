@@ -15,23 +15,23 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ReviewUiState(
-    val isLoading: Boolean = false,
-    val reviews: List<Review> = emptyList(),
-    val averageRating: Double = 0.0,
-    val errorMessage: String? = null,
-    val actionSuccess: Boolean = false
+    val isLoading     : Boolean      = false,
+    val reviews       : List<Review> = emptyList(),
+    val averageRating : Double       = 0.0,
+    val errorMessage  : String?      = null,
+    val actionSuccess : Boolean      = false
 )
 
 @HiltViewModel
 class ReviewViewModel @Inject constructor(
-    private val reviewRepository: ReviewRepository,
-    private val authRepository: AuthRepository
+    private val reviewRepository : ReviewRepository,
+    private val authRepository   : AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReviewUiState())
     val uiState: StateFlow<ReviewUiState> = _uiState.asStateFlow()
 
-    // Load Property Reviews
+    // ── Load Property Reviews ─────────────────────────────────────
     fun loadPropertyReviews(propertyId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -53,26 +53,40 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    // Add Review
+    // ── Add Review ✦ FIXED ────────────────────────────────────────
     fun addReview(
-        propertyId: String,
-        bookingId: String,
-        rating: Float,
-        comment: String
+        propertyId        : String,
+        bookingId         : String,
+        rating            : Float,
+        comment           : String,
+        // ✦ FIX: Category ratings parameters add kiye
+        cleanlinessRating : Float = 0f,
+        locationRating    : Float = 0f,
+        valueRating       : Float = 0f
     ) {
         viewModelScope.launch {
-            val userId   = authRepository.currentUser?.uid ?: return@launch
-            val userName = authRepository.currentUser?.displayName ?: ""
+            val userId   = authRepository.currentUser?.uid         ?: return@launch
+            // ✦ FIX: displayName empty ho toh email ka pehla part use karo
+            val userName = authRepository.currentUser?.displayName
+                ?.takeIf { it.isNotBlank() }
+                ?: authRepository.currentUser?.email
+                    ?.substringBefore("@")
+                ?: "User"
 
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
             val review = Review(
-                reviewerId    = userId,
-                reviewerName  = userName,
-                propertyId    = propertyId,
-                bookingId     = bookingId,
-                overallRating = rating,
-                comment       = comment
+                reviewerId          = userId,
+                reviewerName        = userName,         // ✦ FIX: proper name
+                reviewerAvatarUrl   = authRepository.currentUser?.photoUrl?.toString() ?: "",
+                propertyId          = propertyId,
+                bookingId           = bookingId,
+                overallRating       = rating,
+                comment             = comment,
+                // ✦ FIX: Category ratings properly set ho rahe hain
+                cleanlinessRating   = cleanlinessRating,
+                locationRating      = locationRating,
+                valueRating         = valueRating
             )
 
             when (val result = reviewRepository.addReview(review)) {
@@ -87,7 +101,7 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    // Clear Messages — navigation ke baad call karo
+    // ── Clear Messages ────────────────────────────────────────────
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
     }

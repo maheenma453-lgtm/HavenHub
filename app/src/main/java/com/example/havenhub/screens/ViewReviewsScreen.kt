@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,8 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,7 +33,6 @@ fun ViewReviewsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Property ki reviews load karo
     LaunchedEffect(propertyId) {
         viewModel.loadPropertyReviews(propertyId)
     }
@@ -63,12 +63,12 @@ fun ViewReviewsScreen(
         }
 
         LazyColumn(
-            modifier        = Modifier.fillMaxSize().padding(padding),
-            contentPadding  = PaddingValues(16.dp),
+            modifier            = Modifier.fillMaxSize().padding(padding),
+            contentPadding      = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                // Rating Overview Card
+                // ── Rating Overview Card ───────────────────────────
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(16.dp),
@@ -116,17 +116,18 @@ fun ViewReviewsScreen(
                 Spacer(Modifier.height(4.dp))
             }
 
-            // Error Message
             if (uiState.errorMessage != null) {
                 item {
                     Text(text = uiState.errorMessage!!, color = ErrorRed, fontSize = 14.sp)
                 }
             }
 
-            // Empty State
             if (uiState.reviews.isEmpty() && !uiState.isLoading) {
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier         = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text("No reviews yet.", color = TextSecondary, fontSize = 14.sp)
                     }
                 }
@@ -139,11 +140,12 @@ fun ViewReviewsScreen(
     }
 }
 
+// ── Rating Bar ─────────────────────────────────────────────────────
 @Composable
 fun RatingBar(star: Int, count: Int, total: Int) {
     val fraction = if (total > 0) count.toFloat() / total else 0f
     Row(
-        verticalAlignment   = Alignment.CenterVertically,
+        verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text("$star", fontSize = 12.sp, color = TextSecondary)
@@ -157,6 +159,7 @@ fun RatingBar(star: Int, count: Int, total: Int) {
     }
 }
 
+// ── Review Card ────────────────────────────────────────────────────
 @Composable
 fun ReviewCard(review: Review) {
     Card(
@@ -165,6 +168,8 @@ fun ReviewCard(review: Review) {
         colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+
+            // ── Reviewer Info Row ──────────────────────────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(color = PrimaryBlue, shape = CircleShape) {
                     Box(
@@ -172,7 +177,8 @@ fun ReviewCard(review: Review) {
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            review.reviewerName.firstOrNull()?.toString() ?: "?",
+                            // ✦ FIX: reviewerName empty ho toh "?" show karo
+                            text       = review.reviewerName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
                             color      = Color.White,
                             fontWeight = FontWeight.Bold
                         )
@@ -180,9 +186,15 @@ fun ReviewCard(review: Review) {
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(review.reviewerName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
+                    // ✦ FIX: Name empty ho toh "Anonymous" show karo
                     Text(
-                        review.createdAt?.toDate()?.toString() ?: "-",
+                        text       = review.reviewerName.ifEmpty { "Anonymous" },
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize   = 14.sp,
+                        color      = TextPrimary
+                    )
+                    Text(
+                        text     = review.createdAt?.toDate()?.toString() ?: "-",
                         fontSize = 11.sp,
                         color    = TextSecondary
                     )
@@ -198,8 +210,77 @@ fun ReviewCard(review: Review) {
                     }
                 }
             }
+
             Spacer(Modifier.height(10.dp))
+
+            // ── Review Comment ─────────────────────────────────────
             Text(review.comment, fontSize = 13.sp, lineHeight = 20.sp, color = TextPrimary)
+
+            // ✦ NEW: Landlord Reply Section ─────────────────────────
+            if (review.hasLandlordReply) {
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = BorderGray, thickness = 0.8.dp)
+                Spacer(Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = PrimaryBlue.copy(alpha = 0.06f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(10.dp)
+                ) {
+                    // Landlord Avatar
+                    Surface(
+                        color  = AccentGold,
+                        shape  = CircleShape,
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector        = Icons.Default.Home,
+                                contentDescription = null,
+                                tint     = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Landlord Reply",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize   = 12.sp,
+                                color      = PrimaryBlue
+                            )
+                            // Reply date agar available ho
+                            review.landlordRepliedAt?.let { ts ->
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "• ${ts.toDate().let {
+                                        "${it.date} ${it.month.let { m ->
+                                            arrayOf("Jan","Feb","Mar","Apr","May","Jun",
+                                                "Jul","Aug","Sep","Oct","Nov","Dec")[m]
+                                        }} ${it.year + 1900}"
+                                    }}",
+                                    fontSize = 10.sp,
+                                    color    = TextSecondary
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            review.landlordReply,
+                            fontSize   = 12.sp,
+                            lineHeight = 18.sp,
+                            color      = TextPrimary,
+                            fontStyle  = FontStyle.Italic
+                        )
+                    }
+                }
+            }
         }
     }
 }

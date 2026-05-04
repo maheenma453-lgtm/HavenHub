@@ -26,8 +26,6 @@ private val authRoutes = listOf(
     Screen.ForgotPassword.route
 )
 
-// Yeh sirf admin-specific routes hain
-// Notifications/Settings shared routes hain — role se decide hongi
 private val strictAdminRoutes = listOf(
     Screen.AdminDashboard.route,
     Screen.ManageUsers.route,
@@ -41,8 +39,6 @@ private val strictAdminRoutes = listOf(
     Screen.PaymentReports.route,
 )
 
-// Yeh routes admin aur tenant dono use karte hain
-// Inhe role se judge karo, route se nahi
 private val sharedRoutes = listOf(
     Screen.Notifications.route,
     Screen.NotificationDetail.route,
@@ -54,7 +50,7 @@ private val sharedRoutes = listOf(
     Screen.HelpAndSupport.route,
     Screen.Profile.route,
     Screen.EditProfile.route,
-    Screen.Favourites.route,          // ← ADDED: Favourites shared route
+    Screen.Favourites.route,
 )
 
 @Composable
@@ -73,15 +69,10 @@ fun HavenHubNavGraph(
 
     val isAuthRoute = currentRoute in authRoutes
 
-    // ✅ FIX: isAdminRoute ab ROLE check karta hai, sirf route nahi
-    // Pehle bug: "notifications" route adminRoutes mein tha, toh tenant ko bhi admin navbar milta tha
-    // Ab fix: strict admin routes (dashboard, manage, verify) + agar admin role hai toh shared routes bhi
     val isAdminRoute = when {
-        // Clearly admin-only screens
         strictAdminRoutes.any { currentRoute == it }                               -> true
         currentRoute?.startsWith("property_verification_detail") == true           -> true
         currentRoute?.startsWith("user_verification_detail") == true               -> true
-        // Shared screens (notifications, settings, profile, favourites) — role se decide karo
         sharedRoutes.any { currentRoute == it }                                    -> isCurrentUserAdmin
         currentRoute?.startsWith("notification_detail") == true                    -> isCurrentUserAdmin
         else                                                                       -> false
@@ -334,7 +325,22 @@ fun HavenHubNavGraph(
 
 // ── Vacation ──────────────────────────────────────────────────────
             composable(Screen.VacationRentals.route) { VacationRentalsScreen(navController) }
-            composable(Screen.PreBooking.route)      { PreBookingScreen(navController) }
+
+            // ✦ UPDATED: propertyId argument ke saath
+            composable(
+                route     = Screen.PreBooking.route,
+                arguments = listOf(
+                    navArgument(Screen.PreBooking.ARG_PROPERTY_ID) {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    }
+                )
+            ) { back ->
+                PreBookingScreen(
+                    navController = navController,
+                    propertyId    = back.arguments?.getString(Screen.PreBooking.ARG_PROPERTY_ID) ?: ""
+                )
+            }
 
             composable(
                 route     = Screen.VacationCalendar.route,
