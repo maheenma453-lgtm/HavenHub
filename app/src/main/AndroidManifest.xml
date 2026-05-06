@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- ── Permissions ─────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
@@ -16,6 +17,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.HavenHub">
 
+        <!-- ── Main Activity ───────────────────────────────────── -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -26,13 +28,26 @@
         </activity>
 
         <!--
-            FCM Service — receives push notifications when app is in foreground, background, or killed.
-            Class name updated to FirebaseMessagingService to avoid conflict with
-            the Firebase SDK's own internal FirebaseMessagingService class.
-            Without this registration FCM delivers nothing.
+            FCM Push Notification Service
+            ─────────────────────────────────────────────────────────
+            PATCH APPLIED: Renamed from `.remote.FirebaseMessagingService`
+            to `.remote.HavenHubMessagingService`.
+
+            WHY THIS FIX IS NEEDED:
+            The old class name `FirebaseMessagingService` clashed with the
+            Firebase SDK's own internal parent class
+            `com.google.firebase.messaging.FirebaseMessagingService`.
+            This caused a silent class-resolution conflict, which stopped
+            push notifications from being delivered after the first FCM
+            token refresh — because the system could not correctly bind to
+            our custom service implementation.
+
+            With this rename, the class name is unique and the Android
+            system correctly binds to OUR service, restoring all push
+            notification delivery (foreground, background, and killed state).
         -->
         <service
-            android:name=".remote.FirebaseMessagingService"
+            android:name=".remote.HavenHubMessagingService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />

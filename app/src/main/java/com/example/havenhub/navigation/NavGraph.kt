@@ -15,8 +15,12 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.havenhub.screens.*
 import com.example.havenhub.viewmodel.AuthViewModel
+// PATCH: Import the two new ViewModels needed for live badge counts
+import com.example.havenhub.viewmodel.NotificationViewModel
+import com.example.havenhub.viewmodel.MessagingViewModel
 import com.google.firebase.auth.FirebaseAuth
 
+// ── Routes that belong to the auth flow (no bottom bar) ───────────
 private val authRoutes = listOf(
     Screen.Splash.route,
     Screen.Onboarding.route,
@@ -26,6 +30,7 @@ private val authRoutes = listOf(
     Screen.ForgotPassword.route
 )
 
+// ── Routes that are exclusively for admins ────────────────────────
 private val strictAdminRoutes = listOf(
     Screen.AdminDashboard.route,
     Screen.ManageUsers.route,
@@ -39,6 +44,7 @@ private val strictAdminRoutes = listOf(
     Screen.PaymentReports.route,
 )
 
+// ── Routes accessible by all logged-in roles ──────────────────────
 private val sharedRoutes = listOf(
     Screen.Notifications.route,
     Screen.NotificationDetail.route,
@@ -56,10 +62,32 @@ private val sharedRoutes = listOf(
 @Composable
 fun HavenHubNavGraph(
     navController     : NavHostController,
+    // NOTE: unreadMessageCount is now driven internally via MessagingViewModel;
+    // keep this param for backward-compat but it is no longer the source of truth.
     unreadMessageCount: Int = 0
 ) {
     val authViewModel: AuthViewModel = hiltViewModel()
     val uiState by authViewModel.uiState.collectAsState()
+
+    // ── PATCH: Instantiate badge-count ViewModels ─────────────────
+    val notificationViewModel: NotificationViewModel = hiltViewModel()
+    val messagingViewModel   : MessagingViewModel    = hiltViewModel()
+
+    val notifUiState     by notificationViewModel.uiState.collectAsState()
+    val messagingUiState by messagingViewModel.uiState.collectAsState()
+
+    // Resolve the current Firebase user ID
+    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+    // ── PATCH: Start live observation as soon as we have a userId ─
+    // This ensures the notification bell badge and message badge are
+    // populated even before the user navigates to those screens.
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isNotEmpty()) {
+            notificationViewModel.observeNotifications(currentUserId)
+            messagingViewModel.loadConversations(currentUserId)
+        }
+    }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -69,6 +97,7 @@ fun HavenHubNavGraph(
 
     val isAuthRoute = currentRoute in authRoutes
 
+    // Determine whether the current destination belongs to the admin zone
     val isAdminRoute = when {
         strictAdminRoutes.any { currentRoute == it }                               -> true
         currentRoute?.startsWith("property_verification_detail") == true           -> true
@@ -81,11 +110,12 @@ fun HavenHubNavGraph(
     Scaffold(
         bottomBar = {
             when {
-                isAuthRoute  -> {}
+                isAuthRoute  -> { /* No bottom bar on auth screens */ }
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
                 else         -> BottomNavBar(
                     navController      = navController,
-                    unreadMessageCount = unreadMessageCount,
+                    // PATCH: Use live unread count from MessagingViewModel instead of hardcoded 0
+                    unreadMessageCount = messagingUiState.unreadCount,
                     userRole           = uiState.userRole,
                 )
             }
@@ -326,7 +356,6 @@ fun HavenHubNavGraph(
 // ── Vacation ──────────────────────────────────────────────────────
             composable(Screen.VacationRentals.route) { VacationRentalsScreen(navController) }
 
-            // ✦ UPDATED: propertyId argument ke saath
             composable(
                 route     = Screen.PreBooking.route,
                 arguments = listOf(

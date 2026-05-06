@@ -130,7 +130,6 @@ fun SignInScreen(
                         .padding(top = 20.dp, bottom = 36.dp),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    // FIX: Logo removed — clean HAVENHUB wordmark only
                     Row {
                         Text(
                             "HAVEN",
@@ -200,13 +199,18 @@ fun SignInScreen(
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
 
+                    // ✅ FIXED: fieldColors with text visibility fix
                     val fieldColors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor   = SI_NavyPrimary,
-                        focusedLabelColor    = SI_NavyPrimary,
-                        unfocusedBorderColor = SI_BorderGray,
-                        unfocusedLabelColor  = SI_TextMuted,
-                        errorBorderColor     = SI_ErrorRed,
-                        cursorColor          = SI_NavyPrimary
+                        focusedBorderColor      = SI_NavyPrimary,
+                        focusedLabelColor       = SI_NavyPrimary,
+                        unfocusedBorderColor    = SI_BorderGray,
+                        unfocusedLabelColor     = SI_TextMuted,
+                        errorBorderColor        = SI_ErrorRed,
+                        cursorColor             = SI_NavyPrimary,
+                        focusedTextColor        = SI_TextPrimary,
+                        unfocusedTextColor      = SI_TextPrimary,
+                        focusedContainerColor   = SI_White,
+                        unfocusedContainerColor = SI_White,
                     )
 
                     // Email

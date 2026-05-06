@@ -85,9 +85,11 @@ fun CustomTextField(
                     }
                 }
             }
+
             trailingIcon != null -> {
                 { Icon(imageVector = trailingIcon, contentDescription = null) }
             }
+
             else -> null
         },
         supportingText = errorMessage?.let {
@@ -107,7 +109,8 @@ fun CustomTextField(
                 KeyboardType.Number,
                 KeyboardType.Phone,
                 KeyboardType.Uri -> KeyboardCapitalization.None
-                else             -> KeyboardCapitalization.Sentences
+
+                else -> KeyboardCapitalization.Sentences
             }
         ),
         keyboardActions = KeyboardActions(onAny = { onImeAction() }),
@@ -115,12 +118,17 @@ fun CustomTextField(
         maxLines = if (singleLine) 1 else maxLines,
         shape = MaterialTheme.shapes.medium,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor   = MaterialTheme.colorScheme.primary,
+            // ✦ FIX: Yeh 3 lines missing thin — text type hone par invisible tha
+            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+            // Baaki sab same rakha
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-            errorBorderColor     = MaterialTheme.colorScheme.error,
-            focusedLabelColor    = MaterialTheme.colorScheme.primary,
-            unfocusedLabelColor  = MaterialTheme.colorScheme.onSurfaceVariant,
-            cursorColor          = MaterialTheme.colorScheme.primary
+            errorBorderColor = MaterialTheme.colorScheme.error,
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            cursorColor = MaterialTheme.colorScheme.primary
         )
     )
 }

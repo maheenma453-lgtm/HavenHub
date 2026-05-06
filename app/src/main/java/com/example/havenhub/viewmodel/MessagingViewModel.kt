@@ -15,12 +15,22 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class MessagingUiState(
-    val isLoading     : Boolean                = false,
-    val messages      : List<Message>          = emptyList(),
-    val conversations : List<Map<String, Any>> = emptyList(),
-    val unreadCount   : Int                    = 0,
-    val errorMessage  : String?                = null,
-    val sendSuccess   : Boolean                = false
+    val isLoading    : Boolean                = false,
+    val messages     : List<Message>          = emptyList(),
+    val conversations: List<Map<String, Any>> = emptyList(),
+    val unreadCount  : Int                    = 0,
+    val errorMessage : String?                = null,
+    val sendSuccess  : Boolean                = false,
+
+    // Selected messages delete state
+    val isSelectionMode   : Boolean      = false,
+    val selectedMessageIds: Set<String>  = emptySet(),
+    val isDeleting        : Boolean      = false,
+    val deleteSuccess     : Boolean      = false,
+
+    // Full chat delete state
+    val isChatDeleting    : Boolean      = false,
+    val chatDeleteSuccess : Boolean      = false
 )
 
 @HiltViewModel
@@ -31,9 +41,10 @@ class MessagingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MessagingUiState())
     val uiState: StateFlow<MessagingUiState> = _uiState.asStateFlow()
 
-    private var currentUserId : String = ""
-    private var messageJob    : Job?   = null
-    private var convoJob      : Job?   = null
+    private var currentUserId: String = ""
+    private var currentChatId : String = ""
+    private var messageJob   : Job?   = null
+    private var convoJob     : Job?   = null
 
     fun initUserId(userId: String) {
         currentUserId = userId
@@ -47,8 +58,20 @@ class MessagingViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             messagingRepository.getConversationsRealtime(userId).collect { result ->
                 when (result) {
-                    is Resource.Success -> _uiState.update {
-                        it.copy(isLoading = false, conversations = result.data ?: emptyList())
+                    is Resource.Success -> {
+                        val convos = result.data ?: emptyList()
+                        // Count conversations with unread messages for badge total
+                        val unreadConversationCount = convos.count { convo ->
+                            val perUserUnread = (convo["unreadCount_$userId"] as? Long)?.toInt() ?: 0
+                            perUserUnread > 0
+                        }
+                        _uiState.update {
+                            it.copy(
+                                isLoading     = false,
+                                conversations = convos,
+                                unreadCount   = unreadConversationCount
+                            )
+                        }
                     }
                     is Resource.Error   -> _uiState.update {
                         it.copy(isLoading = false, errorMessage = result.message)
@@ -59,10 +82,10 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    // ✅ FIXED: Always simple chatId — propertyId ignored
     fun loadChat(otherUserId: String, propertyId: String = "") {
         if (currentUserId.isEmpty() || otherUserId.isEmpty()) return
         val chatId = messagingRepository.generateChatId(currentUserId, otherUserId)
+        currentChatId = chatId
         listenToMessages(chatId)
     }
 
@@ -73,12 +96,13 @@ class MessagingViewModel @Inject constructor(
             messagingRepository.getMessagesRealtime(chatId).collect { result ->
                 when (result) {
                     is Resource.Success -> {
+                        val incoming = result.data ?: emptyList()
+                        val selected = _uiState.value.selectedMessageIds
+                        val merged   = incoming.map { msg ->
+                            msg.copy(isSelected = msg.id in selected)
+                        }
                         _uiState.update {
-                            it.copy(
-                                isLoading    = false,
-                                messages     = result.data ?: emptyList(),
-                                errorMessage = null
-                            )
+                            it.copy(isLoading = false, messages = merged, errorMessage = null)
                         }
                         markAsRead(chatId, currentUserId)
                     }
@@ -91,19 +115,167 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    fun markAsRead(chatId: String, userId: String) {
-        viewModelScope.launch {
-            messagingRepository.markMessagesAsRead(chatId, userId)
+    // ── Selection Mode ────────────────────────────────────────────────────────
+
+    fun onMessageLongPress(messageId: String) {
+        _uiState.update { state ->
+            val newSelected = state.selectedMessageIds + messageId
+            state.copy(
+                isSelectionMode    = true,
+                selectedMessageIds = newSelected,
+                messages           = state.messages.map { msg ->
+                    msg.copy(isSelected = msg.id in newSelected)
+                }
+            )
         }
     }
 
-    // ✅ FIXED: Always simple chatId — propertyId ignored
+    fun onMessageTap(messageId: String) {
+        if (!_uiState.value.isSelectionMode) return
+        _uiState.update { state ->
+            val newSelected = if (messageId in state.selectedMessageIds)
+                state.selectedMessageIds - messageId
+            else
+                state.selectedMessageIds + messageId
+            state.copy(
+                isSelectionMode    = newSelected.isNotEmpty(),
+                selectedMessageIds = newSelected,
+                messages           = state.messages.map { msg ->
+                    msg.copy(isSelected = msg.id in newSelected)
+                }
+            )
+        }
+    }
+
+    fun clearSelection() {
+        _uiState.update { state ->
+            state.copy(
+                isSelectionMode    = false,
+                selectedMessageIds = emptySet(),
+                messages           = state.messages.map { it.copy(isSelected = false) }
+            )
+        }
+    }
+
+    fun selectAllMessages() {
+        _uiState.update { state ->
+            val allIds = state.messages.map { it.id }.toSet()
+            state.copy(
+                isSelectionMode    = true,
+                selectedMessageIds = allIds,
+                messages           = state.messages.map { it.copy(isSelected = true) }
+            )
+        }
+    }
+
+    fun deleteSelectedMessages() {
+        val chatId   = currentChatId
+        val myMsgIds = _uiState.value.messages
+            .filter { it.id in _uiState.value.selectedMessageIds && it.senderId == currentUserId }
+            .map    { it.id }
+
+        if (myMsgIds.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "You can only delete your own messages") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeleting = true) }
+            val result = messagingRepository.deleteMessages(chatId = chatId, messageIds = myMsgIds)
+            when (result) {
+                is Resource.Success -> _uiState.update { state ->
+                    state.copy(
+                        isDeleting         = false,
+                        isSelectionMode    = false,
+                        selectedMessageIds = emptySet(),
+                        deleteSuccess      = true,
+                        messages           = state.messages
+                            .filter { it.id !in myMsgIds }
+                            .map    { it.copy(isSelected = false) }
+                    )
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isDeleting = false, errorMessage = result.message)
+                }
+                else -> {}
+            }
+        }
+    }
+
+    // ── Full Chat Delete (used from ChatScreen) ────────────────────────────────
+
+    fun deleteEntireChat(otherUserId: String) {
+        val chatId = if (currentChatId.isNotEmpty()) currentChatId
+        else messagingRepository.generateChatId(currentUserId, otherUserId)
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isChatDeleting = true) }
+            try {
+                messagingRepository.deleteConversation(chatId)
+                messageJob?.cancel()
+                _uiState.update { it.copy(isChatDeleting = false, chatDeleteSuccess = true) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isChatDeleting = false, errorMessage = e.message ?: "Chat could not be deleted")
+                }
+            }
+        }
+    }
+
+    // Used from MessageListScreen to delete a conversation
+    fun deleteConversation(conversationId: String, currentUid: String) {
+        viewModelScope.launch {
+            try {
+                messagingRepository.deleteConversation(conversationId)
+                // Remove from local list immediately
+                _uiState.update { state ->
+                    state.copy(
+                        conversations = state.conversations.filter { convo ->
+                            val cid = (convo["conversationId"] as? String)
+                                ?: (convo["id"] as? String) ?: ""
+                            cid != conversationId
+                        }
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = "Could not delete: ${e.message}")
+                }
+            }
+        }
+    }
+
+    // ── Mark as Read ─────────────────────────────────────────────────────────
+
+    fun markAsRead(chatId: String, userId: String) {
+        viewModelScope.launch {
+            messagingRepository.markMessagesAsRead(chatId, userId)
+
+            // Update local conversation list — reset unread count instantly
+            val updatedConvos = _uiState.value.conversations.map { convo ->
+                val cid = (convo["conversationId"] as? String)
+                    ?: (convo["id"] as? String) ?: ""
+                if (cid == chatId)
+                    convo.toMutableMap().also { it["unreadCount_$userId"] = 0L }
+                else
+                    convo
+            }
+
+            // Recount unread conversations after marking read
+            val newUnread = updatedConvos.count { convo ->
+                ((convo["unreadCount_$userId"] as? Long)?.toInt() ?: 0) > 0
+            }
+
+            _uiState.update { it.copy(conversations = updatedConvos, unreadCount = newUnread) }
+        }
+    }
+
     fun sendMessage(
-        receiverId  : String,
-        content     : String,
-        propertyId  : String  = "",
-        messageType : String  = Message.TYPE_TEXT,
-        mediaUrl    : String? = null
+        receiverId : String,
+        content    : String,
+        propertyId : String  = "",
+        messageType: String  = Message.TYPE_TEXT,
+        mediaUrl   : String? = null
     ) {
         if (content.isBlank() && mediaUrl == null) return
         if (currentUserId.isEmpty()) {
@@ -113,10 +285,7 @@ class MessagingViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(sendSuccess = false) }
-
-            // ✅ ALWAYS simple chatId — propertyId ignore karo
             val chatId = messagingRepository.generateChatId(currentUserId, receiverId)
-
             messagingRepository.createOrGetConversation(currentUserId, receiverId)
 
             val result = messagingRepository.sendMessage(
@@ -136,13 +305,10 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    fun clearError() {
-        _uiState.update { it.copy(errorMessage = null) }
-    }
-
-    fun resetSendSuccess() {
-        _uiState.update { it.copy(sendSuccess = false) }
-    }
+    fun clearError()             { _uiState.update { it.copy(errorMessage = null) } }
+    fun resetSendSuccess()       { _uiState.update { it.copy(sendSuccess = false) } }
+    fun resetDeleteSuccess()     { _uiState.update { it.copy(deleteSuccess = false) } }
+    fun resetChatDeleteSuccess() { _uiState.update { it.copy(chatDeleteSuccess = false) } }
 
     override fun onCleared() {
         super.onCleared()

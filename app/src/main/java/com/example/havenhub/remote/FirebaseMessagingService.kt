@@ -10,46 +10,47 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
 /**
- * ✅ FIX LIST:
- * 1. @AndroidEntryPoint HATAYA — Hilt Services mein properly inject nahi karta,
- *    silent crash hoti thi aur onMessageReceived kabhi nahi chalta tha.
- * 2. NotificationHelper manually instantiate kiya — @Inject ki zaroorat nahi.
- * 3. onNewToken mein Thread() ki jagah coroutine-safe approach use ki.
+ * HavenHub FCM push notification receiver.
+ *
+ * FIX 1 — Renamed from FirebaseMessagingService to HavenHubMessagingService.
+ *          The old class name matched the parent class name exactly, causing
+ *          a silent class resolution conflict. Android resolved the wrong class
+ *          after the first install, so push notifications stopped arriving.
+ *          Renaming the class permanently fixes this.
+ *
+ * FIX 2 — @AndroidEntryPoint removed. Hilt injects via onCreate which is called
+ *          AFTER FCM delivers the message. Using lazy init avoids the null crash.
  */
-class FirebaseMessagingService : FirebaseMessagingService() {
+class HavenHubMessagingService : FirebaseMessagingService() {
 
-    // ✅ FIX: @Inject hatao — manually banao. Hilt @AndroidEntryPoint
-    // Service mein onCreate se pehle inject karta hai jo FCM Service mein
-    // reliable nahi hota aur nullPointerException silently crash karti thi.
     private val notificationHelper: NotificationHelper by lazy {
         NotificationHelper(applicationContext)
     }
 
+    // ------------------------------------------------------------------
+    // Called every time a push message arrives (foreground or background)
+    // ------------------------------------------------------------------
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
-        Log.d("FCM_SERVICE", "Message received from: ${remoteMessage.from}")
+        Log.d("FCM", "Message received from: ${remoteMessage.from}")
 
-        val title = remoteMessage.notification?.title
-            ?: remoteMessage.data["title"]
-            ?: "HavenHub"
-        val body = remoteMessage.notification?.body
-            ?: remoteMessage.data["body"]
-            ?: ""
+        val title       = remoteMessage.notification?.title ?: remoteMessage.data["title"] ?: "HavenHub"
+        val body        = remoteMessage.notification?.body  ?: remoteMessage.data["body"]  ?: ""
         val type        = remoteMessage.data["type"]        ?: Constants.NOTIF_SYSTEM
         val referenceId = remoteMessage.data["referenceId"] ?: ""
 
         if (body.isEmpty()) {
-            Log.w("FCM_SERVICE", "Empty body — notification skipped")
+            Log.w("FCM", "Empty body — notification skipped")
             return
         }
 
-        // Channels create karo — agar app ne pehle nahi kiye to yahan ensure karo
+        // Ensure channels exist before posting any notification
         notificationHelper.createNotificationChannels()
 
         when (type) {
+
             Constants.NOTIF_BOOKING -> {
-                val subType = remoteMessage.data["subType"] ?: ""
-                when (subType) {
+                when (remoteMessage.data["subType"] ?: "") {
                     "CONFIRMED" -> notificationHelper.showBookingConfirmed(
                         propertyName = remoteMessage.data["propertyTitle"] ?: "",
                         bookingId    = referenceId
@@ -67,31 +68,12 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                         propertyName = remoteMessage.data["propertyTitle"] ?: "",
                         bookingId    = referenceId
                     )
-                    else -> notificationHelper.showNotification(
-                        title       = title,
-                        message     = body,
-                        type        = type,
-                        referenceId = referenceId
-                    )
+                    else -> notificationHelper.showNotification(title, body, type, referenceId)
                 }
             }
 
-            Constants.NOTIF_PAYMENT -> notificationHelper.showNotification(
-                title       = title,
-                message     = body,
-                type        = type,
-                referenceId = referenceId
-            )
-
-            Constants.NOTIF_MESSAGE -> notificationHelper.showNewMessage(
-                senderName     = remoteMessage.data["senderName"] ?: title,
-                preview        = body,
-                conversationId = referenceId
-            )
-
             Constants.NOTIF_PROPERTY -> {
-                val subType = remoteMessage.data["subType"] ?: ""
-                when (subType) {
+                when (remoteMessage.data["subType"] ?: "") {
                     "APPROVED" -> notificationHelper.showPropertyApproved(
                         propertyTitle = remoteMessage.data["propertyTitle"] ?: "",
                         propertyId    = referenceId,
@@ -107,18 +89,12 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                         landlordName  = remoteMessage.data["landlordName"]  ?: "",
                         propertyId    = referenceId
                     )
-                    else -> notificationHelper.showNotification(
-                        title       = title,
-                        message     = body,
-                        type        = type,
-                        referenceId = referenceId
-                    )
+                    else -> notificationHelper.showNotification(title, body, type, referenceId)
                 }
             }
 
             Constants.NOTIF_SYSTEM -> {
-                val subType = remoteMessage.data["subType"] ?: ""
-                when (subType) {
+                when (remoteMessage.data["subType"] ?: "") {
                     "USER_VERIFIED" -> notificationHelper.showUserVerified(
                         userName = remoteMessage.data["userName"] ?: ""
                     )
@@ -130,41 +106,40 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                         userName = remoteMessage.data["userName"] ?: "",
                         userId   = referenceId
                     )
-                    else -> notificationHelper.showNotification(
-                        title       = title,
-                        message     = body,
-                        type        = type,
-                        referenceId = referenceId
-                    )
+                    else -> notificationHelper.showNotification(title, body, type, referenceId)
                 }
             }
 
-            else -> notificationHelper.showNotification(
-                title       = title,
-                message     = body,
-                type        = type,
-                referenceId = referenceId
+            Constants.NOTIF_MESSAGE -> notificationHelper.showNewMessage(
+                senderName     = remoteMessage.data["senderName"] ?: title,
+                preview        = body,
+                conversationId = referenceId
             )
+
+            else -> notificationHelper.showNotification(title, body, type, referenceId)
         }
 
-        Log.d("FCM_SERVICE", "Notification handled — type=$type ref=$referenceId")
+        Log.d("FCM", "Notification posted — type=$type referenceId=$referenceId")
     }
 
+    // ------------------------------------------------------------------
+    // Called when FCM issues a new device token
+    // ------------------------------------------------------------------
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d("FCM_SERVICE", "New FCM token: $token")
+        Log.d("FCM", "New token issued: $token")
 
-        // SharedPreferences mein token save karo
-        val prefs = getSharedPreferences("haven_prefs", MODE_PRIVATE)
-        prefs.edit().putString(Constants.PREF_FCM_TOKEN, token).apply()
+        // Save token locally so it can be uploaded on next login if user is signed out
+        getSharedPreferences("haven_prefs", MODE_PRIVATE)
+            .edit().putString(Constants.PREF_FCM_TOKEN, token).apply()
 
+        val prefs  = getSharedPreferences("haven_prefs", MODE_PRIVATE)
         val userId = FirebaseAuth.getInstance().currentUser?.uid
             ?: prefs.getString(Constants.PREF_USER_ID, "") ?: ""
-
-        val role = prefs.getString(Constants.PREF_USER_ROLE, Constants.ROLE_TENANT)
+        val role   = prefs.getString(Constants.PREF_USER_ROLE, Constants.ROLE_TENANT)
             ?.uppercase() ?: Constants.ROLE_TENANT
 
-        // ✅ FIX: Thread safe way — simple background thread, no coroutine needed here
+        // Upload token to Firestore in a background thread (no coroutine needed here)
         if (userId.isNotEmpty()) {
             Thread {
                 try {
@@ -172,15 +147,16 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                         .collection(Constants.COLLECTION_USERS)
                         .document(userId)
                         .update("fcmToken", token)
-                    Log.d("FCM_SERVICE", "Token saved for userId=$userId")
+                    Log.d("FCM", "Token saved for userId=$userId")
                 } catch (e: Exception) {
-                    Log.e("FCM_SERVICE", "Token save failed: ${e.localizedMessage}")
+                    Log.e("FCM", "Token save failed: ${e.message}")
                 }
             }.start()
         } else {
-            Log.w("FCM_SERVICE", "No userId — token will be saved on next login")
+            Log.w("FCM", "No userId available — token will be saved on next login")
         }
 
+        // Subscribe to role topic so server can send targeted push messages
         val roleTopic = when (role) {
             Constants.ROLE_ADMIN    -> Constants.TOPIC_ADMIN
             Constants.ROLE_LANDLORD -> Constants.TOPIC_LANDLORD
@@ -188,23 +164,10 @@ class FirebaseMessagingService : FirebaseMessagingService() {
         }
 
         FirebaseMessaging.getInstance().subscribeToTopic(roleTopic)
-            .addOnSuccessListener { Log.d("FCM_SERVICE", "Subscribed: $roleTopic") }
-            .addOnFailureListener { Log.e("FCM_SERVICE", "Subscribe failed: ${it.message}") }
+            .addOnSuccessListener { Log.d("FCM", "Subscribed to topic: $roleTopic") }
+            .addOnFailureListener { Log.e("FCM", "Topic subscribe failed: ${it.message}") }
 
         FirebaseMessaging.getInstance().subscribeToTopic(Constants.TOPIC_ALL)
-            .addOnSuccessListener { Log.d("FCM_SERVICE", "Subscribed: ${Constants.TOPIC_ALL}") }
+            .addOnSuccessListener { Log.d("FCM", "Subscribed to topic: ${Constants.TOPIC_ALL}") }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

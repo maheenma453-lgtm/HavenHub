@@ -2,6 +2,7 @@ package com.example.havenhub.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.havenhub.MainActivity
 import com.example.havenhub.data.AppSettings
 import com.example.havenhub.data.UserPreferences
 import com.example.havenhub.repository.AuthRepository
@@ -16,17 +17,17 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SettingsUiState(
-    val isLoading: Boolean = false,
+    val isLoading      : Boolean          = false,
     val userPreferences: UserPreferences? = null,
-    val appSettings: AppSettings? = null,
-    val errorMessage: String? = null,
-    val actionSuccess: Boolean = false
+    val appSettings    : AppSettings?     = null,
+    val errorMessage   : String?          = null,
+    val actionSuccess  : Boolean          = false
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val authRepository: AuthRepository
+    private val authRepository    : AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -37,7 +38,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun loadSettings() {
-        val userId = authRepository.currentUser?.uid ?: return   // ✅ Fixed
+        val userId = authRepository.currentUser?.uid ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
@@ -46,9 +47,9 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isLoading       = false,
-                        userPreferences = if (prefsResult is Resource.Success) prefsResult.data else null,
+                        userPreferences = if (prefsResult    is Resource.Success) prefsResult.data    else null,
                         appSettings     = if (settingsResult is Resource.Success) settingsResult.data else null,
-                        errorMessage    = if (prefsResult is Resource.Error) prefsResult.message
+                        errorMessage    = if (prefsResult    is Resource.Error)   prefsResult.message
                         else if (settingsResult is Resource.Error) settingsResult.message
                         else null
                     )
@@ -77,9 +78,17 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleDarkMode(enabled: Boolean) {
-        val userId = authRepository.currentUser?.uid ?: return   // ✅ Fixed
+        val userId = authRepository.currentUser?.uid ?: return
         viewModelScope.launch {
+            // STEP 1: SharedPreferences mein save karo (local, instant)
             settingsRepository.setDarkMode(enabled)
+
+            // STEP 2: MainActivity ka StateFlow update karo
+            // Yahi asal fix hai — theme tabhi change hogi jab yeh line chalegi
+            // Pehle yeh line nahi thi isliye toggle kaam nahi karta tha
+            MainActivity.darkModeFlow.value = enabled
+
+            // STEP 3: Firestore mein bhi save karo (cross-device sync)
             val fields = mapOf("isDarkMode" to enabled)
             when (val result = settingsRepository.updateUserPreferences(userId, fields)) {
                 is Resource.Success -> _uiState.update {
@@ -94,7 +103,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleNotifications(enabled: Boolean) {
-        val userId = authRepository.currentUser?.uid ?: return   // ✅ Fixed
+        val userId = authRepository.currentUser?.uid ?: return
         viewModelScope.launch {
             settingsRepository.setNotificationsEnabled(enabled)
             val current = _uiState.value.userPreferences ?: return@launch
@@ -108,19 +117,15 @@ class SettingsViewModel @Inject constructor(
                 "notifyAdminAlerts"    to updated.notifyAdminAlerts
             )
             when (val result = settingsRepository.updateUserPreferences(userId, fields)) {
-                is Resource.Success -> _uiState.update {
-                    it.copy(userPreferences = updated)
-                }
-                is Resource.Error -> _uiState.update {
-                    it.copy(errorMessage = result.message)
-                }
-                Resource.Loading -> Unit
+                is Resource.Success -> _uiState.update { it.copy(userPreferences = updated) }
+                is Resource.Error   -> _uiState.update { it.copy(errorMessage = result.message) }
+                Resource.Loading    -> Unit
             }
         }
     }
 
     fun updateNotificationChannel(channel: String, enabled: Boolean) {
-        val userId = authRepository.currentUser?.uid ?: return   // ✅ Fixed
+        val userId = authRepository.currentUser?.uid ?: return
         viewModelScope.launch {
             val fields = mapOf(channel to enabled)
             when (val result = settingsRepository.updateUserPreferences(userId, fields)) {
@@ -128,18 +133,16 @@ class SettingsViewModel @Inject constructor(
                     val current = _uiState.value.userPreferences ?: return@launch
                     val updated = when (channel) {
                         "notifyBookingUpdates" -> current.copy(notifyBookingUpdates = enabled)
-                        "notifyMessages"       -> current.copy(notifyMessages = enabled)
-                        "notifyPayments"       -> current.copy(notifyPayments = enabled)
-                        "notifyPromotions"     -> current.copy(notifyPromotions = enabled)
-                        "notifyAdminAlerts"    -> current.copy(notifyAdminAlerts = enabled)
+                        "notifyMessages"       -> current.copy(notifyMessages       = enabled)
+                        "notifyPayments"       -> current.copy(notifyPayments       = enabled)
+                        "notifyPromotions"     -> current.copy(notifyPromotions     = enabled)
+                        "notifyAdminAlerts"    -> current.copy(notifyAdminAlerts    = enabled)
                         else -> current
                     }
                     _uiState.update { it.copy(userPreferences = updated) }
                 }
-                is Resource.Error -> _uiState.update {
-                    it.copy(errorMessage = result.message)
-                }
-                Resource.Loading -> Unit
+                is Resource.Error -> _uiState.update { it.copy(errorMessage = result.message) }
+                Resource.Loading  -> Unit
             }
         }
     }

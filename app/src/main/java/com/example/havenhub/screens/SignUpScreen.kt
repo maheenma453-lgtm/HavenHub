@@ -200,7 +200,12 @@ fun SignUpScreen(
                         unfocusedBorderColor = SU_BorderGray,
                         unfocusedLabelColor  = SU_TextMuted,
                         errorBorderColor     = SU_ErrorRed,
-                        cursorColor          = SU_NavyPrimary
+                        cursorColor          = SU_NavyPrimary,
+                        //cursorColor             = SU_NavyPrimary,
+                        focusedTextColor        = Color(0xFF0D1B3E),
+                        unfocusedTextColor      = Color(0xFF0D1B3E),
+                        focusedContainerColor   = SU_White,
+                        unfocusedContainerColor = SU_White,
                     )
 
                     // ── Profile Image ────────────────────────────────────────
