@@ -1,6 +1,5 @@
 package com.example.havenhub.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -26,19 +25,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.ManagementViewModel
 
-// ── Brand Colors ──────────────────────────────────────────────────────────────
-private val NavyBlue   = Color(0xFF1B2A4A)
-private val NavyLight  = Color(0xFF243658)
-private val Gold       = Color(0xFFC9A227)
-private val GoldDark   = Color(0xFFA07D10)
-private val PageBg     = Color(0xFFF4F6FA)
-private val GreenOk    = Color(0xFF27AE60)
-private val RedErr     = Color(0xFFE74C3C)
+// Semantic status colors — intentional
+private val GreenOk = Color(0xFF27AE60)
+private val RedErr  = Color(0xFFE74C3C)
 
 private const val SUPER_ADMIN_EMAIL = "admin@havenhub.com"
+
+// ✅ FIX: role String ko display-friendly naam mein convert karne ka helper
+private fun roleDisplayName(role: String): String {
+    return when (role.uppercase().trim()) {
+        "TENANT"   -> "Tenant"
+        "LANDLORD" -> "Landlord"
+        "ADMIN"    -> "Admin"
+        else       -> role.lowercase().replaceFirstChar { it.uppercase() }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,23 +53,32 @@ fun ManageUsersScreen(
     var searchQuery  by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf("All") }
 
+    val primary          = MaterialTheme.colorScheme.primary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val tertiary         = MaterialTheme.colorScheme.tertiary
+    val onPrimary        = MaterialTheme.colorScheme.onPrimary
+    val surface          = MaterialTheme.colorScheme.surface
+    val onSurface        = MaterialTheme.colorScheme.onSurface
+    val background       = MaterialTheme.colorScheme.background
+
+    // ✅ FIX: user.userRole.displayName() ki jagah user.role use karo
     val filteredUsers = remember(uiState.users, searchQuery, selectedRole) {
         uiState.users.filter { user ->
             val matchesSearch = user.fullName.contains(searchQuery, ignoreCase = true) ||
                     user.email.contains(searchQuery, ignoreCase = true)
             val matchesRole = selectedRole == "All" ||
-                    user.userRole.displayName() == selectedRole
+                    roleDisplayName(user.role) == selectedRole
             matchesSearch && matchesRole
         }
     }
 
     Scaffold(
-        containerColor = PageBg,
+        containerColor = background,
         topBar = {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.horizontalGradient(listOf(NavyBlue, NavyLight)))
+                    .background(Brush.horizontalGradient(listOf(primary, primaryContainer)))
                     .statusBarsPadding()
             ) {
                 Row(
@@ -76,20 +88,20 @@ fun ManageUsersScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Gold)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = tertiary)
                     }
                     Spacer(Modifier.width(4.dp))
                     Column {
                         Text(
                             "Manage Users",
-                            color         = Color.White,
-                            fontSize      = 20.sp,
-                            fontWeight    = FontWeight.Bold,
+                            color      = onPrimary,
+                            fontSize   = 20.sp,
+                            fontWeight = FontWeight.Bold,
                             letterSpacing = 0.3.sp
                         )
                         Text(
                             "${uiState.users.size} total users",
-                            color    = Gold.copy(alpha = 0.85f),
+                            color    = tertiary.copy(alpha = 0.85f),
                             fontSize = 12.sp
                         )
                     }
@@ -100,7 +112,9 @@ fun ManageUsersScreen(
                         .fillMaxWidth()
                         .height(2.dp)
                         .background(
-                            Brush.horizontalGradient(listOf(Color.Transparent, Gold, Color.Transparent))
+                            Brush.horizontalGradient(
+                                listOf(background.copy(0f), tertiary, background.copy(0f))
+                            )
                         )
                         .align(Alignment.BottomCenter)
                 )
@@ -108,20 +122,16 @@ fun ManageUsersScreen(
         }
     ) { padding ->
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // ── Search + Filter Banner ─────────────────────────────────────────
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+
+            // ── Search + Role filter banner ───────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(NavyBlue, NavyLight)))
+                    .background(Brush.verticalGradient(listOf(primary, primaryContainer)))
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-
                     OutlinedTextField(
                         value         = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -129,26 +139,25 @@ fun ManageUsersScreen(
                             Text(
                                 "Search by name or email...",
                                 fontSize = 13.sp,
-                                color    = Color.White.copy(0.5f)
+                                color    = onPrimary.copy(0.5f)
                             )
                         },
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, null, tint = Gold)
-                        },
-                        singleLine = true,
-                        modifier   = Modifier.fillMaxWidth(),
-                        shape      = RoundedCornerShape(14.dp),
-                        colors     = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor      = Gold,
-                            unfocusedBorderColor    = Color.White.copy(0.25f),
-                            focusedContainerColor   = Color.White.copy(0.08f),
-                            unfocusedContainerColor = Color.White.copy(0.05f),
-                            focusedTextColor        = Color.White,
-                            unfocusedTextColor      = Color.White,
-                            cursorColor             = Gold
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = tertiary) },
+                        singleLine  = true,
+                        modifier    = Modifier.fillMaxWidth(),
+                        shape       = RoundedCornerShape(14.dp),
+                        colors      = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor      = tertiary,
+                            unfocusedBorderColor    = onPrimary.copy(0.25f),
+                            focusedContainerColor   = onPrimary.copy(0.08f),
+                            unfocusedContainerColor = onPrimary.copy(0.05f),
+                            focusedTextColor        = onPrimary,
+                            unfocusedTextColor      = onPrimary,
+                            cursorColor             = tertiary
                         )
                     )
 
+                    // Role filter chips
                     val roles = listOf("All", "Tenant", "Landlord", "Admin")
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(roles) { role ->
@@ -164,16 +173,16 @@ fun ManageUsersScreen(
                                     )
                                 },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Gold,
-                                    selectedLabelColor     = Color.White,
-                                    containerColor         = Color.White.copy(0.12f),
-                                    labelColor             = Color.White
+                                    selectedContainerColor = tertiary,
+                                    selectedLabelColor     = onPrimary,
+                                    containerColor         = onPrimary.copy(0.12f),
+                                    labelColor             = onPrimary
                                 ),
                                 border = FilterChipDefaults.filterChipBorder(
                                     enabled             = true,
                                     selected            = selected,
-                                    selectedBorderColor = GoldDark,
-                                    borderColor         = Color.White.copy(0.25f),
+                                    selectedBorderColor = tertiary,
+                                    borderColor         = onPrimary.copy(0.25f),
                                     selectedBorderWidth = 1.5.dp,
                                     borderWidth         = 1.dp
                                 )
@@ -183,11 +192,11 @@ fun ManageUsersScreen(
                 }
             }
 
-            // ── Content ────────────────────────────────────────────────────────
+            // ── Content ───────────────────────────────────────────────────────
             when {
                 uiState.isLoading -> {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        CircularProgressIndicator(color = Gold, strokeWidth = 3.dp)
+                        CircularProgressIndicator(color = tertiary, strokeWidth = 3.dp)
                     }
                 }
 
@@ -197,13 +206,24 @@ fun ManageUsersScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(Icons.Default.ErrorOutline, null, tint = RedErr, modifier = Modifier.size(48.dp))
-                            Text("Error: ${uiState.errorMessage}", color = RedErr, fontSize = 14.sp)
+                            Icon(
+                                Icons.Default.ErrorOutline,
+                                null,
+                                tint     = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                "Error: ${uiState.errorMessage}",
+                                color    = MaterialTheme.colorScheme.error,
+                                fontSize = 14.sp
+                            )
                             Button(
                                 onClick = { viewModel.loadAllUsers() },
-                                colors  = ButtonDefaults.buttonColors(containerColor = NavyBlue),
+                                colors  = ButtonDefaults.buttonColors(containerColor = primary),
                                 shape   = RoundedCornerShape(12.dp)
-                            ) { Text("Retry", color = Gold, fontWeight = FontWeight.Bold) }
+                            ) {
+                                Text("Retry", color = tertiary, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -213,16 +233,20 @@ fun ManageUsersScreen(
                         contentPadding      = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // Count banner
                         item {
-                            // Count Banner — same style as other screens
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Brush.horizontalGradient(listOf(NavyBlue, NavyLight)))
+                                    .background(
+                                        Brush.horizontalGradient(listOf(primary, primaryContainer))
+                                    )
                                     .border(
-                                        width = 1.dp,
-                                        brush = Brush.horizontalGradient(listOf(Gold.copy(0.6f), GoldDark.copy(0.4f))),
-                                        shape = RoundedCornerShape(10.dp)
+                                        1.dp,
+                                        Brush.horizontalGradient(
+                                            listOf(tertiary.copy(0.6f), tertiary.copy(0.4f))
+                                        ),
+                                        RoundedCornerShape(10.dp)
                                     )
                                     .padding(horizontal = 14.dp, vertical = 8.dp)
                             ) {
@@ -234,27 +258,32 @@ fun ManageUsersScreen(
                                         modifier = Modifier
                                             .size(7.dp)
                                             .clip(CircleShape)
-                                            .background(Gold)
+                                            .background(tertiary)
                                     )
                                     Text(
                                         "${filteredUsers.size} user${if (filteredUsers.size != 1) "s" else ""} found",
                                         fontSize   = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color      = Gold
+                                        color      = tertiary
                                     )
                                 }
                             }
                         }
 
+                        // ✅ FIX: user.userRole ki jagah user.role use karo
                         items(filteredUsers, key = { it.userId }) { user ->
                             val isSuperAdmin = user.email.equals(SUPER_ADMIN_EMAIL, ignoreCase = true)
-                            PremiumUserCard(
+                            MUPremiumUserCard(
                                 fullName     = user.fullName,
                                 email        = user.email,
-                                role         = user.userRole.displayName(),
+                                role         = roleDisplayName(user.role),   // ✅ FIXED
                                 isVerified   = user.isVerified,
                                 isBanned     = user.isBanned,
                                 isSuperAdmin = isSuperAdmin,
+                                primary      = primary,
+                                tertiary     = tertiary,
+                                surface      = surface,
+                                onSurface    = onSurface,
                                 onBan        = { viewModel.banUser(user.userId) },
                                 onUnban      = { viewModel.unbanUser(user.userId) }
                             )
@@ -266,15 +295,19 @@ fun ManageUsersScreen(
     }
 }
 
-// ── Premium User Card ──────────────────────────────────────────────────────────
+// ── User Card ─────────────────────────────────────────────────────────────────
 @Composable
-private fun PremiumUserCard(
+private fun MUPremiumUserCard(
     fullName    : String,
     email       : String,
     role        : String,
     isVerified  : Boolean,
     isBanned    : Boolean,
     isSuperAdmin: Boolean,
+    primary     : Color,
+    tertiary    : Color,
+    surface     : Color,
+    onSurface   : Color,
     onBan       : () -> Unit,
     onUnban     : () -> Unit
 ) {
@@ -282,22 +315,22 @@ private fun PremiumUserCard(
 
     val roleColor = when (role.lowercase()) {
         "admin"    -> Color(0xFF6A1B9A)
-        "landlord" -> NavyBlue
+        "landlord" -> primary
         else       -> Color(0xFF00796B)
     }
 
     Card(
-        modifier = Modifier
+        modifier  = Modifier
             .fillMaxWidth()
             .shadow(
-                elevation    = 4.dp,
-                shape        = RoundedCornerShape(16.dp),
-                ambientColor = NavyBlue.copy(alpha = 0.08f),
-                spotColor    = NavyBlue.copy(alpha = 0.12f)
+                4.dp,
+                RoundedCornerShape(16.dp),
+                ambientColor = primary.copy(0.08f),
+                spotColor    = primary.copy(0.12f)
             ),
-        shape  = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSuperAdmin) Color(0xFFFFFBF0) else Color.White
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.cardColors(
+            containerColor = if (isSuperAdmin) tertiary.copy(0.05f) else surface
         ),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
@@ -308,9 +341,9 @@ private fun PremiumUserCard(
                 .height(3.dp)
                 .background(
                     if (isSuperAdmin)
-                        Brush.horizontalGradient(listOf(Gold, GoldDark))
+                        Brush.horizontalGradient(listOf(tertiary, tertiary.copy(0.6f)))
                     else
-                        Brush.horizontalGradient(listOf(NavyBlue, Gold))
+                        Brush.horizontalGradient(listOf(primary, tertiary))
                 )
         )
 
@@ -321,16 +354,16 @@ private fun PremiumUserCard(
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Avatar
+            // Avatar circle
             Box(
                 modifier = Modifier
                     .size(50.dp)
                     .clip(CircleShape)
                     .background(
                         if (isSuperAdmin)
-                            Brush.radialGradient(listOf(Gold, GoldDark))
+                            Brush.radialGradient(listOf(tertiary, tertiary.copy(0.7f)))
                         else
-                            Brush.radialGradient(listOf(NavyBlue, NavyLight))
+                            Brush.radialGradient(listOf(primary, primary.copy(0.7f)))
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -338,21 +371,22 @@ private fun PremiumUserCard(
                     Icon(
                         Icons.Default.Shield,
                         null,
-                        tint     = Color.White,
+                        tint     = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
+                    // ✅ FIX: safe null-check with orEmpty()
                     Text(
                         fullName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
                         fontSize   = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color      = Gold
+                        color      = tertiary
                     )
                 }
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                // Name + Super Admin badge
+                // Name + super admin badge
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -361,21 +395,21 @@ private fun PremiumUserCard(
                         fullName,
                         fontWeight = FontWeight.Bold,
                         fontSize   = 15.sp,
-                        color      = NavyBlue,
+                        color      = onSurface,
                         maxLines   = 1,
                         overflow   = TextOverflow.Ellipsis,
                         modifier   = Modifier.weight(1f, fill = false)
                     )
                     if (isSuperAdmin) {
                         Surface(
-                            color = Gold.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.border(1.dp, Gold.copy(0.4f), RoundedCornerShape(20.dp))
+                            color    = tertiary.copy(alpha = 0.15f),
+                            shape    = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(1.dp, tertiary.copy(0.4f), RoundedCornerShape(20.dp))
                         ) {
                             Text(
                                 "Super Admin",
                                 fontSize   = 9.sp,
-                                color      = GoldDark,
+                                color      = tertiary,
                                 fontWeight = FontWeight.ExtraBold,
                                 modifier   = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
@@ -387,19 +421,17 @@ private fun PremiumUserCard(
                 Text(
                     email,
                     fontSize = 12.sp,
-                    color    = NavyBlue.copy(alpha = 0.5f),
+                    color    = onSurface.copy(alpha = 0.5f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-
                 Spacer(Modifier.height(8.dp))
 
-                // Badges row
+                // Role / Verified / Banned badges
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Role
                     Surface(
-                        color = roleColor.copy(alpha = 0.10f),
-                        shape = RoundedCornerShape(20.dp),
+                        color    = roleColor.copy(0.10f),
+                        shape    = RoundedCornerShape(20.dp),
                         modifier = Modifier.border(1.dp, roleColor.copy(0.3f), RoundedCornerShape(20.dp))
                     ) {
                         Text(
@@ -411,39 +443,37 @@ private fun PremiumUserCard(
                         )
                     }
 
-                    // Verified
-                    val verifiedColor = if (isVerified) GreenOk else RedErr
+                    val verColor = if (isVerified) GreenOk else RedErr
                     Surface(
-                        color = verifiedColor.copy(alpha = 0.10f),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.border(1.dp, verifiedColor.copy(0.3f), RoundedCornerShape(20.dp))
+                        color    = verColor.copy(0.10f),
+                        shape    = RoundedCornerShape(20.dp),
+                        modifier = Modifier.border(1.dp, verColor.copy(0.3f), RoundedCornerShape(20.dp))
                     ) {
                         Row(
-                            modifier          = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            modifier              = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                            verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(5.dp)
                                     .clip(CircleShape)
-                                    .background(verifiedColor)
+                                    .background(verColor)
                             )
                             Text(
                                 if (isVerified) "Verified" else "Unverified",
                                 fontSize   = 11.sp,
-                                color      = verifiedColor,
+                                color      = verColor,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
 
-                    // Banned
                     if (isBanned) {
                         val bannedColor = Color(0xFF546E7A)
                         Surface(
-                            color = bannedColor.copy(alpha = 0.10f),
-                            shape = RoundedCornerShape(20.dp),
+                            color    = bannedColor.copy(0.10f),
+                            shape    = RoundedCornerShape(20.dp),
                             modifier = Modifier.border(1.dp, bannedColor.copy(0.3f), RoundedCornerShape(20.dp))
                         ) {
                             Text(
@@ -458,7 +488,7 @@ private fun PremiumUserCard(
                 }
             }
 
-            // 3-dot menu
+            // 3-dot menu (not shown for super admin)
             if (!isSuperAdmin) {
                 Box {
                     IconButton(
@@ -466,19 +496,15 @@ private fun PremiumUserCard(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(NavyBlue.copy(alpha = 0.06f))
+                            .background(primary.copy(0.06f))
                     ) {
-                        Icon(
-                            Icons.Default.MoreVert, null,
-                            tint     = NavyBlue,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(Icons.Default.MoreVert, null, tint = onSurface, modifier = Modifier.size(20.dp))
                     }
                     DropdownMenu(
-                        expanded         = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        modifier         = Modifier
-                            .background(Color.White)
+                        expanded          = menuExpanded,
+                        onDismissRequest  = { menuExpanded = false },
+                        modifier          = Modifier
+                            .background(surface)
                             .width(160.dp)
                     ) {
                         if (isBanned) {
@@ -491,7 +517,7 @@ private fun PremiumUserCard(
                                             .background(GreenOk)
                                     )
                                 },
-                                text = {
+                                text    = {
                                     Text(
                                         "Unban User",
                                         color      = GreenOk,
@@ -511,7 +537,7 @@ private fun PremiumUserCard(
                                             .background(RedErr)
                                     )
                                 },
-                                text = {
+                                text    = {
                                     Text(
                                         "Ban User",
                                         color      = RedErr,

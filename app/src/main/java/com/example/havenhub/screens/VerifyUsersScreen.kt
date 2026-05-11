@@ -1,6 +1,5 @@
 package com.example.havenhub.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -19,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,20 +25,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.data.User
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.GoldAccent
-import com.example.havenhub.ui.theme.GoldAccentDark
-import com.example.havenhub.ui.theme.PrimaryNavy
 import com.example.havenhub.ui.theme.SuccessGreen
 import com.example.havenhub.viewmodel.VerificationViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
-
-// ── Brand Colors ─────────────────────────────────────────────────────────────
-private val NavyBlue    = Color(0xFF1B2A4A)
-private val NavyLight   = Color(0xFF243658)
-private val Gold        = Color(0xFFC9A227)
-private val GoldDark    = Color(0xFFA07D10)
-private val PageBg      = Color(0xFFF4F6FA)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,14 +56,20 @@ fun VerifyUsersScreen(
 
     LaunchedEffect(Unit) { viewModel.loadPendingUsers() }
 
+    val primary   = MaterialTheme.colorScheme.primary
+    val tertiary  = MaterialTheme.colorScheme.tertiary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+
     Scaffold(
         snackbarHost   = { SnackbarHost(snackbarHostState) },
-        containerColor = PageBg,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.horizontalGradient(listOf(NavyBlue, NavyLight)))
+                    .background(
+                        Brush.horizontalGradient(listOf(primary, primaryContainer))
+                    )
                     .statusBarsPadding()
             ) {
                 Row(
@@ -88,14 +82,14 @@ fun VerifyUsersScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint               = Gold
+                            tint               = tertiary
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     Column {
                         Text(
                             text          = "Verify Users",
-                            color         = Color.White,
+                            color         = MaterialTheme.colorScheme.onPrimary,
                             fontSize      = 20.sp,
                             fontWeight    = FontWeight.Bold,
                             letterSpacing = 0.3.sp
@@ -103,7 +97,7 @@ fun VerifyUsersScreen(
                         if (!uiState.isLoading && uiState.pendingUsers.isNotEmpty()) {
                             Text(
                                 text     = "${uiState.pendingUsers.size} pending review",
-                                color    = Gold.copy(alpha = 0.85f),
+                                color    = tertiary.copy(alpha = 0.85f),
                                 fontSize = 12.sp
                             )
                         }
@@ -116,7 +110,11 @@ fun VerifyUsersScreen(
                         .height(2.dp)
                         .background(
                             Brush.horizontalGradient(
-                                listOf(Color.Transparent, Gold, Color.Transparent)
+                                listOf(
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                                    tertiary,
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                                )
                             )
                         )
                         .align(Alignment.BottomCenter)
@@ -133,8 +131,8 @@ fun VerifyUsersScreen(
                 // ── Loading ───────────────────────────────────────────────────
                 uiState.isLoading -> {
                     CircularProgressIndicator(
-                        modifier  = Modifier.align(Alignment.Center),
-                        color     = Gold,
+                        modifier    = Modifier.align(Alignment.Center),
+                        color       = tertiary,
                         strokeWidth = 3.dp
                     )
                 }
@@ -169,12 +167,12 @@ fun VerifyUsersScreen(
                             "All caught up!",
                             fontSize   = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color      = NavyBlue
+                            color      = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
                             "No users pending verification",
                             fontSize = 13.sp,
-                            color    = NavyBlue.copy(alpha = 0.45f)
+                            color    = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f)
                         )
                     }
                 }
@@ -193,13 +191,13 @@ fun VerifyUsersScreen(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(
-                                        Brush.horizontalGradient(
-                                            listOf(NavyBlue, NavyLight)
-                                        )
+                                        Brush.horizontalGradient(listOf(primary, primaryContainer))
                                     )
                                     .border(
                                         width = 1.5.dp,
-                                        brush = Brush.horizontalGradient(listOf(Gold, GoldDark)),
+                                        brush = Brush.horizontalGradient(
+                                            listOf(tertiary, tertiary.copy(alpha = 0.6f))
+                                        ),
                                         shape = RoundedCornerShape(14.dp)
                                     )
                                     .padding(horizontal = 16.dp, vertical = 13.dp)
@@ -209,14 +207,14 @@ fun VerifyUsersScreen(
                                         modifier = Modifier
                                             .size(8.dp)
                                             .clip(CircleShape)
-                                            .background(Gold)
+                                            .background(tertiary)
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text(
                                         "${uiState.pendingUsers.size} User${if (uiState.pendingUsers.size != 1) "s" else ""} Pending Verification",
                                         fontWeight = FontWeight.Bold,
                                         fontSize   = 13.sp,
-                                        color      = Gold
+                                        color      = tertiary
                                     )
                                 }
                             }
@@ -253,6 +251,9 @@ private fun AdminPendingUserCard(
         .lowercase()
         .replaceFirstChar { it.uppercase() }
 
+    val primary  = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+
     Card(
         onClick   = onClick,
         modifier  = Modifier
@@ -260,11 +261,13 @@ private fun AdminPendingUserCard(
             .shadow(
                 elevation    = 4.dp,
                 shape        = RoundedCornerShape(16.dp),
-                ambientColor = NavyBlue.copy(alpha = 0.08f),
-                spotColor    = NavyBlue.copy(alpha = 0.12f)
+                ambientColor = primary.copy(alpha = 0.08f),
+                spotColor    = primary.copy(alpha = 0.12f)
             ),
         shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        colors    = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         // Top accent bar
@@ -272,7 +275,7 @@ private fun AdminPendingUserCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(3.dp)
-                .background(Brush.horizontalGradient(listOf(NavyBlue, Gold)))
+                .background(Brush.horizontalGradient(listOf(primary, tertiary)))
         )
 
         Row(
@@ -287,13 +290,13 @@ private fun AdminPendingUserCard(
                 modifier = Modifier
                     .size(52.dp)
                     .clip(CircleShape)
-                    .background(NavyBlue),
+                    .background(primary),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Person,
                     contentDescription = null,
-                    tint               = Gold,
+                    tint               = tertiary,
                     modifier           = Modifier.size(26.dp)
                 )
             }
@@ -304,13 +307,13 @@ private fun AdminPendingUserCard(
                     text       = user.fullName,
                     fontWeight = FontWeight.Bold,
                     fontSize   = 15.sp,
-                    color      = NavyBlue
+                    color      = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text     = user.email,
                     fontSize = 12.sp,
-                    color    = NavyBlue.copy(alpha = 0.5f),
+                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     maxLines = 1
                 )
                 Spacer(modifier = Modifier.height(6.dp))
@@ -318,27 +321,27 @@ private fun AdminPendingUserCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Role Badge
                     Surface(
-                        color = NavyBlue.copy(alpha = 0.08f),
+                        color = primary.copy(alpha = 0.08f),
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text     = roleDisplay,
-                            fontSize = 11.sp,
+                            text       = roleDisplay,
+                            fontSize   = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color    = NavyBlue,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            color      = primary,
+                            modifier   = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
 
                     // Date Badge
                     Surface(
-                        color = Gold.copy(alpha = 0.10f),
+                        color = tertiary.copy(alpha = 0.10f),
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
                             text     = submittedDate,
                             fontSize = 11.sp,
-                            color    = GoldDark,
+                            color    = tertiary,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
@@ -352,22 +355,17 @@ private fun AdminPendingUserCard(
                 modifier       = Modifier.height(38.dp),
                 shape          = RoundedCornerShape(10.dp),
                 colors         = ButtonDefaults.buttonColors(
-                    containerColor = NavyBlue,
-                    contentColor   = Gold
+                    containerColor = primary,
+                    contentColor   = tertiary
                 )
             ) {
                 Text(
                     "Review",
-                    fontSize   = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize      = 12.sp,
+                    fontWeight    = FontWeight.Bold,
                     letterSpacing = 0.3.sp
                 )
             }
         }
     }
 }
-
-
-
-
-

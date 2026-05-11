@@ -165,7 +165,7 @@ class DashboardViewModel @Inject constructor(
             val payments   = if (paymentsResult   is Resource.Success) paymentsResult.data   ?: emptyList() else emptyList()
             val users      = if (usersResult      is Resource.Success) usersResult.data      ?: emptyList() else emptyList()
 
-            val totalEarnings = payments.sumOf { it.amount }
+            val totalEarnings = payments.sumOf { it.amountDouble }
 
             val cal          = Calendar.getInstance()
             val currentMonth = cal.get(Calendar.MONTH)
@@ -176,7 +176,7 @@ class DashboardViewModel @Inject constructor(
                     val pCal = Calendar.getInstance().apply { time = ts.toDate() }
                     pCal.get(Calendar.MONTH) == currentMonth && pCal.get(Calendar.YEAR) == currentYear
                 } ?: false
-            }.sumOf { it.amount }
+            }.sumOf { it.amountDouble }
 
             val avgRating = if (properties.isNotEmpty())
                 properties.map { it.averageRating.toDouble() }.average().takeIf { !it.isNaN() } ?: 0.0
@@ -248,7 +248,7 @@ class DashboardViewModel @Inject constructor(
                     val pCal = Calendar.getInstance().apply { time = ts.toDate() }
                     pCal.get(Calendar.DAY_OF_YEAR) == dayOfYear && pCal.get(Calendar.YEAR) == year
                 } ?: false
-            }.sumOf { it.amount }
+            }.sumOf { it.amountDouble }
 
             val dayIndex = dayCal.get(Calendar.DAY_OF_WEEK) - 2
             val label    = dayLabels.getOrElse(if (dayIndex < 0) dayIndex + 7 else dayIndex) { dayLabels[index % 7] }

@@ -26,29 +26,34 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.data.NotificationType
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.NotificationViewModel
 import com.google.firebase.auth.FirebaseAuth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationDetailScreen(
-    navController: NavController,
+    navController : NavController,
     notificationId: String,
-    viewModel: NotificationViewModel = hiltViewModel()
+    viewModel     : NotificationViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    val uiState = viewModel.uiState.collectAsState().value
+    val userId  = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    // Notification find karein
+    // Find notification from state
     val notification = uiState.notifications.find { it.notificationId == notificationId }
 
     // Mark as read when screen opens
     LaunchedEffect(notificationId) {
-        if (notificationId.isNotEmpty()) {
-            viewModel.markAsRead(notificationId, userId)
-        }
+        if (notificationId.isNotEmpty()) viewModel.markAsRead(notificationId, userId)
     }
+
+    val primary          = MaterialTheme.colorScheme.primary
+    val onPrimary        = MaterialTheme.colorScheme.onPrimary
+    val background       = MaterialTheme.colorScheme.background
+    val surface          = MaterialTheme.colorScheme.surface
+    val onSurface        = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val outline          = MaterialTheme.colorScheme.outline
 
     Scaffold(
         topBar = {
@@ -60,117 +65,110 @@ fun NotificationDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryBlue,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor             = primary,
+                    titleContentColor          = onPrimary,
+                    navigationIconContentColor = onPrimary
                 )
             )
-        }
+        },
+        containerColor = background
     ) { padding ->
 
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = PrimaryBlue)
+                CircularProgressIndicator(color = primary)
             }
             return@Scaffold
         }
 
         if (notification == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Notification not found.", color = TextSecondary)
+                Text("Notification not found.", color = onSurfaceVariant)
             }
             return@Scaffold
         }
 
-        // ✅ FIX: String ko Enum mein convert karein safely
+        // Safely convert string type to enum
         val enumType = try {
             NotificationType.valueOf(notification.type)
         } catch (e: Exception) {
-            NotificationType.BOOKING_REQUESTED // Fallback
+            NotificationType.BOOKING_REQUESTED
         }
 
+        val notifColor = getNotificationColor(enumType)
+
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(padding)
+                .verticalScroll(rememberScrollState()).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Spacer(Modifier.height(12.dp))
 
-            // Icon Section
+            // ── Notification type icon ────────────────────────────────────────
             Box(
-                modifier = Modifier
-                    .size(90.dp)
-                    .clip(CircleShape)
-                    .background(getNotificationColor(enumType).copy(alpha = 0.15f)),
+                modifier = Modifier.size(90.dp).clip(CircleShape)
+                    .background(notifColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = getNotificationIcon(enumType),
+                    imageVector        = getNotificationIcon(enumType),
                     contentDescription = null,
-                    tint = getNotificationColor(enumType),
-                    modifier = Modifier.size(44.dp)
+                    tint               = notifColor,
+                    modifier           = Modifier.size(44.dp)
                 )
             }
 
-            // Type Tag
+            // ── Type label chip ───────────────────────────────────────────────
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(getNotificationColor(enumType).copy(alpha = 0.12f))
+                modifier = Modifier.clip(RoundedCornerShape(20.dp))
+                    .background(notifColor.copy(alpha = 0.12f))
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = enumType.name.replace("_", " "),
-                    color = getNotificationColor(enumType),
-                    fontSize = 13.sp,
+                    text       = enumType.name.replace("_", " "),
+                    color      = notifColor,
+                    fontSize   = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
 
-            // Title
+            // ── Title ─────────────────────────────────────────────────────────
             Text(
-                text = notification.title,
-                fontSize = 20.sp,
+                text      = notification.title,
+                fontSize  = 20.sp,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                color = TextPrimary
+                textAlign  = TextAlign.Center,
+                color      = onSurface
             )
 
-            // Time
+            // ── Timestamp ─────────────────────────────────────────────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(14.dp), tint = TextSecondary)
+                Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(14.dp), tint = onSurfaceVariant)
                 Spacer(Modifier.width(4.dp))
-                Text(
-                    text = notification.createdAt?.toString() ?: "-",
-                    fontSize = 13.sp,
-                    color = TextSecondary
-                )
+                Text(text = notification.createdAt?.toString() ?: "-", fontSize = 13.sp, color = onSurfaceVariant)
             }
 
-            HorizontalDivider(color = BorderGray)
+            HorizontalDivider(color = outline)
 
-            // Message Body
+            // ── Message body ──────────────────────────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+                shape    = RoundedCornerShape(12.dp),
+                colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Text(
-                    text = notification.body,
-                    modifier = Modifier.padding(16.dp),
-                    fontSize = 15.sp,
+                    text       = notification.body,
+                    modifier   = Modifier.padding(16.dp),
+                    fontSize   = 15.sp,
                     lineHeight = 24.sp,
-                    color = TextPrimary
+                    color      = onSurface
                 )
             }
 
-            // Action Button
+            // ── Action button ─────────────────────────────────────────────────
             NotificationActionButton(
-                type = enumType,
+                type    = enumType,
                 onClick = {
                     when (enumType) {
                         NotificationType.BOOKING_REQUESTED,
@@ -178,21 +176,15 @@ fun NotificationDetailScreen(
                         NotificationType.BOOKING_CANCELLED,
                         NotificationType.BOOKING_COMPLETED,
                         NotificationType.BOOKING_REMINDER -> {
-                            if (notification.referenceId.isNotEmpty()) {
+                            if (notification.referenceId.isNotEmpty())
                                 navController.navigate(Screen.BookingDetails.createRoute(notification.referenceId))
-                            }
                         }
                         NotificationType.PAYMENT_RECEIVED,
                         NotificationType.PAYMENT_FAILED,
-                        NotificationType.REFUND_ISSUED -> {
-                            if (notification.referenceId.isNotEmpty()) {
-                                // Navigate to payment detail or wallet screen
-                            }
-                        }
-                        NotificationType.NEW_MESSAGE -> {
-                            if (notification.referenceId.isNotEmpty()) {
+                        NotificationType.REFUND_ISSUED    -> { /* navigate to payment detail */ }
+                        NotificationType.NEW_MESSAGE      -> {
+                            if (notification.referenceId.isNotEmpty())
                                 navController.navigate(Screen.Chat.createRoute(notification.referenceId))
-                            }
                         }
                         else -> { }
                     }
@@ -204,30 +196,27 @@ fun NotificationDetailScreen(
     }
 }
 
-// ── Helpers (Fixed Conflicting Overloads & Deprecations) ─────────────────────
-
+// ── Helper: get icon for notification type ────────────────────────────────────
 @Composable
-fun getNotificationIcon(type: NotificationType): ImageVector {
-    return when (type) {
-        NotificationType.BOOKING_REQUESTED -> Icons.Default.EventNote
-        NotificationType.NEW_MESSAGE       -> Icons.AutoMirrored.Filled.Message
-        NotificationType.PAYMENT_RECEIVED  -> Icons.Default.Payments
-        NotificationType.ACCOUNT_VERIFIED  -> Icons.Default.VerifiedUser
-        else                               -> Icons.Default.Notifications
-    }
+fun getNotificationIcon(type: NotificationType): ImageVector = when (type) {
+    NotificationType.BOOKING_REQUESTED -> Icons.Default.EventNote
+    NotificationType.NEW_MESSAGE       -> Icons.AutoMirrored.Filled.Message
+    NotificationType.PAYMENT_RECEIVED  -> Icons.Default.Payments
+    NotificationType.ACCOUNT_VERIFIED  -> Icons.Default.VerifiedUser
+    else                               -> Icons.Default.Notifications
 }
 
+// ── Helper: get color for notification type ───────────────────────────────────
 @Composable
-fun getNotificationColor(type: NotificationType): Color {
-    return when (type) {
-        NotificationType.BOOKING_REQUESTED,
-        NotificationType.BOOKING_CONFIRMED -> PrimaryBlue
-        NotificationType.BOOKING_CANCELLED -> Color.Red
-        NotificationType.PAYMENT_RECEIVED  -> Color(0xFF4CAF50)
-        else                               -> Color.Gray
-    }
+fun getNotificationColor(type: NotificationType): Color = when (type) {
+    NotificationType.BOOKING_REQUESTED,
+    NotificationType.BOOKING_CONFIRMED -> MaterialTheme.colorScheme.primary
+    NotificationType.BOOKING_CANCELLED -> MaterialTheme.colorScheme.error
+    NotificationType.PAYMENT_RECEIVED  -> Color(0xFF4CAF50)
+    else                               -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
+// ── Action button based on notification type ──────────────────────────────────
 @Composable
 fun NotificationActionButton(type: NotificationType, onClick: () -> Unit) {
     val (label, icon) = when (type) {
@@ -247,7 +236,7 @@ fun NotificationActionButton(type: NotificationType, onClick: () -> Unit) {
         onClick  = onClick,
         modifier = Modifier.fillMaxWidth().height(50.dp),
         shape    = RoundedCornerShape(12.dp),
-        colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+        colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))

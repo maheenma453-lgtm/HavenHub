@@ -26,7 +26,7 @@ import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.OnboardingViewModel
 
-// ── Colors ────────────────────────────────────────────────────────────────────
+// ── Onboarding brand colors — intentionally hardcoded (splash/brand screen)
 private val OB_NavyDark    = Color(0xFF1A2B5E)
 private val OB_NavyMid     = Color(0xFF2E4A8A)
 private val OB_GoldPrimary = Color(0xFFC9A84C)
@@ -35,18 +35,19 @@ private val OB_White       = Color.White
 private val OB_BgTop       = Color(0xFF3D5A99)
 private val OB_BgBottom    = Color(0xFF1E3570)
 
+// ── Data class for each onboarding page
 private data class OBPage(
-    val emoji    : String,
-    val title    : String,
-    val subtitle : String,
-    val features : List<Pair<String, String>>,
-    val color    : Color
+    val emoji   : String,
+    val title   : String,
+    val subtitle: String,
+    val features: List<Pair<String, String>>,
+    val color   : Color
 )
 
 @Composable
 fun OnboardingScreen(
-    navController : NavController,
-    viewModel     : OnboardingViewModel = hiltViewModel()
+    navController: NavController,
+    viewModel    : OnboardingViewModel = hiltViewModel()
 ) {
     OnboardingContent(navController = navController, viewModel = viewModel)
 }
@@ -54,8 +55,8 @@ fun OnboardingScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun OnboardingContent(
-    navController : NavController,
-    viewModel     : OnboardingViewModel
+    navController: NavController,
+    viewModel    : OnboardingViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -101,6 +102,7 @@ private fun OnboardingContent(
     val pagerState  = rememberPagerState(pageCount = { pages.size })
     val currentPage = pagerState.currentPage
 
+    // Sync ViewModel page with pager
     LaunchedEffect(uiState.currentPage) {
         if (pagerState.currentPage != uiState.currentPage)
             pagerState.animateScrollToPage(uiState.currentPage)
@@ -111,6 +113,8 @@ private fun OnboardingContent(
             else viewModel.previousPage()
         }
     }
+
+    // Navigate when onboarding complete
     LaunchedEffect(uiState.isOnboardingComplete) {
         if (uiState.isOnboardingComplete)
             navController.navigate(Screen.SignIn.route) {
@@ -118,17 +122,16 @@ private fun OnboardingContent(
             }
     }
 
+    // Animations
     val floatAnim by rememberInfiniteTransition(label = "fl").animateFloat(
         initialValue  = -10f, targetValue = 10f,
-        animationSpec = infiniteRepeatable(
-            tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse
-        ), label = "float"
+        animationSpec = infiniteRepeatable(tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label         = "float"
     )
     val pulseAnim by rememberInfiniteTransition(label = "pu").animateFloat(
         initialValue  = 0.88f, targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(
-            tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse
-        ), label = "pulse"
+        animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label         = "pulse"
     )
     val shimmer by rememberInfiniteTransition(label = "sh").animateFloat(
         initialValue  = 0f, targetValue = 1f,
@@ -136,6 +139,7 @@ private fun OnboardingContent(
         label         = "shimmer"
     )
 
+    // Page transition animation
     var pageKey by remember(currentPage) { mutableStateOf(false) }
     LaunchedEffect(currentPage) {
         pageKey = false
@@ -151,23 +155,16 @@ private fun OnboardingContent(
         animationSpec = tween(420, easing = EaseOutCubic), label = "psl"
     )
 
-    val currentColor = pages[currentPage].color
-
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // ── Full Navy Blue background ─────────────────────────────────────────
+        // ── Full navy background ──────────────────────────────────────────────
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(OB_BgTop, OB_BgBottom),
-                        startY = 0f, endY = 900f
-                    )
-                )
+            modifier = Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(OB_BgTop, OB_BgBottom), startY = 0f, endY = 900f)
+            )
         )
 
-        // ── White card bottom 58% ─────────────────────────────────────────────
+        // ── White card — bottom 60% ───────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -179,140 +176,76 @@ private fun OnboardingContent(
 
         Column(modifier = Modifier.fillMaxSize()) {
 
-            // ── TOP SECTION: Navy with emoji ──────────────────────────────────
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.40f)
-            ) {
-                // HavenHub label top-left
+            // ── TOP: Navy section with floating emoji ─────────────────────────
+            Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.40f)) {
+
+                // Brand wordmark
                 Column(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(top = 52.dp, start = 24.dp)
+                    modifier = Modifier.align(Alignment.TopStart).padding(top = 52.dp, start = 24.dp)
                 ) {
                     Row {
-                        Text(
-                            text       = "HAVEN",
-                            fontSize   = 16.sp,
-                            fontWeight = FontWeight.Black,
-                            color      = OB_White
-                        )
-                        Text(
-                            text       = "HUB",
-                            fontSize   = 16.sp,
-                            fontWeight = FontWeight.Black,
-                            color      = OB_GoldPrimary
-                        )
+                        Text("HAVEN", fontSize = 16.sp, fontWeight = FontWeight.Black, color = OB_White)
+                        Text("HUB",   fontSize = 16.sp, fontWeight = FontWeight.Black, color = OB_GoldPrimary)
                     }
                     Box(
-                        modifier = Modifier
-                            .width(36.dp)
-                            .height(2.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(OB_GoldPrimary, OB_GoldLight)
-                                )
-                            )
+                        modifier = Modifier.width(36.dp).height(2.dp).clip(CircleShape)
+                            .background(Brush.horizontalGradient(listOf(OB_GoldPrimary, OB_GoldLight)))
                     )
                 }
 
-                // Skip button top-right
+                // Skip button
                 TextButton(
                     onClick  = { viewModel.skipOnboarding() },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 48.dp, end = 20.dp)
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 48.dp, end = 20.dp)
                 ) {
-                    Text(
-                        text       = "Skip",
-                        fontSize   = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color      = OB_White.copy(alpha = 0.75f)
-                    )
+                    Text("Skip", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = OB_White.copy(alpha = 0.75f))
                 }
 
-                // Center: floating emoji in glass card
-                Box(
-                    modifier         = Modifier
-                        .align(Alignment.Center)
-                        .padding(top = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                // Floating emoji card
+                Box(modifier = Modifier.align(Alignment.Center).padding(top = 16.dp), contentAlignment = Alignment.Center) {
                     // Pulse ring
                     Box(
-                        modifier = Modifier
-                            .size((150 * pulseAnim).dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(
-                                        OB_GoldPrimary.copy(alpha = 0.12f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
+                        modifier = Modifier.size((150 * pulseAnim).dp).clip(CircleShape)
+                            .background(Brush.radialGradient(listOf(OB_GoldPrimary.copy(alpha = 0.12f), Color.Transparent)))
                     )
                     // Glass card
                     Box(
-                        modifier = Modifier
-                            .size(120.dp)
-                            .offset(y = floatAnim.dp)
-                            .clip(RoundedCornerShape(32.dp))
-                            .background(OB_White.copy(alpha = 0.15f)),
+                        modifier = Modifier.size(120.dp).offset(y = floatAnim.dp)
+                            .clip(RoundedCornerShape(32.dp)).background(OB_White.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Gold top stripe on card
+                        // Gold top stripe
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(3.dp)
-                                .align(Alignment.TopCenter)
-                                .clip(
-                                    RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
-                                )
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(OB_GoldPrimary, OB_GoldLight, OB_GoldPrimary)
-                                    )
-                                )
+                            modifier = Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopCenter)
+                                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+                                .background(Brush.horizontalGradient(listOf(OB_GoldPrimary, OB_GoldLight, OB_GoldPrimary)))
                         )
-                        Text(
-                            text     = pages[currentPage].emoji,
-                            fontSize = 58.sp
-                        )
+                        Text(text = pages[currentPage].emoji, fontSize = 58.sp)
                     }
                 }
             }
 
-            // ── BOTTOM WHITE SECTION ──────────────────────────────────────────
+            // ── BOTTOM: White content section ─────────────────────────────────
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp))
-                    .background(OB_White)
+                modifier = Modifier.fillMaxWidth().weight(1f)
+                    .clip(RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp)).background(OB_White)
             ) {
-                // Gold shimmer top stripe
+                // Gold shimmer stripe
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    OB_GoldPrimary.copy(alpha = 0.4f + 0.6f * shimmer),
-                                    OB_GoldLight,
-                                    OB_GoldPrimary.copy(alpha = 0.4f + 0.6f * (1f - shimmer)),
-                                    Color.Transparent
-                                )
+                    modifier = Modifier.fillMaxWidth().height(3.dp).background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                OB_GoldPrimary.copy(alpha = 0.4f + 0.6f * shimmer),
+                                OB_GoldLight,
+                                OB_GoldPrimary.copy(alpha = 0.4f + 0.6f * (1f - shimmer)),
+                                Color.Transparent
                             )
                         )
+                    )
                 )
 
-                // Pager content
+                // Pager
                 HorizontalPager(
                     state             = pagerState,
                     modifier          = Modifier.weight(1f),
@@ -326,12 +259,9 @@ private fun OnboardingContent(
                     )
                 }
 
-                // ── Dots + Buttons ────────────────────────────────────────────
+                // ── Dots + Navigation buttons ─────────────────────────────────
                 Column(
-                    modifier            = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(bottom = 32.dp),
+                    modifier            = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Page dots
@@ -348,63 +278,42 @@ private fun OnboardingContent(
                                 label         = "dw$index"
                             )
                             Box(
-                                modifier = Modifier
-                                    .width(dotWidth)
-                                    .height(8.dp)
-                                    .clip(CircleShape)
+                                modifier = Modifier.width(dotWidth).height(8.dp).clip(CircleShape)
                                     .background(
                                         if (isSelected)
-                                            Brush.horizontalGradient(
-                                                listOf(OB_GoldPrimary, OB_GoldLight)
-                                            )
+                                            Brush.horizontalGradient(listOf(OB_GoldPrimary, OB_GoldLight))
                                         else
-                                            Brush.horizontalGradient(
-                                                listOf(
-                                                    Color(0xFFD0D5E8),
-                                                    Color(0xFFD0D5E8)
-                                                )
-                                            )
+                                            Brush.horizontalGradient(listOf(Color(0xFFD0D5E8), Color(0xFFD0D5E8)))
                                     )
                             )
                         }
                     }
 
                     // Next / Get Started button
+                    val isLastPage = currentPage == uiState.totalPages - 1
                     Button(
                         onClick   = { viewModel.nextPage() },
-                        modifier  = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
+                        modifier  = Modifier.fillMaxWidth().height(56.dp),
                         shape     = RoundedCornerShape(16.dp),
                         colors    = ButtonDefaults.buttonColors(
-                            containerColor = if (currentPage == uiState.totalPages - 1)
-                                OB_GoldPrimary else OB_NavyMid
+                            containerColor = if (isLastPage) OB_GoldPrimary else OB_NavyMid
                         ),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                     ) {
                         Text(
-                            text          = if (currentPage < uiState.totalPages - 1)
-                                "Next" else "Get Started",
+                            text          = if (isLastPage) "Get Started" else "Next",
                             fontSize      = 15.sp,
                             fontWeight    = FontWeight.ExtraBold,
-                            color         = if (currentPage == uiState.totalPages - 1)
-                                OB_NavyDark else OB_White,
+                            color         = if (isLastPage) OB_NavyDark else OB_White,
                             letterSpacing = 0.3.sp
                         )
                     }
 
+                    // Back button (only show after first page)
                     if (currentPage > 0) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        TextButton(
-                            onClick  = { viewModel.previousPage() },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text       = "Back",
-                                fontSize   = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color      = OB_NavyDark.copy(alpha = 0.45f)
-                            )
+                        TextButton(onClick = { viewModel.previousPage() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Back", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = OB_NavyDark.copy(alpha = 0.45f))
                         }
                     }
                 }
@@ -413,79 +322,47 @@ private fun OnboardingContent(
     }
 }
 
+// ── Single page content body ──────────────────────────────────────────────────
 @Composable
 private fun OBPageBody(
-    page        : OBPage,
-    alpha       : Float,
-    slideOffset : Float,
-    accentColor : Color
+    page       : OBPage,
+    alpha      : Float,
+    slideOffset: Float,
+    accentColor: Color
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .alpha(alpha)
-            .offset(y = slideOffset.dp)
+        modifier = Modifier.fillMaxSize().alpha(alpha).offset(y = slideOffset.dp)
             .padding(horizontal = 24.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        Text(
-            text       = page.title,
-            fontSize   = 23.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color      = OB_NavyDark
-        )
-
+        Text(text = page.title, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, color = OB_NavyDark)
         Spacer(modifier = Modifier.height(4.dp))
 
         // Gold underline accent
         Box(
-            modifier = Modifier
-                .width(40.dp)
-                .height(3.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(OB_GoldPrimary, OB_GoldLight)
-                    )
-                )
+            modifier = Modifier.width(40.dp).height(3.dp).clip(CircleShape)
+                .background(Brush.horizontalGradient(listOf(OB_GoldPrimary, OB_GoldLight)))
         )
-
         Spacer(modifier = Modifier.height(10.dp))
 
-        Text(
-            text       = page.subtitle,
-            fontSize   = 13.5.sp,
-            color      = OB_NavyDark.copy(alpha = 0.55f),
-            lineHeight = 20.sp
-        )
-
+        Text(text = page.subtitle, fontSize = 13.5.sp, color = OB_NavyDark.copy(alpha = 0.55f), lineHeight = 20.sp)
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Feature rows
+        // Feature list rows
         page.features.forEach { (icon, text) ->
             Row(
-                verticalAlignment     = Alignment.CenterVertically,
-                modifier              = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                modifier          = Modifier.fillMaxWidth().padding(vertical = 6.dp)
             ) {
-                // Icon bubble
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
                         .background(accentColor.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(text = icon, fontSize = 18.sp)
                 }
                 Spacer(modifier = Modifier.width(14.dp))
-                Text(
-                    text       = text,
-                    fontSize   = 13.sp,
-                    color      = OB_NavyDark.copy(alpha = 0.80f),
-                    fontWeight = FontWeight.Medium
-                )
+                Text(text = text, fontSize = 13.sp, color = OB_NavyDark.copy(alpha = 0.80f), fontWeight = FontWeight.Medium)
             }
         }
     }

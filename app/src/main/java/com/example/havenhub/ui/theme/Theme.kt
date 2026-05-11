@@ -10,39 +10,68 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// ─── Dark Color Scheme ────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+// DARK COLOR SCHEME — deep navy + logo gold
+// ════════════════════════════════════════════════════════════════════
 private val DarkColorScheme = darkColorScheme(
-    primary            = PrimaryNavyLight,       // lighter navy on dark
-    onPrimary          = BackgroundDark,
-    primaryContainer   = PrimaryNavyDark,
+    // Primary — navy tones
+    primary            = DarkGoldPrimary,       // gold as primary action color
+    onPrimary          = DarkBg,
+    primaryContainer   = DarkBgTertiary,
+    onPrimaryContainer = DarkGoldLight,
 
-    secondary          = SecondaryBlue,
-    onSecondary        = BackgroundDark,
-    secondaryContainer = SecondaryBlueDark,
+    // Secondary — muted navy
+    secondary          = DarkBgElevated,
+    onSecondary        = DarkTextPrimary,
+    secondaryContainer = DarkBgSecondary,
+    onSecondaryContainer = DarkTextSecondary,
 
-    tertiary           = GoldAccentLight,        // lighter gold on dark
-    onTertiary         = BackgroundDark,
-    tertiaryContainer  = GoldAccentDark,
+    // Tertiary — gold accent
+    tertiary           = DarkGoldLight,
+    onTertiary         = DarkBg,
+    tertiaryContainer  = DarkGoldFaint,
+    onTertiaryContainer = DarkGoldPrimary,
 
-    background         = BackgroundDark,
-    onBackground       = TextPrimaryDark,
+    // Backgrounds
+    background         = DarkBg,
+    onBackground       = DarkTextPrimary,
 
-    surface            = SurfaceDark,
-    onSurface          = TextPrimaryDark,
-    surfaceVariant     = SurfaceVariantDark,
+    // Surfaces
+    surface            = DarkSurface,
+    onSurface          = DarkTextPrimary,
+    surfaceVariant     = DarkSurfaceVariant,
+    onSurfaceVariant   = DarkTextSecondary,
 
-    error              = ErrorRedDark,
-    onError            = OnErrorRedDark
+    // Outline
+    outline            = DarkBorder,
+    outlineVariant     = DarkBorderGold,
+
+    // Error
+    error              = DarkError,
+    onError            = DarkOnError,
+    errorContainer     = Color(0xFF3A0A12),
+    onErrorContainer   = DarkError,
+
+    // Inverse
+    inverseSurface     = DarkTextPrimary,
+    inverseOnSurface   = DarkBg,
+    inversePrimary     = PrimaryNavy,
+
+    // Scrim
+    scrim              = DarkBg.copy(alpha = 0.8f)
 )
 
-// ─── Light Color Scheme ───────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+// LIGHT COLOR SCHEME — unchanged, do not modify
+// ════════════════════════════════════════════════════════════════════
 private val LightColorScheme = lightColorScheme(
-    primary            = PrimaryNavy,            // #1B2B5B — HAVEN navy
+    primary            = PrimaryNavy,
     onPrimary          = TextOnPrimary,
     primaryContainer   = PrimaryNavyLight,
 
@@ -50,7 +79,7 @@ private val LightColorScheme = lightColorScheme(
     onSecondary        = OnSecondary,
     secondaryContainer = SecondaryBlueLight,
 
-    tertiary           = GoldAccent,             // #C9A84C — HUB gold
+    tertiary           = GoldAccent,
     onTertiary         = OnAccentGold,
     tertiaryContainer  = GoldAccentLight,
 
@@ -65,7 +94,9 @@ private val LightColorScheme = lightColorScheme(
     onError            = OnErrorRed
 )
 
-// ─── Theme Entry Point ────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+// THEME ENTRY POINT
+// ════════════════════════════════════════════════════════════════════
 @Composable
 fun HavenHubTheme(
     darkTheme   : Boolean = isSystemInDarkTheme(),
@@ -85,17 +116,47 @@ fun HavenHubTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // Status bar — HavenHub navy
-            window.statusBarColor = PrimaryNavy.toArgb()
+
+            // Status bar color — dark: deep navy, light: primary navy
+            window.statusBarColor = if (darkTheme)
+                DarkBg.toArgb()
+            else
+                PrimaryNavy.toArgb()
+
+            // Status bar icons — dark: light icons, light: dark icons
             WindowCompat.getInsetsController(window, view)
-                .isAppearanceLightStatusBars = false
+                .isAppearanceLightStatusBars = !darkTheme
         }
     }
 
-
     MaterialTheme(
-      colorScheme = colorScheme,
-      typography  = HavenTypography,
+        colorScheme = colorScheme,
+        typography  = HavenTypography,
         content     = content
-  )
+    )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -13,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -21,7 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.*
+import com.example.havenhub.ui.theme.ErrorRed
 import com.example.havenhub.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,18 +40,21 @@ fun SettingsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                // ✅ MaterialTheme use — auto dark/light
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = PrimaryBlue,
-                    titleContentColor          = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor             = MaterialTheme.colorScheme.primary,
+                    titleContentColor          = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
-        }
+        },
+        // ✅ Scaffold background auto dark/light
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
 
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = PrimaryBlue)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             return@Scaffold
         }
@@ -64,7 +66,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
 
-            // Account
+            // ── Account ──────────────────────────────────────────────────────
             SettingsGroup(title = "Account") {
                 SettingsItem(
                     icon    = Icons.Default.ManageAccounts,
@@ -78,7 +80,7 @@ fun SettingsScreen(
                 )
             }
 
-            // Preferences
+            // ── Preferences ──────────────────────────────────────────────────
             SettingsGroup(title = "Preferences") {
                 SettingsItem(
                     icon     = Icons.Default.Notifications,
@@ -87,19 +89,15 @@ fun SettingsScreen(
                         "Enabled" else "Disabled",
                     onClick  = { navController.navigate(Screen.NotificationSettings.route) }
                 )
-                SettingsItem(
-                    icon     = Icons.Default.DarkMode,
-                    label    = "Dark Mode",
-                    subtitle = if (uiState.userPreferences?.isDarkMode == true) "On" else "Off",
-                    onClick  = {
-                        viewModel.toggleDarkMode(
-                            uiState.userPreferences?.isDarkMode?.not() ?: false
-                        )
-                    }
+
+                // ✅ Dark Mode — WhatsApp style Switch
+                DarkModeToggleItem(
+                    isDarkMode = uiState.userPreferences?.isDarkMode == true,
+                    onToggle   = { viewModel.toggleDarkMode(it) }
                 )
             }
 
-            // Support
+            // ── Support ──────────────────────────────────────────────────────
             SettingsGroup(title = "Support") {
                 SettingsItem(
                     icon    = Icons.AutoMirrored.Filled.Help,
@@ -113,7 +111,7 @@ fun SettingsScreen(
                 )
             }
 
-            // Error Message
+            // ── Error ────────────────────────────────────────────────────────
             uiState.errorMessage?.let { error ->
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -127,22 +125,72 @@ fun SettingsScreen(
     }
 }
 
+// ✅ WhatsApp-style Dark Mode toggle — Switch dikhta hai, click pe bhi toggle hota hai
+@Composable
+fun DarkModeToggleItem(
+    isDarkMode: Boolean,
+    onToggle  : (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle(!isDarkMode) }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector      = Icons.Default.DarkMode,
+            contentDescription = null,
+            tint             = MaterialTheme.colorScheme.primary,
+            modifier         = Modifier.size(22.dp)
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text     = "Dark Mode",
+                fontSize = 14.sp,
+                color    = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text     = if (isDarkMode) "On" else "Off",
+                fontSize = 12.sp,
+                color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
+        // ✅ WhatsApp-style Switch
+        Switch(
+            checked         = isDarkMode,
+            onCheckedChange = { onToggle(it) },
+            colors          = SwitchDefaults.colors(
+                checkedThumbColor   = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor   = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        )
+    }
+}
+
+// ✅ SettingsGroup — MaterialTheme colors
 @Composable
 fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text     = title,
-            fontSize = 12.sp,
-            color    = TextSecondary,
+            text       = title,
+            fontSize   = 12.sp,
+            color      = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            modifier   = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
         )
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
             shape  = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+            colors = CardDefaults.cardColors(
+                // ✅ Dark mode mein dark card, light mein light card
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         ) {
             Column { content() }
         }
@@ -150,6 +198,7 @@ fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
+// ✅ SettingsItem — MaterialTheme colors
 @Composable
 fun SettingsItem(
     icon    : ImageVector,
@@ -158,18 +207,46 @@ fun SettingsItem(
     onClick : () -> Unit
 ) {
     Row(
-        modifier          = Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(22.dp))
+        Icon(
+            icon,
+            contentDescription = null,
+            tint               = MaterialTheme.colorScheme.primary,
+            modifier           = Modifier.size(22.dp)
+        )
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, fontSize = 14.sp, color = TextPrimary)
-            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = TextSecondary)
+            Text(
+                label,
+                fontSize = 14.sp,
+                color    = MaterialTheme.colorScheme.onSurface
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    fontSize = 12.sp,
+                    color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
         }
-        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
+        Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint               = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+        )
     }
 }
+
+
+
+
+
+
+
+
+

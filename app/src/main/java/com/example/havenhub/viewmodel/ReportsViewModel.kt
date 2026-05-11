@@ -68,7 +68,7 @@ class ReportsViewModel @Inject constructor(
 
             val totalRevenue = allPayments
                 .filter { it.status == PaymentStatus.COMPLETED.name }
-                .sumOf { it.amount }
+                .sumOf { it.amountDouble }
 
             // ✅ Fixed: use .name on enum directly (lines 80-81 fix)
             val completed = bookings.count { it.status == "COMPLETED" }

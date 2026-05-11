@@ -62,15 +62,31 @@ class AdminRepository @Inject constructor(
             email               = data["email"] as? String ?: "",
             phoneNumber         = data["phoneNumber"] as? String ?: "",
             profileImageUrl     = data["profileImageUrl"] as? String ?: "",
-            role                = data["role"] as? String ?: "TENANT",
+            role                = data["role"] as? String ?: "tenant",
+
             verificationStatus  = data["verificationStatus"] as? String ?: "PENDING",
+
+            // ✅ FIX: isVerified — multiple possible field names handle karo
             isVerified          = (data["isVerified"] as? Boolean)
                 ?: (data["verificationStatus"] as? String)
                     ?.uppercase()
                     ?.let { it == "VERIFIED" || it == "APPROVED" }
                 ?: false,
-            isActive            = data["active"] as? Boolean ?: true,
-            isBanned            = data["banned"] as? Boolean ?: false,
+
+            // ✅ FIX: isActive — "isActive" aur "active" dono check karo
+            isActive            = (data["isActive"] as? Boolean)
+                ?: (data["active"] as? Boolean)
+                ?: true,
+
+            // ✅ FIX: isBanned — "isBanned" aur "banned" dono check karo
+            isBanned            = (data["isBanned"] as? Boolean)
+                ?: (data["banned"] as? Boolean)
+                ?: false,
+
+            // ✅ FIX: CNIC fields — crash nahi hoga agar fields missing hoon
+            cnicNumber          = data["cnicNumber"] as? String ?: "",
+            cnicImageUrl        = data["cnicImageUrl"] as? String ?: "",
+
             nationalId          = data["nationalId"] as? String ?: "",
             idFrontUrl          = data["idFrontUrl"] as? String ?: "",
             idBackUrl           = data["idBackUrl"] as? String ?: "",
@@ -138,7 +154,7 @@ class AdminRepository @Inject constructor(
                 try {
                     parseUserSafely(data, fallbackUserId = doc.id)
                 } catch (e: Exception) {
-                    null
+                    null   // ✅ ek user fail hone se poori list crash nahi hogi
                 }
             }
             Resource.Success(users)
@@ -146,7 +162,7 @@ class AdminRepository @Inject constructor(
             Resource.Error(e.localizedMessage ?: "Failed to fetch users")
         }
     }
-    // ✅ Approve user — verificationStatus VERIFIED set karo
+
     suspend fun approveUser(userId: String): Resource<Unit> {
         return try {
             val fields = mapOf(
@@ -160,43 +176,48 @@ class AdminRepository @Inject constructor(
             Resource.Error(e.localizedMessage ?: "Failed to approve user")
         }
     }
-    // ✅ Approve user — isVerified=true, verificationStatus=APPROVED, banned=false, active=true
+
     suspend fun unbanUser(userId: String): Resource<Unit> {
         return try {
             usersCollection.document(userId)
                 .update(
                     mapOf(
+                        // ✅ FIX: dono field names update karo taake koi bhi query kaam kare
                         "banned"             to false,
+                        "isBanned"           to false,
                         "isVerified"         to true,
                         "verificationStatus" to "APPROVED",
                         "active"             to true,
+                        "isActive"           to true,
                         "updatedAt"          to Timestamp.now()
                     )
                 )
                 .await()
             Resource.Success(Unit)
         } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to approve user")
+            Resource.Error(e.localizedMessage ?: "Failed to unban user")
         }
     }
 
-    // ✅ Reject user — isVerified=false, verificationStatus=REJECTED, banned=true, active=false
     suspend fun banUser(userId: String): Resource<Unit> {
         return try {
             usersCollection.document(userId)
                 .update(
                     mapOf(
+                        // ✅ FIX: dono field names update karo
                         "banned"             to true,
+                        "isBanned"           to true,
                         "isVerified"         to false,
                         "verificationStatus" to "REJECTED",
                         "active"             to false,
+                        "isActive"           to false,
                         "updatedAt"          to Timestamp.now()
                     )
                 )
                 .await()
             Resource.Success(Unit)
         } catch (e: Exception) {
-            Resource.Error(e.localizedMessage ?: "Failed to reject user")
+            Resource.Error(e.localizedMessage ?: "Failed to ban user")
         }
     }
 
@@ -279,8 +300,6 @@ class AdminRepository @Inject constructor(
         }
     }
 
-    // ✅ NEW: Generic booking status update — landlord approve/reject ke liye
-    //    ManagementViewModel.approveBooking() aur rejectBooking() yahi call karte hain
     suspend fun updateBookingStatus(bookingId: String, status: String): Resource<Unit> {
         return try {
             bookingsCollection.document(bookingId)

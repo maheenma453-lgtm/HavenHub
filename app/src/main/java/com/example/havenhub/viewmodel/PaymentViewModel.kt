@@ -37,16 +37,44 @@ class PaymentViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PaymentUiState())
     val uiState: StateFlow<PaymentUiState> = _uiState.asStateFlow()
 
+    // ✅ FIX Bug 3: Ab screen se userId pass karke call karo
+    fun loadPaymentHistory(userId: String) {
+        if (userId.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "User ID missing") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                when (val result = paymentRepository.getUserPayments(userId)) {
+                    is Resource.Success -> _uiState.update {
+                        it.copy(isLoading = false, paymentHistory = result.data)
+                    }
+                    is Resource.Error -> _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
+                    }
+                    Resource.Loading -> Unit
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load payments")
+                }
+            }
+        }
+    }
+
+    // ✅ FIX Bug 1: amount String le raha hai ab — Double nahi
     fun processPayment(
         bookingId : String,
         payerId   : String,
         payeeId   : String,
         payerName : String,
         payeeName : String,
-        amount    : Double,
+        amount    : String,   // ← String
         method    : PaymentMethod
     ) {
-        if (amount <= 0.0) {
+        val amountDouble = amount.toDoubleOrNull() ?: 0.0
+        if (amountDouble <= 0.0) {
             _uiState.update { it.copy(errorMessage = "Invalid payment amount") }
             return
         }
@@ -61,7 +89,7 @@ class PaymentViewModel @Inject constructor(
                     payerName     = payerName,
                     payeeId       = payeeId,
                     payeeName     = payeeName,
-                    amount        = amount,
+                    amount        = amount,   // ← String as-is
                     paymentMethod = method.name,
                     status        = PaymentStatus.PENDING.name,
                     type          = PaymentType.BOOKING.name
@@ -69,22 +97,17 @@ class PaymentViewModel @Inject constructor(
 
                 when (val result = paymentRepository.savePayment(payment)) {
                     is Resource.Success -> {
-                        // ✅ 1. Booking status CONFIRMED karo
                         bookingRepository.updateBookingStatus(
                             bookingId,
                             BookingStatus.CONFIRMED
                         )
 
-                        // ✅ 2. Booking document mein paymentStatus = PAID aur paymentId update karo
-                        //       Yeh woh fix hai jo missing tha — ab har booking pay hone ke baad
-                        //       paymentStatus "PAID" show karega chahe koi bhi property ho
                         bookingRepository.updatePaymentStatusOnBooking(
                             bookingId     = bookingId,
                             paymentStatus = PaymentStatus.COMPLETED.name,
                             paymentId     = result.data ?: ""
                         )
 
-                        // ✅ 3. Payment record ka status bhi COMPLETED karo
                         paymentRepository.updatePaymentStatus(
                             result.data ?: "",
                             PaymentStatus.COMPLETED.name
@@ -113,27 +136,6 @@ class PaymentViewModel @Inject constructor(
         }
     }
 
-    fun loadPaymentHistory(userId: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            try {
-                when (val result = paymentRepository.getUserPayments(userId)) {
-                    is Resource.Success -> _uiState.update {
-                        it.copy(isLoading = false, paymentHistory = result.data)
-                    }
-                    is Resource.Error -> _uiState.update {
-                        it.copy(isLoading = false, errorMessage = result.message)
-                    }
-                    Resource.Loading -> Unit
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load payments")
-                }
-            }
-        }
-    }
-
     fun verifyPaymentStatus(bookingId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -155,6 +157,28 @@ class PaymentViewModel @Inject constructor(
         }
     }
 
+    fun loadLandlordPayments(landlordId: String) {
+        if (landlordId.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                when (val result = paymentRepository.getLandlordPayments(landlordId)) {
+                    is Resource.Success -> _uiState.update {
+                        it.copy(isLoading = false, paymentHistory = result.data)
+                    }
+                    is Resource.Error -> _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
+                    }
+                    Resource.Loading -> Unit
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load payments")
+                }
+            }
+        }
+    }
+
     fun selectPaymentMethod(method: PaymentMethod) {
         _uiState.update { it.copy(selectedMethod = method) }
     }
@@ -162,9 +186,11 @@ class PaymentViewModel @Inject constructor(
     fun setDefaultMethod(method: PaymentMethod) {
         _uiState.update { it.copy(defaultMethod = method, selectedMethod = method) }
     }
+
     fun setError(msg: String) {
         _uiState.update { it.copy(errorMessage = msg) }
     }
+
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
     }

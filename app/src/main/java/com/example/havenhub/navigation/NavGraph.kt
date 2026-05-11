@@ -265,7 +265,8 @@ fun HavenHubNavGraph(
                     payeeId       = back.arguments?.getString("payeeId")   ?: "",
                     payerName     = back.arguments?.getString("payerName") ?: "",
                     payeeName     = back.arguments?.getString("payeeName") ?: "",
-                    amount        = back.arguments?.getString("amount")?.toDoubleOrNull() ?: 0.0
+                    amount = back.arguments?.getString("amount") ?: ""
+                   // amount        = back.arguments?.getString("amount")?.toDoubleOrNull() ?: 0.0
                 )
             }
 

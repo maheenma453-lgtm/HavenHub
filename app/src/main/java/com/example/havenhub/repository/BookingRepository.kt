@@ -29,18 +29,24 @@ class BookingRepository @Inject constructor(
 
     // ── CREATE ────────────────────────────────────────────────────────────────
     suspend fun createBooking(booking: Booking): Resource<String> {
-        val pendingBooking = booking.copy(status = BookingStatus.PENDING.name)
+
+        // ✅ FIX: tenantName blank hai toh Firestore se fetch karo BEFORE saving
+        val resolvedTenantName = resolveTenantName(booking)
+
+        val pendingBooking = booking.copy(
+            status     = BookingStatus.PENDING.name,
+            tenantName = resolvedTenantName   // ✅ guaranteed non-blank naam
+        )
+
         val result = dataManager.createBooking(pendingBooking)
 
         if (result is Resource.Success) {
-            val bookingId = result.data ?: ""
-
+            val bookingId          = result.data ?: ""
             val resolvedLandlordId = resolveLandlordId(booking)
-            val finalBooking = pendingBooking.copy(
+            val finalBooking       = pendingBooking.copy(
                 bookingId  = bookingId,
                 landlordId = resolvedLandlordId
             )
-
             sendBookingNotificationToLandlord(finalBooking)
             sendBookingNotificationToAdmin(finalBooking)
         }
@@ -94,7 +100,7 @@ class BookingRepository @Inject constructor(
                                 bookingId     = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
-                        else -> { /* PENDING, COMPLETED — handle as needed */ }
+                        else -> {}
                     }
                 }
             } catch (e: Exception) {
@@ -132,6 +138,38 @@ class BookingRepository @Inject constructor(
     // ══════════════════════════════════════════════════════════════════════════
     // PRIVATE HELPERS
     // ══════════════════════════════════════════════════════════════════════════
+
+    // ✅ NEW: tenantName Firestore se resolve karo
+    private suspend fun resolveTenantName(booking: Booking): String {
+        // Pehle check: booking object mein naam already hai
+        if (booking.tenantName.isNotBlank()) {
+            Log.d("BOOKING_REPO", "tenantName already present: ${booking.tenantName}")
+            return booking.tenantName
+        }
+
+        // Nahi hai toh tenantId se Firestore users collection se fetch karo
+        if (booking.tenantId.isBlank()) {
+            Log.e("BOOKING_REPO", "tenantId bhi blank — cannot resolve tenantName")
+            return ""
+        }
+
+        return try {
+            val userDoc = usersCol.document(booking.tenantId).get().await()
+            val name = userDoc.getString("fullName")      // ✅ Firestore mein "fullName" field hai
+                ?: userDoc.getString("name")
+                ?: userDoc.getString("displayName")
+                ?: ""
+            if (name.isNotBlank()) {
+                Log.d("BOOKING_REPO", "✅ tenantName resolved: $name")
+            } else {
+                Log.w("BOOKING_REPO", "tenantName empty even after Firestore fetch for ${booking.tenantId}")
+            }
+            name
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "resolveTenantName error: ${e.localizedMessage}")
+            ""
+        }
+    }
 
     private suspend fun resolveLandlordId(booking: Booking): String {
         if (booking.landlordId.isNotBlank()) {
@@ -171,7 +209,7 @@ class BookingRepository @Inject constructor(
                 landlordId    = landlordId,
                 bookingId     = booking.bookingId,
                 propertyTitle = booking.propertyTitle.ifBlank { "Property" },
-                tenantName    = booking.tenantName.ifBlank  { "Tenant"   }
+                tenantName    = booking.tenantName.ifBlank    { "Tenant"   }
             )
             Log.d("BOOKING_REPO", "✅ Landlord notification sent to $landlordId")
         } catch (e: Exception) {
@@ -181,10 +219,8 @@ class BookingRepository @Inject constructor(
 
     private suspend fun sendBookingNotificationToAdmin(booking: Booking) {
         try {
-            // ✅ Firestore mein role = "ADMIN" (uppercase) — screenshot se confirmed
             var adminQuery = usersCol.whereEqualTo("role", "ADMIN").get().await()
             if (adminQuery.isEmpty) {
-                // fallback — agar kisi ne lowercase set kiya ho
                 adminQuery = usersCol.whereEqualTo("role", "admin").get().await()
             }
 
@@ -211,7 +247,7 @@ class BookingRepository @Inject constructor(
                     adminId       = adminId,
                     bookingId     = booking.bookingId,
                     propertyTitle = booking.propertyTitle.ifBlank { "Property" },
-                    tenantName    = booking.tenantName.ifBlank  { "Tenant"   }
+                    tenantName    = booking.tenantName.ifBlank    { "Tenant"   }
                 )
                 Log.d("BOOKING_REPO", "✅ Admin notification sent to $adminId")
             }

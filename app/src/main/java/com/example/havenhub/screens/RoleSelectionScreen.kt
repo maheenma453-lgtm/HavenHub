@@ -29,19 +29,7 @@ import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.AuthViewModel
 
-// ── Brand Colors ──────────────────────────────────────────────────────────────
-private val RS_NavyDark      = Color(0xFF0D1B3E)
-private val RS_NavyPrimary   = Color(0xFF1A2A6C)
-private val RS_GoldPrimary   = Color(0xFFC9A84C)
-private val RS_GoldLight     = Color(0xFFE8C96A)
-private val RS_GoldDark      = Color(0xFF9A7A30)
-private val RS_White         = Color(0xFFFFFFFF)
-private val RS_Surface       = Color(0xFFF4F6FB)
-private val RS_GrayText      = Color(0xFF8A94A6)
-private val RS_GrayBorder    = Color(0xFFDDE2EF)
-private val RS_ErrorRed      = Color(0xFFD94040)
-
-// Role accent colors
+// Role accent colors — yeh semantic hain, theme se bahar hain
 private val RS_TenantAccent   = Color(0xFF1A6FA8)
 private val RS_LandlordAccent = Color(0xFF2E7D52)
 private val RS_AdminAccent    = Color(0xFF6A3AAF)
@@ -68,10 +56,20 @@ fun RoleSelectionScreen(
         label         = "slideY"
     )
 
+    val primary          = MaterialTheme.colorScheme.primary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val tertiary         = MaterialTheme.colorScheme.tertiary
+    val onPrimary        = MaterialTheme.colorScheme.onPrimary
+    val background       = MaterialTheme.colorScheme.background
+    val onBackground     = MaterialTheme.colorScheme.onBackground
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val outline          = MaterialTheme.colorScheme.outline
+    val error            = MaterialTheme.colorScheme.error
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(RS_Surface)
+            .background(background)
     ) {
         Column(
             modifier            = Modifier
@@ -79,13 +77,13 @@ fun RoleSelectionScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ── Top Navy Header ───────────────────────────────────────────────
+            // ── Top Header ────────────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            listOf(RS_NavyDark, RS_NavyPrimary),
+                            listOf(primary, primaryContainer),
                             startY = 0f, endY = 500f
                         )
                     )
@@ -99,7 +97,7 @@ fun RoleSelectionScreen(
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
-                                listOf(RS_GoldPrimary.copy(alpha = 0.12f), Color.Transparent)
+                                listOf(tertiary.copy(alpha = 0.12f), Color.Transparent)
                             )
                         )
                 )
@@ -114,36 +112,32 @@ fun RoleSelectionScreen(
                         .offset(y = slideY.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Brand wordmark
                     Row {
                         Text(
                             "HAVEN",
                             fontSize      = 20.sp,
                             fontWeight    = FontWeight.Black,
-                            color         = RS_White,
+                            color         = onPrimary,
                             letterSpacing = 1.5.sp
                         )
                         Text(
                             "HUB",
                             fontSize      = 20.sp,
                             fontWeight    = FontWeight.Black,
-                            color         = RS_GoldPrimary,
+                            color         = tertiary,
                             letterSpacing = 1.5.sp
                         )
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Gold accent line
                     Box(
                         modifier = Modifier
                             .width(40.dp)
                             .height(3.dp)
                             .clip(CircleShape)
                             .background(
-                                Brush.horizontalGradient(
-                                    listOf(RS_GoldDark, RS_GoldPrimary, RS_GoldLight)
-                                )
+                                Brush.horizontalGradient(listOf(tertiary, tertiary.copy(0.6f)))
                             )
                     )
 
@@ -153,7 +147,7 @@ fun RoleSelectionScreen(
                         "How will you use\nHavenHub?",
                         fontSize      = 24.sp,
                         fontWeight    = FontWeight.Black,
-                        color         = RS_White,
+                        color         = onPrimary,
                         textAlign     = TextAlign.Center,
                         lineHeight    = 32.sp,
                         letterSpacing = (-0.3).sp
@@ -164,19 +158,18 @@ fun RoleSelectionScreen(
                     Text(
                         "Select your role to get a personalized experience",
                         fontSize   = 13.sp,
-                        color      = RS_White.copy(alpha = 0.55f),
+                        color      = onPrimary.copy(alpha = 0.55f),
                         textAlign  = TextAlign.Center,
                         lineHeight = 19.sp
                     )
                 }
 
-                // Bottom curve
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(24.dp)
                         .align(Alignment.BottomCenter)
-                        .background(RS_Surface)
+                        .background(background)
                 )
             }
 
@@ -197,6 +190,9 @@ fun RoleSelectionScreen(
                     subtitle    = "Search & book verified rental properties",
                     isSelected  = localSelectedRole == "tenant",
                     accentColor = RS_TenantAccent,
+                    surfaceColor = MaterialTheme.colorScheme.surface,
+                    borderColor  = outline,
+                    subtitleColor = onSurfaceVariant,
                     onClick     = {
                         localSelectedRole = "tenant"
                         viewModel.onRoleSelected("tenant")
@@ -208,6 +204,9 @@ fun RoleSelectionScreen(
                     subtitle    = "List & manage your rental properties",
                     isSelected  = localSelectedRole == "landlord",
                     accentColor = RS_LandlordAccent,
+                    surfaceColor = MaterialTheme.colorScheme.surface,
+                    borderColor  = outline,
+                    subtitleColor = onSurfaceVariant,
                     onClick     = {
                         localSelectedRole = "landlord"
                         viewModel.onRoleSelected("landlord")
@@ -219,6 +218,9 @@ fun RoleSelectionScreen(
                     subtitle    = "Verify & moderate the platform",
                     isSelected  = localSelectedRole == "admin",
                     accentColor = RS_AdminAccent,
+                    surfaceColor = MaterialTheme.colorScheme.surface,
+                    borderColor  = outline,
+                    subtitleColor = onSurfaceVariant,
                     onClick     = {
                         localSelectedRole = "admin"
                         viewModel.onRoleSelected("admin")
@@ -235,12 +237,12 @@ fun RoleSelectionScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(RS_ErrorRed.copy(alpha = 0.08f))
+                        .background(error.copy(alpha = 0.08f))
                         .padding(10.dp)
                 ) {
                     Text(
                         it,
-                        color     = RS_ErrorRed,
+                        color     = error,
                         fontSize  = 12.sp,
                         textAlign = TextAlign.Center,
                         modifier  = Modifier.fillMaxWidth()
@@ -262,12 +264,12 @@ fun RoleSelectionScreen(
                     .graphicsLayer { alpha = fadeAlpha },
                 shape     = RoundedCornerShape(15.dp),
                 colors    = ButtonDefaults.buttonColors(
-                    containerColor = when (localSelectedRole) {
+                    containerColor         = when (localSelectedRole) {
                         "landlord" -> RS_LandlordAccent
                         "admin"    -> RS_AdminAccent
-                        else       -> RS_NavyPrimary
+                        else       -> primary
                     },
-                    disabledContainerColor = RS_GrayBorder
+                    disabledContainerColor = outline
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
@@ -275,14 +277,14 @@ fun RoleSelectionScreen(
                     text          = "Continue",
                     fontSize      = 15.sp,
                     fontWeight    = FontWeight.Bold,
-                    color         = RS_White,
+                    color         = onPrimary,
                     letterSpacing = 0.4.sp
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(
                     imageVector        = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = null,
-                    tint               = RS_White,
+                    tint               = onPrimary,
                     modifier           = Modifier.size(18.dp)
                 )
             }
@@ -293,10 +295,10 @@ fun RoleSelectionScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier          = Modifier.graphicsLayer { alpha = fadeAlpha }
             ) {
-                Text("Already have an account? ", color = RS_GrayText, fontSize = 13.sp)
+                Text("Already have an account? ", color = onSurfaceVariant, fontSize = 13.sp)
                 Text(
                     "Sign In",
-                    color      = RS_GoldDark,
+                    color      = tertiary,
                     fontSize   = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier   = Modifier.clickable {
@@ -315,15 +317,18 @@ fun RoleSelectionScreen(
 // ── Role Card Component ───────────────────────────────────────────────────────
 @Composable
 private fun RSRoleCard(
-    emoji      : String,
-    title      : String,
-    subtitle   : String,
-    isSelected : Boolean,
-    accentColor: Color,
-    onClick    : () -> Unit
+    emoji        : String,
+    title        : String,
+    subtitle     : String,
+    isSelected   : Boolean,
+    accentColor  : Color,
+    surfaceColor : Color,
+    borderColor  : Color,
+    subtitleColor: Color,
+    onClick      : () -> Unit
 ) {
-    val bgColor     = if (isSelected) accentColor.copy(alpha = 0.07f) else RS_White
-    val borderColor = if (isSelected) accentColor else RS_GrayBorder
+    val bgColor     = if (isSelected) accentColor.copy(alpha = 0.07f) else surfaceColor
+    val borderClr   = if (isSelected) accentColor else borderColor
     val borderWidth = if (isSelected) 2.dp else 1.dp
 
     Box(
@@ -331,7 +336,7 @@ private fun RSRoleCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(bgColor)
-            .border(borderWidth, borderColor, RoundedCornerShape(16.dp))
+            .border(borderWidth, borderClr, RoundedCornerShape(16.dp))
             .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
@@ -344,7 +349,8 @@ private fun RSRoleCard(
                     .size(52.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isSelected) accentColor.copy(alpha = 0.12f) else RS_Surface
+                        if (isSelected) accentColor.copy(alpha = 0.12f)
+                        else MaterialTheme.colorScheme.surfaceVariant
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -356,13 +362,13 @@ private fun RSRoleCard(
                     text       = title,
                     fontSize   = 15.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color      = if (isSelected) accentColor else RS_NavyDark
+                    color      = if (isSelected) accentColor else MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text       = subtitle,
                     fontSize   = 12.sp,
-                    color      = RS_GrayText,
+                    color      = subtitleColor,
                     lineHeight = 17.sp
                 )
             }
@@ -372,7 +378,8 @@ private fun RSRoleCard(
                     .size(24.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isSelected) accentColor else RS_GrayBorder.copy(alpha = 0.5f)
+                        if (isSelected) accentColor
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -380,7 +387,7 @@ private fun RSRoleCard(
                     Icon(
                         imageVector        = Icons.Default.Check,
                         contentDescription = null,
-                        tint               = RS_White,
+                        tint               = MaterialTheme.colorScheme.onPrimary,
                         modifier           = Modifier.size(14.dp)
                     )
                 }

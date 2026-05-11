@@ -240,7 +240,7 @@ class HomeViewModel @Inject constructor(
 
                 val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
                 val revenue: Double =
-                    if (paymentsResult is Resource.Success) paymentsResult.data.sumOf { it.amount }
+                    if (paymentsResult is Resource.Success) paymentsResult.data.sumOf { it.amountDouble }
                     else 0.0
 
                 _uiState.update { state ->

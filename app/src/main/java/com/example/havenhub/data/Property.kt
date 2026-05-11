@@ -37,7 +37,7 @@ data class Property(
     val pt1DocumentUrl: String = "",
     val amenities: List<String> = emptyList(),
 
-    // ✅ Drawable image name field (Firestore se aayega)
+    // Firestore se aayega — manually set drawable name
     val drawableImageName: String = "",
 
     val petsAllowed: Boolean = false,
@@ -53,12 +53,10 @@ data class Property(
 
     val adminNote: String = "",
 
-    // ✅ Firestore mein "isAvailable" field hai
     @get:PropertyName("isAvailable")
     @set:PropertyName("isAvailable")
     var available: Boolean = true,
 
-    // ✅ Firestore mein "isFeatured" field hai
     @get:PropertyName("isFeatured")
     @set:PropertyName("isFeatured")
     var featured: Boolean = false,
@@ -69,10 +67,7 @@ data class Property(
     val updatedAt: Timestamp? = null
 
 ) {
-    // Firestore serialization ke liye empty constructor
     constructor() : this(propertyId = "")
-
-    // --- UI Helpers (@Exclude so Firestore doesn't try to save them) ---
 
     @get:Exclude
     val coverImageUrl: String get() = imageUrls.firstOrNull() ?: ""
@@ -80,39 +75,80 @@ data class Property(
     @get:Exclude
     val formattedPrice: String get() = "PKR ${"%,.0f".format(pricePerNight)}"
 
-    // ✅ isAvailable — 'available' backing field ka clean getter
     @get:Exclude
     val isAvailable: Boolean get() = available
 
-    // ✅ isFeatured — 'featured' backing field ka clean getter
-    //    HomeViewModel mein `it.isFeatured` yahi use karta hai
     @get:Exclude
     val isFeatured: Boolean get() = featured
 
     val hasPt1Document: Boolean get() = pt1DocumentUrl.isNotBlank()
 
-    // ✅ Auto drawable resolve — agar drawableImageName empty ho
-    //    toh city aur propertyType se guess karo
+    // ✅ FIXED: Sab drawable file names ab actual files se match karte hain
+    // Drawable folder mein jo exact naam hain wahi use kiye hain
     val resolvedDrawableName: String
         get() {
+            // Agar Firestore mein drawableImageName set hai toh wahi use karo
             if (drawableImageName.isNotEmpty()) return drawableImageName
+
             val c = city.lowercase().trim()
             val t = propertyType.lowercase().trim()
+
+            // Title bhi check karo — agar city field empty ho
+            val titleLower = title.lowercase().trim()
+
+            // City ya title se match karo
+            val searchText = if (c.isNotEmpty()) c else titleLower
+
             return when {
-                c.contains("lahore")       && t == "apartment" -> "apartment_lahore"
-                c.contains("rawalpindi")   && t == "apartment" -> "apartment_rawalpindi"
-                c.contains("karachi")      && t == "house"     -> "house_karachi"
-                c.contains("kaghan")                           -> "house_kaghanvalley"
-                c.contains("hunza")                            -> "hunza_farmhouse"
-                c.contains("naran")                            -> "naran_farmhouse"
-                c.contains("skardu")                           -> "skardu"
-                c.contains("swat")         && t == "villa"     -> "swat_villa"
-                c.contains("murree")
-                        || c.contains("murri")                     -> "vila_murree"
-                c.contains("islamabad")    && t == "room"      -> "room_islamabad"
-                c.contains("sialkot")      && t == "room"      -> "room_sialkot"
-                c.contains("faisalabad")   && t == "studio"    -> "studio_faisalabad"
-                else                                           -> ""
+                // ── Lahore ──────────────────────────────────────────────────
+                searchText.contains("lahore") && t == "apartment"
+                    -> "apartment_lahore"           // ✅ apartment_lahore.jpg
+
+                // ── Rawalpindi ──────────────────────────────────────────────
+                searchText.contains("rawalpindi") || searchText.contains("pindi")
+                    -> "rawalpindi_apt"             // ✅ rawalpindi_apt.jpg  (was: apartment_rawalpindi)
+
+                // ── Karachi ─────────────────────────────────────────────────
+                searchText.contains("karachi")
+                    -> "house_karachi"              // ✅ house_karachi.jpg
+
+                // ── Kaghan ──────────────────────────────────────────────────
+                searchText.contains("kaghan")
+                    -> "kaghan_valleyhouse"         // ✅ kaghan_valleyhouse.jpg (was: house_kaghanvalley)
+
+                // ── Hunza ───────────────────────────────────────────────────
+                searchText.contains("hunza")
+                    -> "farmhouse_hunza"            // ✅ farmhouse_hunza.jpg  (was: hunza_farmhouse)
+
+                // ── Naran ───────────────────────────────────────────────────
+                searchText.contains("naran")
+                    -> "farmhouse_naran"            // ✅ farmhouse_naran.jpg  (was: naran_farmhouse)
+
+                // ── Skardu ──────────────────────────────────────────────────
+                searchText.contains("skardu")
+                    -> "skardu_house"               // ✅ skardu_house.jpg     (was: skardu)
+
+                // ── Swat ────────────────────────────────────────────────────
+                searchText.contains("swat") && t == "villa"
+                    -> "swat_vila"                  // ✅ swat_vila.jpg        (was: swat_villa)
+
+                // ── Murree ──────────────────────────────────────────────────
+                searchText.contains("murree") || searchText.contains("murri")
+                    -> "vila_murree"                // ✅ vila_murree.jpg
+
+                // ── Islamabad ───────────────────────────────────────────────
+                searchText.contains("islamabad") && t == "room"
+                    -> "room_islamabad"             // ✅ room_islamabad.jpg
+
+                // ── Sialkot ─────────────────────────────────────────────────
+                searchText.contains("sialkot")
+                    -> "room_sialkot"               // ✅ room_sialkot.jpg
+
+                // ── Faisalabad ──────────────────────────────────────────────
+                searchText.contains("faisalabad") || searchText.contains("faislabad")
+                    -> "studio_faislabad"           // ✅ studio_faislabad.jpg (note: typo in filename)
+
+                else    -> ""
             }
         }
 

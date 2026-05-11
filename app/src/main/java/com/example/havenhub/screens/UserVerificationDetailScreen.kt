@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,14 +29,11 @@ fun UserVerificationDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // ✅ FIX: Pehle pendingUsers mein dhundo, warna selectedUser use karo
-    // (selectedUser tab set hota hai jab loadUserById Firestore se fetch kare)
     val user = remember(uiState.pendingUsers, uiState.selectedUser, userId) {
         uiState.pendingUsers.find { it.userId == userId }
             ?: uiState.selectedUser?.takeIf { it.userId == userId }
     }
 
-    // ✅ FIX: Agar user pendingUsers mein nahi mila toh directly Firestore se load karo
     LaunchedEffect(userId) {
         viewModel.loadUserById(userId)
     }
@@ -58,7 +54,6 @@ fun UserVerificationDetailScreen(
         }
     }
 
-    // ── Reject Dialog ─────────────────────────────────────────────────────────
     var showRejectDialog by remember { mutableStateOf(false) }
     var rejectReason     by remember { mutableStateOf("") }
 
@@ -102,16 +97,13 @@ fun UserVerificationDetailScreen(
                 title = { Text("Verify User", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = Color(0xFF0D1B3E),
-                    titleContentColor          = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor             = MaterialTheme.colorScheme.primary,
+                    titleContentColor          = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
         },
@@ -126,9 +118,7 @@ fun UserVerificationDetailScreen(
                     ) {
                         OutlinedButton(
                             onClick  = { showRejectDialog = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
+                            modifier = Modifier.weight(1f).height(50.dp),
                             enabled  = !uiState.isLoading,
                             shape    = RoundedCornerShape(12.dp),
                             colors   = ButtonDefaults.outlinedButtonColors(
@@ -138,20 +128,18 @@ fun UserVerificationDetailScreen(
 
                         Button(
                             onClick  = { viewModel.verifyUser(user) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
+                            modifier = Modifier.weight(1f).height(50.dp),
                             enabled  = !uiState.isLoading,
                             shape    = RoundedCornerShape(12.dp),
                             colors   = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF0D1B3E)
+                                containerColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
                             if (uiState.isLoading) {
                                 CircularProgressIndicator(
                                     modifier    = Modifier.size(20.dp),
                                     strokeWidth = 2.dp,
-                                    color       = Color.White
+                                    color       = MaterialTheme.colorScheme.onPrimary
                                 )
                             } else {
                                 Text("Approve", fontWeight = FontWeight.SemiBold)
@@ -168,17 +156,14 @@ fun UserVerificationDetailScreen(
                 .padding(pad)
         ) {
             when {
-                // ✅ Loading state — data aa raha hai
                 uiState.isLoading && user == null -> {
                     CircularProgressIndicator(
                         modifier    = Modifier.align(Alignment.Center),
-                        color       = Color(0xFF0D1B3E),
+                        color       = MaterialTheme.colorScheme.primary,
                         strokeWidth = 3.dp
                     )
                 }
 
-                // ✅ Sirf tab "User not found" dikhao jab loading bhi band ho
-                // aur dono sources (pendingUsers + selectedUser) mein na ho
                 !uiState.isLoading && user == null -> {
                     Column(
                         modifier            = Modifier.align(Alignment.Center),
@@ -189,12 +174,12 @@ fun UserVerificationDetailScreen(
                             "User not found",
                             fontSize   = 16.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color      = Color(0xFF0D1B3E)
+                            color      = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
                             "User ID: $userId",
                             fontSize = 12.sp,
-                            color    = Color.Gray
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -221,7 +206,7 @@ fun UserVerificationDetailScreen(
                                         "User Details",
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize   = 16.sp,
-                                        color      = Color(0xFF0D1B3E)
+                                        color      = MaterialTheme.colorScheme.onSurface
                                     )
                                     HorizontalDivider(thickness = 0.5.dp)
                                     UserDetailRow("Name",  user!!.fullName)
@@ -259,13 +244,13 @@ fun UserVerificationDetailScreen(
                                             "CNIC Document",
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize   = 16.sp,
-                                            color      = Color(0xFF0D1B3E)
+                                            color      = MaterialTheme.colorScheme.onSurface
                                         )
                                         HorizontalDivider(thickness = 0.5.dp)
                                         Text(
                                             "Verify the CNIC image below:",
                                             fontSize = 13.sp,
-                                            color    = Color.Gray
+                                            color    = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         AsyncImage(
                                             model              = user.cnicImageUrl,
@@ -288,8 +273,10 @@ fun UserVerificationDetailScreen(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
-                                        if (user.isVerified) Color(0xFFE8F5E9)
-                                        else Color(0xFFFFF8E1)
+                                        if (user.isVerified)
+                                            MaterialTheme.colorScheme.tertiaryContainer
+                                        else
+                                            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
                                     )
                                     .padding(14.dp),
                                 verticalAlignment     = Alignment.CenterVertically,
@@ -301,10 +288,7 @@ fun UserVerificationDetailScreen(
                                     else
                                         "⏳ Awaiting admin verification. Review CNIC above.",
                                     fontSize = 13.sp,
-                                    color    = if (user.isVerified)
-                                        Color(0xFF2E7D32)
-                                    else
-                                        Color(0xFF8A7040)
+                                    color    = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
                         }
@@ -331,7 +315,9 @@ private fun UserDetailRow(label: String, value: String) {
         Text(
             text       = value,
             fontWeight = FontWeight.Bold,
-            style      = MaterialTheme.typography.bodyMedium
+            style      = MaterialTheme.typography.bodyMedium,
+            color      = MaterialTheme.colorScheme.onSurface
         )
     }
 }
+

@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -26,17 +25,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.data.Property
-import com.example.havenhub.ui.theme.*
+import com.example.havenhub.ui.theme.SuccessGreen
+import com.example.havenhub.ui.theme.WarningOrange
 import com.example.havenhub.viewmodel.VerificationViewModel
-
-// ── Brand Colors ──────────────────────────────────────────────────────────────
-private val NavyBlue    = Color(0xFF1B2A4A)
-private val NavyLight   = Color(0xFF243658)
-private val Gold        = Color(0xFFC9A227)
-private val GoldDark    = Color(0xFFA07D10)
-private val PageBg      = Color(0xFFF4F6FA)
-private val GreenOk     = Color(0xFF27AE60)
-private val OrangeWarn  = Color(0xFFE67E22)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,14 +52,19 @@ fun VerifyPropertiesScreen(
     }
     LaunchedEffect(Unit) { viewModel.loadPendingProperties() }
 
+    val primary          = MaterialTheme.colorScheme.primary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val tertiary         = MaterialTheme.colorScheme.tertiary
+    val onPrimary        = MaterialTheme.colorScheme.onPrimary
+
     Scaffold(
         snackbarHost   = { SnackbarHost(snackbarHostState) },
-        containerColor = PageBg,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.horizontalGradient(listOf(NavyBlue, NavyLight)))
+                    .background(Brush.horizontalGradient(listOf(primary, primaryContainer)))
                     .statusBarsPadding()
             ) {
                 Row(
@@ -78,13 +74,13 @@ fun VerifyPropertiesScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Gold)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = tertiary)
                     }
                     Spacer(Modifier.width(4.dp))
                     Column {
                         Text(
                             "Verify Properties",
-                            color         = Color.White,
+                            color         = onPrimary,
                             fontSize      = 20.sp,
                             fontWeight    = FontWeight.Bold,
                             letterSpacing = 0.3.sp
@@ -92,7 +88,7 @@ fun VerifyPropertiesScreen(
                         if (!uiState.isLoading && uiState.pendingProperties.isNotEmpty()) {
                             Text(
                                 "${uiState.pendingProperties.size} pending review",
-                                color    = Gold.copy(alpha = 0.85f),
+                                color    = tertiary.copy(alpha = 0.85f),
                                 fontSize = 12.sp
                             )
                         }
@@ -103,7 +99,13 @@ fun VerifyPropertiesScreen(
                         .fillMaxWidth()
                         .height(2.dp)
                         .background(
-                            Brush.horizontalGradient(listOf(Color.Transparent, Gold, Color.Transparent))
+                            Brush.horizontalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                                    tertiary,
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                                )
+                            )
                         )
                         .align(Alignment.BottomCenter)
                 )
@@ -120,7 +122,7 @@ fun VerifyPropertiesScreen(
                 // ── Loading ───────────────────────────────────────────────────
                 uiState.isLoading -> {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        CircularProgressIndicator(color = Gold, strokeWidth = 3.dp)
+                        CircularProgressIndicator(color = tertiary, strokeWidth = 3.dp)
                     }
                 }
 
@@ -137,15 +139,15 @@ fun VerifyPropertiesScreen(
                                     .clip(CircleShape)
                                     .background(
                                         Brush.radialGradient(
-                                            listOf(GreenOk.copy(0.18f), GreenOk.copy(0.04f))
+                                            listOf(SuccessGreen.copy(0.18f), SuccessGreen.copy(0.04f))
                                         )
                                     )
-                                    .border(1.5.dp, GreenOk.copy(0.3f), CircleShape),
+                                    .border(1.5.dp, SuccessGreen.copy(0.3f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.CheckCircle, null,
-                                    tint     = GreenOk,
+                                    tint     = SuccessGreen,
                                     modifier = Modifier.size(44.dp)
                                 )
                             }
@@ -153,12 +155,12 @@ fun VerifyPropertiesScreen(
                                 "All caught up!",
                                 fontSize   = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color      = NavyBlue
+                                color      = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
                                 "No properties pending verification",
                                 fontSize = 13.sp,
-                                color    = NavyBlue.copy(alpha = 0.45f)
+                                color    = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f)
                             )
                         }
                     }
@@ -170,7 +172,7 @@ fun VerifyPropertiesScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Brush.verticalGradient(listOf(NavyBlue, NavyLight)))
+                            .background(Brush.verticalGradient(listOf(primary, primaryContainer)))
                             .padding(horizontal = 16.dp, vertical = 13.dp)
                     ) {
                         Row(
@@ -181,36 +183,41 @@ fun VerifyPropertiesScreen(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(Gold.copy(0.2f)),
+                                    .background(tertiary.copy(0.2f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.HourglassEmpty, null,
-                                    tint     = Gold,
+                                    tint     = tertiary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                             Column {
                                 Text(
                                     "${uiState.pendingProperties.size} Properties Pending Review",
-                                    color      = Color.White,
+                                    color      = onPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize   = 14.sp
                                 )
                                 Text(
                                     "Tap a property to review details",
-                                    color    = Gold.copy(alpha = 0.75f),
+                                    color    = tertiary.copy(alpha = 0.75f),
                                     fontSize = 12.sp
                                 )
                             }
                         }
-                        // Gold shimmer line at bottom
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(1.5.dp)
                                 .background(
-                                    Brush.horizontalGradient(listOf(Color.Transparent, Gold.copy(0.5f), Color.Transparent))
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                                            tertiary.copy(0.5f),
+                                            MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                                        )
+                                    )
                                 )
                                 .align(Alignment.BottomCenter)
                         )
@@ -240,21 +247,26 @@ fun VerifyPropertiesScreen(
 // ── Premium Property Card ──────────────────────────────────────────────────────
 @Composable
 fun PremiumPropertyVerifyCard(property: Property, onClick: () -> Unit) {
+    val primary  = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(
                 elevation    = 4.dp,
                 shape        = RoundedCornerShape(16.dp),
-                ambientColor = NavyBlue.copy(0.08f),
-                spotColor    = NavyBlue.copy(0.12f)
+                ambientColor = primary.copy(0.08f),
+                spotColor    = primary.copy(0.12f)
             )
     ) {
         Card(
             modifier  = Modifier.fillMaxWidth(),
             onClick   = onClick,
             shape     = RoundedCornerShape(16.dp),
-            colors    = CardDefaults.cardColors(containerColor = Color.White),
+            colors    = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
             // Top accent bar
@@ -262,7 +274,7 @@ fun PremiumPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(3.dp)
-                    .background(Brush.horizontalGradient(listOf(NavyBlue, Gold)))
+                    .background(Brush.horizontalGradient(listOf(primary, tertiary)))
             )
 
             Row(
@@ -276,12 +288,12 @@ fun PremiumPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                     modifier = Modifier
                         .size(50.dp)
                         .clip(CircleShape)
-                        .background(NavyBlue),
+                        .background(primary),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Default.Home, null,
-                        tint     = Gold,
+                        tint     = tertiary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -293,7 +305,7 @@ fun PremiumPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                         property.title,
                         fontWeight = FontWeight.Bold,
                         fontSize   = 15.sp,
-                        color      = NavyBlue,
+                        color      = MaterialTheme.colorScheme.onSurface,
                         maxLines   = 1,
                         overflow   = TextOverflow.Ellipsis
                     )
@@ -301,7 +313,7 @@ fun PremiumPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                     Text(
                         property.address.ifEmpty { property.city },
                         fontSize = 12.sp,
-                        color    = NavyBlue.copy(alpha = 0.5f),
+                        color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -309,28 +321,28 @@ fun PremiumPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         // Type badge
                         Surface(
-                            color = NavyBlue.copy(alpha = 0.08f),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.border(1.dp, NavyBlue.copy(0.2f), RoundedCornerShape(20.dp))
+                            color    = primary.copy(alpha = 0.08f),
+                            shape    = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(1.dp, primary.copy(0.2f), RoundedCornerShape(20.dp))
                         ) {
                             Text(
                                 property.propertyType.lowercase().replaceFirstChar { it.uppercase() },
                                 fontSize   = 11.sp,
-                                color      = NavyBlue,
+                                color      = primary,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier   = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                             )
                         }
                         // Price badge
                         Surface(
-                            color = Gold.copy(alpha = 0.10f),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.border(1.dp, Gold.copy(0.3f), RoundedCornerShape(20.dp))
+                            color    = tertiary.copy(alpha = 0.10f),
+                            shape    = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(1.dp, tertiary.copy(0.3f), RoundedCornerShape(20.dp))
                         ) {
                             Text(
                                 property.formattedPrice,
                                 fontSize   = 11.sp,
-                                color      = GoldDark,
+                                color      = tertiary,
                                 fontWeight = FontWeight.Bold,
                                 modifier   = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                             )
@@ -346,25 +358,25 @@ fun PremiumPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                 ) {
                     // Pending badge
                     Surface(
-                        color = OrangeWarn.copy(alpha = 0.10f),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.border(1.dp, OrangeWarn.copy(0.3f), RoundedCornerShape(20.dp))
+                        color    = WarningOrange.copy(alpha = 0.10f),
+                        shape    = RoundedCornerShape(20.dp),
+                        modifier = Modifier.border(1.dp, WarningOrange.copy(0.3f), RoundedCornerShape(20.dp))
                     ) {
                         Row(
-                            modifier          = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            modifier              = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(5.dp)
                                     .clip(CircleShape)
-                                    .background(OrangeWarn)
+                                    .background(WarningOrange)
                             )
                             Text(
                                 "Pending",
                                 fontSize   = 11.sp,
-                                color      = OrangeWarn,
+                                color      = WarningOrange,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -374,12 +386,12 @@ fun PremiumPropertyVerifyCard(property: Property, onClick: () -> Unit) {
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
-                            .background(Gold.copy(alpha = 0.12f)),
+                            .background(tertiary.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.KeyboardArrowRight, null,
-                            tint     = Gold,
+                            tint     = tertiary,
                             modifier = Modifier.size(18.dp)
                         )
                     }

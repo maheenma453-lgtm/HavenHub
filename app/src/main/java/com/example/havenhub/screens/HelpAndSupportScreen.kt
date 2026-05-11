@@ -12,22 +12,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.havenhub.ui.theme.*
 
+// FAQ data model
 data class FaqItem(val question: String, val answer: String)
 
+// Frequently asked questions list
 val faqs = listOf(
-    FaqItem("How do I book a property?", "Browse properties, select one you like, choose your dates, and proceed to payment. Your booking will be confirmed instantly."),
-    FaqItem("Can I cancel my booking?", "Yes, you can cancel from 'My Bookings'. Cancellation policies vary per property. Check the property details for refund info."),
-    FaqItem("How do I contact the host?", "Once your booking is confirmed, you can message the host directly through the app's chat feature."),
-    FaqItem("Is my payment secure?", "Yes, all payments are encrypted and processed through trusted payment gateways like JazzCash and EasyPaisa."),
-    FaqItem("How do I list my property?", "Go to your Profile, tap 'My Properties', then 'Add Property'. Fill in the details and submit for verification."),
+    FaqItem("How do I book a property?",   "Browse properties, select one you like, choose your dates, and proceed to payment. Your booking will be confirmed instantly."),
+    FaqItem("Can I cancel my booking?",    "Yes, you can cancel from 'My Bookings'. Cancellation policies vary per property. Check the property details for refund info."),
+    FaqItem("How do I contact the host?",  "Once your booking is confirmed, you can message the host directly through the app's chat feature."),
+    FaqItem("Is my payment secure?",       "Yes, all payments are encrypted and processed through trusted payment gateways like JazzCash and EasyPaisa."),
+    FaqItem("How do I list my property?",  "Go to your Profile, tap 'My Properties', then 'Add Property'. Fill in the details and submit for verification.")
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,23 +50,20 @@ fun HelpAndSupportScreen(navController: NavController) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = PrimaryBlue,
-                    titleContentColor          = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor             = MaterialTheme.colorScheme.primary,
+                    titleContentColor          = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+            modifier            = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // Search
+            // ── Search field ──────────────────────────────────────────────────
             OutlinedTextField(
                 value         = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -74,34 +71,36 @@ fun HelpAndSupportScreen(navController: NavController) {
                 placeholder   = { Text("Search for help...") },
                 leadingIcon   = { Icon(Icons.Default.Search, contentDescription = null) },
                 shape         = RoundedCornerShape(12.dp),
-                singleLine    = true
+                singleLine    = true,
+                colors        = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    cursorColor        = MaterialTheme.colorScheme.primary
+                )
             )
 
-            // Contact Options
-            Text("Contact Us", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = PrimaryBlue)
+            // ── Contact options ───────────────────────────────────────────────
+            Text("Contact Us", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ContactCard(icon = Icons.Default.Chat,     label = "Live Chat",     sub = "Available 9AM-6PM",    modifier = Modifier.weight(1f))
-                ContactCard(icon = Icons.Default.Email,    label = "Email Us",      sub = "support@havenhub.pk", modifier = Modifier.weight(1f))
+                HASContactCard(icon = Icons.Default.Chat,     label = "Live Chat",     sub = "Available 9AM-6PM",    modifier = Modifier.weight(1f))
+                HASContactCard(icon = Icons.Default.Email,    label = "Email Us",      sub = "support@havenhub.pk", modifier = Modifier.weight(1f))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ContactCard(icon = Icons.Default.Phone,    label = "Call Us",       sub = "0800-12345",           modifier = Modifier.weight(1f))
-                ContactCard(icon = Icons.Default.Language, label = "Visit Website", sub = "havenhub.pk",         modifier = Modifier.weight(1f))
+                HASContactCard(icon = Icons.Default.Phone,    label = "Call Us",       sub = "0800-12345",           modifier = Modifier.weight(1f))
+                HASContactCard(icon = Icons.Default.Language, label = "Visit Website", sub = "havenhub.pk",          modifier = Modifier.weight(1f))
             }
 
-            // FAQs
-            Text("Frequently Asked Questions", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = PrimaryBlue)
+            // ── FAQs ──────────────────────────────────────────────────────────
+            Text("Frequently Asked Questions", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
 
             filteredFaqs.forEachIndexed { index, faq ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(10.dp),
-                    colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+                    colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Column(
-                        modifier = Modifier.clickable {
-                            expandedFaq[index] = !(expandedFaq[index] ?: false)
-                        }
-                    ) {
+                    Column(modifier = Modifier.clickable { expandedFaq[index] = !(expandedFaq[index] ?: false) }) {
+                        // Question row
                         Row(
                             modifier          = Modifier.fillMaxWidth().padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -110,21 +109,22 @@ fun HelpAndSupportScreen(navController: NavController) {
                                 faq.question,
                                 fontSize   = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color      = TextPrimary,
+                                color      = MaterialTheme.colorScheme.onSurface,
                                 modifier   = Modifier.weight(1f)
                             )
                             Icon(
                                 imageVector        = if (expandedFaq[index] == true) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                 contentDescription = null,
-                                tint               = TextSecondary
+                                tint               = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        // Answer (expanded)
                         if (expandedFaq[index] == true) {
-                            HorizontalDivider(color = BorderGray)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.3f))
                             Text(
                                 faq.answer,
                                 fontSize   = 13.sp,
-                                color      = TextSecondary,
+                                color      = MaterialTheme.colorScheme.onSurfaceVariant,
                                 lineHeight = 20.sp,
                                 modifier   = Modifier.padding(14.dp)
                             )
@@ -138,8 +138,19 @@ fun HelpAndSupportScreen(navController: NavController) {
     }
 }
 
+// ── Contact card ──────────────────────────────────────────────────────────────
 @Composable
 fun ContactCard(
+    icon    : ImageVector,
+    label   : String,
+    sub     : String,
+    modifier: Modifier = Modifier
+) {
+    HASContactCard(icon = icon, label = label, sub = sub, modifier = modifier)
+}
+
+@Composable
+fun HASContactCard(
     icon    : ImageVector,
     label   : String,
     sub     : String,
@@ -148,16 +159,13 @@ fun ContactCard(
     Card(
         modifier = modifier,
         shape    = RoundedCornerShape(12.dp),
-        colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+        colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(
-            modifier            = Modifier.padding(14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(icon, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(28.dp))
+        Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
             Spacer(Modifier.height(6.dp))
-            Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-            Text(sub, fontSize = 11.sp, color = TextSecondary)
+            Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Text(sub,   fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

@@ -10,13 +10,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,7 +24,7 @@ fun PrivacySettingsScreen(
     viewModel    : SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val prefs = uiState.userPreferences
+    val prefs   = uiState.userPreferences
 
     Scaffold(
         topBar = {
@@ -38,17 +36,18 @@ fun PrivacySettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = PrimaryBlue,
-                    titleContentColor          = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor             = MaterialTheme.colorScheme.primary,
+                    titleContentColor          = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
 
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = PrimaryBlue)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             return@Scaffold
         }
@@ -59,7 +58,6 @@ fun PrivacySettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
         ) {
-
             // Profile Visibility
             SettingsGroup(title = "Profile Visibility") {
                 SwitchSettingItem(
@@ -68,9 +66,7 @@ fun PrivacySettingsScreen(
                     subtitle        = "Others can view your profile",
                     checked         = prefs?.isProfilePublic ?: true,
                     onCheckedChange = {
-                        prefs?.let { p ->
-                            viewModel.savePreferences(p.copy(isProfilePublic = it))
-                        }
+                        prefs?.let { p -> viewModel.savePreferences(p.copy(isProfilePublic = it)) }
                     }
                 )
                 SwitchSettingItem(
@@ -79,9 +75,7 @@ fun PrivacySettingsScreen(
                     subtitle        = "Display phone on your profile",
                     checked         = prefs?.showPhoneNumber ?: false,
                     onCheckedChange = {
-                        prefs?.let { p ->
-                            viewModel.savePreferences(p.copy(showPhoneNumber = it))
-                        }
+                        prefs?.let { p -> viewModel.savePreferences(p.copy(showPhoneNumber = it)) }
                     }
                 )
                 SwitchSettingItem(
@@ -90,9 +84,7 @@ fun PrivacySettingsScreen(
                     subtitle        = "Display email on your profile",
                     checked         = prefs?.showEmail ?: false,
                     onCheckedChange = {
-                        prefs?.let { p ->
-                            viewModel.savePreferences(p.copy(showEmail = it))
-                        }
+                        prefs?.let { p -> viewModel.savePreferences(p.copy(showEmail = it)) }
                     }
                 )
             }
@@ -117,20 +109,53 @@ fun PrivacySettingsScreen(
 
             // Legal
             SettingsGroup(title = "Legal") {
-                SettingsItem(icon = Icons.Default.Policy,  label = "Privacy Policy",   onClick = {})
-                SettingsItem(icon = Icons.Default.Gavel,   label = "Terms of Service", onClick = {})
-                SettingsItem(icon = Icons.Default.Cookie,  label = "Cookie Policy",    onClick = {})
+                SettingsItem(icon = Icons.Default.Policy, label = "Privacy Policy",   onClick = {})
+                SettingsItem(icon = Icons.Default.Gavel,  label = "Terms of Service", onClick = {})
+                SettingsItem(icon = Icons.Default.Cookie, label = "Cookie Policy",    onClick = {})
             }
 
-            // Error Message
             uiState.errorMessage?.let { error ->
                 Text(
                     text     = error,
-                    color    = ErrorRed,
+                    color    = MaterialTheme.colorScheme.error,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(16.dp)
                 )
             }
         }
+    }
+}
+
+// ── Switch Setting Item ───────────────────────────────────────────────────────
+@Composable
+fun SwitchSettingItem(
+    icon           : androidx.compose.ui.graphics.vector.ImageVector,
+    label          : String,
+    subtitle       : String,
+    checked        : Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier          = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        }
+        Switch(
+            checked         = checked,
+            onCheckedChange = onCheckedChange,
+            colors          = SwitchDefaults.colors(
+                checkedThumbColor   = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor   = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        )
     }
 }

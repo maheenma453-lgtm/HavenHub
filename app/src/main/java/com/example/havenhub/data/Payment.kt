@@ -15,17 +15,16 @@ data class Payment(
     val payeeId   : String = "",
     val payeeName : String = "",
 
-    val amount         : Double = 0.0,
-    val platformFee    : Double = 0.0,
-    val landlordPayout : Double = 0.0,
+    // ✅ FIX Bug 1: String rakho — Firestore mein "5000" string hai
+    val amount         : String = "0",
+    val platformFee    : String = "0",
+    val landlordPayout : String = "0",
     val currency       : String = "PKR",
 
-    // ✅ Fix: Enum ki jagah String — Firestore serialize kar sakta hai
-    val paymentMethod : String = PaymentMethod.JAZZCASH.name,
+    val paymentMethod        : String = PaymentMethod.JAZZCASH.name,
     val gatewayTransactionId : String = "",
     val gatewayReference     : String = "",
 
-    // ✅ Fix: String rakho
     val type   : String = PaymentType.BOOKING.name,
     val status : String = PaymentStatus.PENDING.name,
 
@@ -40,14 +39,18 @@ data class Payment(
 ) {
     constructor() : this(paymentId = "")
 
-    val formattedAmount : String get() = "$currency ${"%,.0f".format(amount)}"
-    val formattedPayout : String get() = "$currency ${"%,.0f".format(landlordPayout)}"
+    // ✅ FIX: String amount use kar raha hai
+    val formattedAmount : String get() = "$currency $amount"
+    val formattedPayout : String get() = "$currency $landlordPayout"
 
-    // ✅ String se compare karo
+    // ✅ Double chahiye to parse karo safely
+    val amountDouble         : Double get() = amount.toDoubleOrNull() ?: 0.0
+    val platformFeeDouble    : Double get() = platformFee.toDoubleOrNull() ?: 0.0
+    val landlordPayoutDouble : Double get() = landlordPayout.toDoubleOrNull() ?: 0.0
+
     val isSuccessful : Boolean get() = status == PaymentStatus.COMPLETED.name
     val isRefund     : Boolean get() = type   == PaymentType.REFUND.name
 
-    // ✅ Enum chahiye to yeh use karo
     val paymentStatusEnum : PaymentStatus
         get() = try { PaymentStatus.valueOf(status) }
         catch (e: Exception) { PaymentStatus.PENDING }

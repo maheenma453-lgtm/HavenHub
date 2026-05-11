@@ -8,7 +8,7 @@ import com.google.firebase.firestore.ServerTimestamp
 // ── Booking Status ────────────────────────────────────────────
 enum class BookingStatus {
     PENDING,
-    PENDING_APPROVAL,  // ✅ NEW: Payment ho gayi, landlord ne approve nahi kiya abhi
+    PENDING_APPROVAL,  // Payment ho gayi, landlord ne approve nahi kiya abhi
     CONFIRMED,
     CHECKED_IN,
     COMPLETED,
@@ -16,7 +16,7 @@ enum class BookingStatus {
 
     fun displayName(): String = when (this) {
         PENDING          -> "Pending"
-        PENDING_APPROVAL -> "Awaiting Approval"   // ✅ NEW
+        PENDING_APPROVAL -> "Awaiting Approval"
         CONFIRMED        -> "Confirmed"
         CHECKED_IN       -> "Checked In"
         COMPLETED        -> "Completed"
@@ -30,6 +30,7 @@ data class Booking(
     val bookingId          : String     = "",
     val tenantId           : String     = "",
     val tenantName         : String     = "",
+    val tenantEmail        : String     = "", // ✅ FIX: Tenant ki actual email store karne ke liye
     val landlordId         : String     = "",
     val landlordName       : String     = "",
     val propertyId         : String     = "",
@@ -82,8 +83,8 @@ data class Booking(
     val formattedTotal: String
         get() = "PKR ${"%,.0f".format(totalAmount)}"
 
-    // ✅ SRS BR-3: Tenant sirf PENDING booking cancel kar sakta hai
-    //    PENDING_APPROVAL aur CONFIRMED booking cancel nahi ho sakti
+    // SRS BR-3: Tenant sirf PENDING booking cancel kar sakta hai
+    // PENDING_APPROVAL aur CONFIRMED booking cancel nahi ho sakti
     @get:Exclude
     val isCancellable: Boolean
         get() = bookingStatus == BookingStatus.PENDING

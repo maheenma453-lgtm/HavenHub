@@ -18,9 +18,7 @@ class PaymentRepository @Inject constructor(
     suspend fun savePayment(payment: Payment): Resource<String> {
         return try {
             val docRef = paymentsCollection.document()
-            val newPayment = payment.copy(
-                paymentId = docRef.id
-            )
+            val newPayment = payment.copy(paymentId = docRef.id)
             docRef.set(newPayment).await()
             Resource.Success(docRef.id)
         } catch (e: Exception) {
@@ -58,7 +56,7 @@ class PaymentRepository @Inject constructor(
     suspend fun getLandlordPayments(landlordId: String): Resource<List<Payment>> {
         return try {
             val snapshot = paymentsCollection
-                .whereEqualTo("receiverId", landlordId)
+                .whereEqualTo("payeeId", landlordId)  // ✅ FIX: receiverId → payeeId
                 .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .await()

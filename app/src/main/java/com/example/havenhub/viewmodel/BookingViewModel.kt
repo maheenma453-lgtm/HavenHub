@@ -47,7 +47,6 @@ class BookingViewModel @Inject constructor(
     // Load all bookings (by role)
     // ─────────────────────────────────────────────────────────
     fun loadBookings(userId: String, role: String) {
-        // Cache save karo
         cachedUserId = userId
         cachedRole   = role
 
@@ -126,9 +125,15 @@ class BookingViewModel @Inject constructor(
 
     // ─────────────────────────────────────────────────────────
     // Cancel booking — tenant sirf PENDING cancel kar sakta hai
-    // SRS BR-3
+    // ✅ FIX: blank bookingId guard added
     // ─────────────────────────────────────────────────────────
     fun cancelBooking(bookingId: String) {
+        // ✅ Guard: blank bookingId pe crash nahi hoga
+        if (bookingId.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Invalid booking ID") }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
@@ -157,7 +162,6 @@ class BookingViewModel @Inject constructor(
                 }
 
                 // ── Step 3: Fresh list Firestore se dobara load ──
-                // Taake koi bhi stale data na rahe
                 if (cachedUserId.isNotEmpty()) {
                     val fresh = when (cachedRole.lowercase()) {
                         "admin"    -> repository.getAllBookingsForAdmin()

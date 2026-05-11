@@ -18,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -29,7 +28,9 @@ import androidx.navigation.NavController
 import com.example.havenhub.data.Notification
 import com.example.havenhub.data.NotificationType
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.*
+import com.example.havenhub.ui.theme.SuccessGreen
+import com.example.havenhub.ui.theme.WarningOrange
+import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.NotificationViewModel
 import com.google.firebase.auth.FirebaseAuth
 
@@ -41,6 +42,11 @@ fun NotificationsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val userId  = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+    // Read user role to navigate correctly for admin vs tenant/landlord
+    val authViewModel: AuthViewModel = hiltViewModel()
+    val authState by authViewModel.uiState.collectAsState()
+    val isAdmin = authState.userRole == "admin"
 
     var showNoteDialog   by remember { mutableStateOf(false) }
     var dialogTitle      by remember { mutableStateOf("") }
@@ -59,76 +65,51 @@ fun NotificationsScreen(
         }
     }
 
-    // ── Property Note Dialog ───────────────────────────────────────────────────
+    // ── Property approval/rejection dialog ───────────────────────────────────
     if (showNoteDialog) {
         AlertDialog(
             onDismissRequest = { showNoteDialog = false },
-            containerColor   = Color.White,
             shape            = RoundedCornerShape(20.dp),
             icon = {
                 Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (dialogIsApproved) SuccessGreen.copy(0.12f)
-                            else ErrorRed.copy(0.12f)
-                        ),
+                    modifier = Modifier.size(54.dp).clip(CircleShape).background(
+                        if (dialogIsApproved) SuccessGreen.copy(0.12f) else MaterialTheme.colorScheme.error.copy(0.12f)
+                    ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         if (dialogIsApproved) Icons.Default.CheckCircle else Icons.Default.Cancel,
                         null,
-                        tint     = if (dialogIsApproved) SuccessGreen else ErrorRed,
+                        tint     = if (dialogIsApproved) SuccessGreen else MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(26.dp)
                     )
                 }
             },
             title = {
-                Text(
-                    dialogTitle,
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 17.sp,
-                    color      = PrimaryNavy
-                )
+                Text(dialogTitle, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        if (dialogIsApproved)
-                            "Congratulations! Your property has been approved by the admin."
-                        else
-                            "Your property has been rejected by the admin.",
-                        fontSize = 14.sp,
-                        color    = TextSecondary
+                        if (dialogIsApproved) "Congratulations! Your property has been approved by the admin."
+                        else "Your property has been rejected by the admin.",
+                        fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (dialogNote.isNotEmpty()) {
-                        HorizontalDivider(color = GoldAccent.copy(0.2f))
-                        Text(
-                            "Admin Note:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize   = 13.sp,
-                            color      = TextSecondary
-                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.tertiary.copy(0.2f))
+                        Text("Admin Note:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Card(
                             shape  = RoundedCornerShape(10.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (dialogIsApproved)
-                                    SuccessGreen.copy(0.08f)
-                                else
-                                    ErrorRed.copy(0.08f)
+                                containerColor = if (dialogIsApproved) SuccessGreen.copy(0.08f) else MaterialTheme.colorScheme.error.copy(0.08f)
                             ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (dialogIsApproved) SuccessGreen.copy(0.3f)
-                                else ErrorRed.copy(0.3f)
-                            )
+                            border = BorderStroke(1.dp, if (dialogIsApproved) SuccessGreen.copy(0.3f) else MaterialTheme.colorScheme.error.copy(0.3f))
                         ) {
                             Text(
                                 text     = dialogNote,
                                 modifier = Modifier.padding(12.dp),
                                 fontSize = 14.sp,
-                                color    = if (dialogIsApproved) SuccessGreen else ErrorRed
+                                color    = if (dialogIsApproved) SuccessGreen else MaterialTheme.colorScheme.error
                             )
                         }
                     }
@@ -139,7 +120,7 @@ fun NotificationsScreen(
                     onClick  = { showNoteDialog = false },
                     shape    = RoundedCornerShape(12.dp),
                     colors   = ButtonDefaults.buttonColors(
-                        containerColor = if (dialogIsApproved) SuccessGreen else ErrorRed
+                        containerColor = if (dialogIsApproved) SuccessGreen else MaterialTheme.colorScheme.error
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -154,119 +135,70 @@ fun NotificationsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            "Notifications",
-                            fontWeight = FontWeight.Bold,
-                            fontSize   = 18.sp,
-                            color      = Color.White
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Notifications", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onPrimary)
+                        // Unread count badge
                         if (uiState.unreadCount > 0) {
                             Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(GoldAccent)
+                                modifier = Modifier.clip(RoundedCornerShape(20.dp))
+                                    .background(MaterialTheme.colorScheme.tertiary)
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
-                                Text(
-                                    "${uiState.unreadCount}",
-                                    color      = PrimaryNavy,
-                                    fontSize   = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Text("${uiState.unreadCount}", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            "Back",
-                            tint = Color.White
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onPrimary)
                     }
                 },
                 actions = {
                     if (uiState.unreadCount > 0) {
                         TextButton(onClick = { viewModel.markAllAsRead(userId) }) {
-                            Text(
-                                "Mark all read",
-                                fontSize   = 12.sp,
-                                color      = GoldAccent,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Text("Mark all read", fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryNavy)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primary)
             )
         },
-        containerColor = Color(0xFFF0F2F8)
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
 
         if (uiState.isLoading) {
-            Box(
-                Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = PrimaryNavy)
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             return@Scaffold
         }
 
         if (uiState.notifications.isEmpty()) {
-            Box(
-                modifier         = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+            // ── Empty state ───────────────────────────────────────────────────
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(PrimaryNavy.copy(0.08f))
-                            .border(1.5.dp, GoldAccent.copy(0.4f), RoundedCornerShape(20.dp)),
+                        modifier = Modifier.size(80.dp).clip(RoundedCornerShape(20.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(0.08f))
+                            .border(1.5.dp, MaterialTheme.colorScheme.tertiary.copy(0.4f), RoundedCornerShape(20.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.Default.NotificationsNone,
-                            null,
-                            modifier = Modifier.size(40.dp),
-                            tint     = PrimaryNavy.copy(0.5f)
-                        )
+                        Icon(Icons.Default.NotificationsNone, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary.copy(0.5f))
                     }
-                    Text(
-                        "No notifications yet",
-                        fontSize   = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color      = PrimaryNavy
-                    )
-                    Text(
-                        "Your notifications will appear here",
-                        color    = TextSecondary,
-                        fontSize = 13.sp
-                    )
+                    Text("No notifications yet", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                    Text("Your notifications will appear here", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 }
             }
         } else {
             LazyColumn(
-                modifier       = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp),
+                modifier            = Modifier.fillMaxSize().padding(padding),
+                contentPadding      = PaddingValues(vertical = 10.dp, horizontal = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(
                     items = uiState.notifications,
-                    key   = { notification ->
-                        notification.notificationId
-                            .ifEmpty { notification.hashCode().toString() }
-                    }
+                    key   = { it.notificationId.ifEmpty { it.hashCode().toString() } }
                 ) { notification ->
                     val enumType = try {
                         NotificationType.valueOf(notification.type)
@@ -277,9 +209,7 @@ fun NotificationsScreen(
                     NotificationCard(
                         item     = notification,
                         enumType = enumType,
-                        onDelete = {
-                            viewModel.deleteNotification(notification.notificationId, userId)
-                        },
+                        onDelete = { viewModel.deleteNotification(notification.notificationId, userId) },
                         onClick  = {
                             viewModel.markAsRead(notification.notificationId, userId)
                             when (enumType) {
@@ -300,16 +230,15 @@ fun NotificationsScreen(
                                 NotificationType.BOOKING_REMINDER,
                                 NotificationType.BOOKING_COMPLETED,
                                 NotificationType.BOOKING_REQUESTED -> {
-                                    if (notification.referenceId.isNotEmpty())
-                                        navController.navigate(
-                                            Screen.BookingDetails.createRoute(notification.referenceId)
-                                        )
+                                    if (notification.referenceId.isNotEmpty()) {
+                                        // Admin -> ManageBookings, tenant/landlord -> BookingDetails
+                                        if (isAdmin) navController.navigate(Screen.ManageBookings.route)
+                                        else navController.navigate(Screen.BookingDetails.createRoute(notification.referenceId))
+                                    }
                                 }
                                 NotificationType.NEW_MESSAGE -> {
                                     if (notification.referenceId.isNotEmpty())
-                                        navController.navigate(
-                                            Screen.Chat.createRoute(notification.referenceId)
-                                        )
+                                        navController.navigate(Screen.Chat.createRoute(notification.referenceId))
                                 }
                                 else -> { }
                             }
@@ -321,9 +250,7 @@ fun NotificationsScreen(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// NOTIFICATION CARD — Premium Navy + Gold UI
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Notification Card ─────────────────────────────────────────────────────────
 @Composable
 fun NotificationCard(
     item    : Notification,
@@ -335,57 +262,46 @@ fun NotificationCard(
     val notifIcon  = screenNotificationIcon(enumType)
     val isUnread   = !item.isRead
 
+    val primary  = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    val surface  = MaterialTheme.colorScheme.surface
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(14.dp),
         colors    = CardDefaults.cardColors(
-            containerColor = if (isUnread) Color.White else Color(0xFFF8F9FC)
+            containerColor = if (isUnread) surface else MaterialTheme.colorScheme.surfaceVariant
         ),
         elevation = CardDefaults.cardElevation(if (isUnread) 2.dp else 0.dp),
         border    = BorderStroke(
             width = if (isUnread) 1.5.dp else 1.dp,
-            color = if (isUnread) PrimaryNavy.copy(0.25f) else GoldAccent.copy(0.25f)
+            color = if (isUnread) primary.copy(0.25f) else tertiary.copy(0.25f)
         )
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(14.dp),
-            verticalAlignment = Alignment.Top,
+            modifier              = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(14.dp),
+            verticalAlignment     = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── Left: Unread indicator bar ─────────────────────────────────
+            // Unread indicator bar
             if (isUnread) {
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(PrimaryNavy)
-                )
+                Box(modifier = Modifier.width(3.dp).height(44.dp).clip(RoundedCornerShape(2.dp)).background(primary))
             } else {
                 Spacer(Modifier.width(3.dp))
             }
 
-            // ── Icon ──────────────────────────────────────────────────────
+            // Notification type icon
             Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(notifColor.copy(0.12f))
-                    .border(1.dp, notifColor.copy(0.25f), RoundedCornerShape(12.dp)),
+                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
+                    .background(notifColor.copy(0.12f)).border(1.dp, notifColor.copy(0.25f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector        = notifIcon,
-                    contentDescription = null,
-                    tint               = notifColor,
-                    modifier           = Modifier.size(22.dp)
-                )
+                Icon(imageVector = notifIcon, contentDescription = null, tint = notifColor, modifier = Modifier.size(22.dp))
             }
 
-            // ── Content ────────────────────────────────────────────────────
+            // Content
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
@@ -396,98 +312,60 @@ fun NotificationCard(
                         text       = item.title.ifEmpty { enumType.name.replace("_", " ") },
                         fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
                         fontSize   = 13.sp,
-                        color      = PrimaryNavy,
+                        color      = onSurface,
                         modifier   = Modifier.weight(1f)
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text     = item.createdAt?.toDate()?.let {
-                            java.text.SimpleDateFormat(
-                                "MMM dd",
-                                java.util.Locale.getDefault()
-                            ).format(it)
+                            java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault()).format(it)
                         } ?: "-",
                         fontSize = 10.sp,
-                        color    = TextSecondary
+                        color    = onSurfaceVariant
                     )
                 }
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text     = item.body,
-                    fontSize = 12.sp,
-                    color    = if (isUnread) TextPrimary else TextSecondary,
-                    maxLines = 2,
+                    text       = item.body,
+                    fontSize   = 12.sp,
+                    color      = if (isUnread) onSurface.copy(0.75f) else onSurfaceVariant,
+                    maxLines   = 2,
                     lineHeight = 17.sp
                 )
+                // Admin note chip
                 if (item.adminNote.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
+                    val noteColor = when (enumType) {
+                        NotificationType.PROPERTY_APPROVED -> SuccessGreen
+                        NotificationType.PROPERTY_REJECTED  -> MaterialTheme.colorScheme.error
+                        else                                -> MaterialTheme.colorScheme.tertiary
+                    }
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                when (enumType) {
-                                    NotificationType.PROPERTY_APPROVED -> SuccessGreen.copy(0.08f)
-                                    NotificationType.PROPERTY_REJECTED  -> ErrorRed.copy(0.08f)
-                                    else                                -> GoldAccent.copy(0.08f)
-                                }
-                            )
+                        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(noteColor.copy(0.08f))
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Info, null,
-                            modifier = Modifier.size(11.dp),
-                            tint     = when (enumType) {
-                                NotificationType.PROPERTY_APPROVED -> SuccessGreen
-                                NotificationType.PROPERTY_REJECTED  -> ErrorRed
-                                else                                -> GoldAccentDark
-                            }
-                        )
-                        Text(
-                            text     = item.adminNote,
-                            fontSize = 11.sp,
-                            color    = when (enumType) {
-                                NotificationType.PROPERTY_APPROVED -> SuccessGreen
-                                NotificationType.PROPERTY_REJECTED  -> ErrorRed
-                                else                                -> GoldAccentDark
-                            },
-                            maxLines = 1
-                        )
+                        Icon(Icons.Default.Info, null, modifier = Modifier.size(11.dp), tint = noteColor)
+                        Text(text = item.adminNote, fontSize = 11.sp, color = noteColor, maxLines = 1)
                     }
                 }
             }
 
-            // ── Right: Unread dot + Delete ─────────────────────────────────
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
+            // Right: unread dot + delete
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (isUnread) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(GoldAccent)
-                    )
+                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(tertiary))
                 }
-                IconButton(
-                    onClick  = onDelete,
-                    modifier = Modifier.size(22.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Close,
-                        "Delete",
-                        tint     = TextSecondary.copy(0.5f),
-                        modifier = Modifier.size(14.dp)
-                    )
+                IconButton(onClick = onDelete, modifier = Modifier.size(22.dp)) {
+                    Icon(Icons.Default.Close, "Delete", tint = onSurfaceVariant.copy(0.5f), modifier = Modifier.size(14.dp))
                 }
             }
         }
     }
 }
 
-// ── Icon + Color helpers ───────────────────────────────────────────────────────
+// ── Icon + Color helper functions ─────────────────────────────────────────────
 fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED,
     NotificationType.BOOKING_CONFIRMED,
@@ -508,46 +386,19 @@ fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
 }
 
 fun screenNotificationColor(type: NotificationType): Color = when (type) {
-    NotificationType.BOOKING_REQUESTED  -> PrimaryNavy
-    NotificationType.BOOKING_CONFIRMED  -> SuccessGreen
-    NotificationType.BOOKING_CANCELLED  -> ErrorRed
+    NotificationType.BOOKING_REQUESTED  -> Color(0xFF1B2B5B)
+    NotificationType.BOOKING_CONFIRMED  -> Color(0xFF2ECC71)
+    NotificationType.BOOKING_CANCELLED  -> Color(0xFFBA1A1A)
     NotificationType.BOOKING_COMPLETED  -> Color(0xFF00897B)
-    NotificationType.BOOKING_REMINDER   -> GoldAccentDark
-    NotificationType.PAYMENT_RECEIVED   -> SuccessGreen
-    NotificationType.PAYMENT_FAILED     -> ErrorRed
-    NotificationType.REFUND_ISSUED      -> WarningOrange
-    NotificationType.NEW_MESSAGE        -> PrimaryNavyLight
-    NotificationType.PROPERTY_APPROVED  -> SuccessGreen
-    NotificationType.PROPERTY_REJECTED  -> ErrorRed
-    NotificationType.PROPERTY_PENDING   -> WarningOrange
-    NotificationType.USER_VERIFIED      -> SuccessGreen
-    NotificationType.USER_REJECTED      -> ErrorRed
-    else                                -> GoldAccentDark
+    NotificationType.BOOKING_REMINDER   -> Color(0xFF9B7D2E)
+    NotificationType.PAYMENT_RECEIVED   -> Color(0xFF2ECC71)
+    NotificationType.PAYMENT_FAILED     -> Color(0xFFBA1A1A)
+    NotificationType.REFUND_ISSUED      -> Color(0xFFFF6F00)
+    NotificationType.NEW_MESSAGE        -> Color(0xFF2E4A9E)
+    NotificationType.PROPERTY_APPROVED  -> Color(0xFF2ECC71)
+    NotificationType.PROPERTY_REJECTED  -> Color(0xFFBA1A1A)
+    NotificationType.PROPERTY_PENDING   -> Color(0xFFFF6F00)
+    NotificationType.USER_VERIFIED      -> Color(0xFF2ECC71)
+    NotificationType.USER_REJECTED      -> Color(0xFFBA1A1A)
+    else                                -> Color(0xFF9B7D2E)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

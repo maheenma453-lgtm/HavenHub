@@ -29,14 +29,6 @@ import com.example.havenhub.navigation.Screen
 import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.VacationViewModel
 
-// ── Design Tokens ────────────────────────────────────────────────
-private val VNavy     = Color(0xFF0D1B3E)
-private val VNavyMid  = Color(0xFF1A2F5E)
-private val VNavyDeep = Color(0xFF071020)
-private val VGold     = Color(0xFFD4AF37)
-private val VBg       = Color(0xFFF8FAFC)
-private val VMuted    = Color(0xFF64748B)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VacationRentalsScreen(
@@ -44,7 +36,6 @@ fun VacationRentalsScreen(
     viewModel: VacationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-
     var selectedCategory by remember { mutableStateOf("All") }
 
     val filteredProperties = if (selectedCategory == "All") {
@@ -57,12 +48,18 @@ fun VacationRentalsScreen(
 
     LaunchedEffect(Unit) { viewModel.loadVacationProperties() }
 
+    val primary          = MaterialTheme.colorScheme.primary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val tertiary         = MaterialTheme.colorScheme.tertiary
+    val onPrimary        = MaterialTheme.colorScheme.onPrimary
+    val background       = MaterialTheme.colorScheme.background
+
     Scaffold(
         topBar = {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.linearGradient(listOf(VNavyDeep, VNavyMid)))
+                    .background(Brush.linearGradient(listOf(primary, primaryContainer)))
             ) {
                 Row(
                     modifier = Modifier
@@ -74,39 +71,49 @@ fun VacationRentalsScreen(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(0.10f))
-                            .border(1.dp, VGold.copy(0.45f), CircleShape)
+                            .background(onPrimary.copy(0.10f))
+                            .border(1.dp, tertiary.copy(0.45f), CircleShape)
                             .clickable { navController.popBackStack() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack, "Back",
-                            tint = VGold, modifier = Modifier.size(20.dp)
+                            tint     = tertiary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "VACATION HUB", color = VGold,
-                            fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp
+                            "VACATION HUB",
+                            color         = tertiary,
+                            fontSize      = 15.sp,
+                            fontWeight    = FontWeight.Black,
+                            letterSpacing = 2.sp
                         )
-                        Text("Northern Pakistan Stays", color = Color.White.copy(0.50f), fontSize = 11.sp)
+                        Text(
+                            "Northern Pakistan Stays",
+                            color    = onPrimary.copy(0.50f),
+                            fontSize = 11.sp
+                        )
                     }
                     Surface(
-                        color  = VGold.copy(0.15f),
+                        color  = tertiary.copy(0.15f),
                         shape  = RoundedCornerShape(20.dp),
-                        border = BorderStroke(1.dp, VGold.copy(0.45f))
+                        border = BorderStroke(1.dp, tertiary.copy(0.45f))
                     ) {
                         Text(
                             "${filteredProperties.size} Stays",
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            color = VGold, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                            color    = tertiary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
         },
-        containerColor = VBg
+        containerColor = background
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -120,7 +127,7 @@ fun VacationRentalsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(210.dp)
-                        .background(Brush.verticalGradient(listOf(VNavyMid, VBg)))
+                        .background(Brush.verticalGradient(listOf(primaryContainer, background)))
                 ) {
                     Canvas(modifier = Modifier
                         .fillMaxSize()
@@ -143,18 +150,22 @@ fun VacationRentalsScreen(
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Surface(color = VGold.copy(0.2f), shape = RoundedCornerShape(8.dp)) {
+                        Surface(color = tertiary.copy(0.2f), shape = RoundedCornerShape(8.dp)) {
                             Text(
                                 "  PREMIUM SELECTION  ",
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                color = VGold, fontSize = 10.sp, fontWeight = FontWeight.Bold
+                                modifier   = Modifier.padding(vertical = 4.dp),
+                                color      = tertiary,
+                                fontSize   = 10.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
                             "Your Gateway to\nthe North",
-                            color = VNavyDeep, fontSize = 28.sp,
-                            fontWeight = FontWeight.Black, lineHeight = 32.sp
+                            color      = MaterialTheme.colorScheme.onBackground,
+                            fontSize   = 28.sp,
+                            fontWeight = FontWeight.Black,
+                            lineHeight = 32.sp
                         )
                         Spacer(Modifier.height(16.dp))
 
@@ -166,16 +177,17 @@ fun VacationRentalsScreen(
                             val categories = listOf("All", "Islamabad", "Hunza", "Naran", "Skardu", "Swat", "Murree")
                             categories.forEach { city ->
                                 Surface(
-                                    modifier = Modifier.clickable { selectedCategory = city },
-                                    color    = if (city == selectedCategory) VNavy else Color.White,
-                                    shape    = RoundedCornerShape(12.dp),
+                                    modifier        = Modifier.clickable { selectedCategory = city },
+                                    color           = if (city == selectedCategory) primary else MaterialTheme.colorScheme.surface,
+                                    shape           = RoundedCornerShape(12.dp),
                                     shadowElevation = 2.dp
                                 ) {
                                     Text(
                                         city,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                        color    = if (city == selectedCategory) Color.White else VNavyMid,
-                                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold
+                                        modifier   = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                        color      = if (city == selectedCategory) onPrimary else MaterialTheme.colorScheme.onSurface,
+                                        fontSize   = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
                             }
@@ -191,21 +203,28 @@ fun VacationRentalsScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment     = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(4.dp, 18.dp)
-                                .background(VGold, RoundedCornerShape(2.dp))
+                                .background(tertiary, RoundedCornerShape(2.dp))
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
                             if (selectedCategory == "All") "Nearby Stays" else "$selectedCategory Stays",
-                            fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = VNavy
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize   = 18.sp,
+                            color      = MaterialTheme.colorScheme.onBackground
                         )
                     }
-                    Text("View Map", color = VGold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "View Map",
+                        color      = tertiary,
+                        fontSize   = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -214,7 +233,7 @@ fun VacationRentalsScreen(
             if (uiState.isLoading) {
                 item {
                     Box(Modifier.fillMaxWidth().height(200.dp), Alignment.Center) {
-                        CircularProgressIndicator(color = VGold)
+                        CircularProgressIndicator(color = tertiary)
                     }
                 }
             }
@@ -223,23 +242,27 @@ fun VacationRentalsScreen(
             else if (filteredProperties.isEmpty()) {
                 item {
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        modifier         = Modifier.fillMaxWidth().height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
                                 Icons.Default.LocationOff, null,
-                                tint = VMuted, modifier = Modifier.size(48.dp)
+                                tint     = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(48.dp)
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 "No stays found in $selectedCategory",
-                                color = VMuted, fontSize = 14.sp, fontWeight = FontWeight.Medium
+                                color      = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize   = 14.sp,
+                                fontWeight = FontWeight.Medium
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 "Try selecting a different city",
-                                color = VMuted.copy(alpha = 0.6f), fontSize = 12.sp
+                                color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                fontSize = 12.sp
                             )
                         }
                     }
@@ -250,23 +273,17 @@ fun VacationRentalsScreen(
             else {
                 items(filteredProperties) { prop ->
                     VacationPropertyCard(
-                        propertyId = prop.propertyId,
-                        title      = prop.title,
-                        location   = prop.city,
-                        price      = prop.pricePerNight,
-                        rating     = prop.averageRating.toDouble(),
-                        amenities  = prop.amenities ?: emptyList(),
-                        // ✦ FIX: "Reserve Your Stay" ab PreBooking pe navigate karta hai
+                        propertyId  = prop.propertyId,
+                        title       = prop.title,
+                        location    = prop.city,
+                        price       = prop.pricePerNight,
+                        rating      = prop.averageRating.toDouble(),
+                        amenities   = prop.amenities ?: emptyList(),
                         onBookClick = {
-                            navController.navigate(
-                                Screen.PreBooking.createRoute(prop.propertyId)
-                            )
+                            navController.navigate(Screen.PreBooking.createRoute(prop.propertyId))
                         },
-                        // Property detail ke liye card click
                         onCardClick = {
-                            navController.navigate(
-                                Screen.PropertyDetail.createRoute(prop.propertyId)
-                            )
+                            navController.navigate(Screen.PropertyDetail.createRoute(prop.propertyId))
                         }
                     )
                 }
@@ -276,7 +293,6 @@ fun VacationRentalsScreen(
 }
 
 // ── Property Card ─────────────────────────────────────────────────────────────
-
 @Composable
 fun VacationPropertyCard(
     propertyId  : String,
@@ -285,41 +301,53 @@ fun VacationPropertyCard(
     price       : Double,
     rating      : Double,
     amenities   : List<String>,
-    onBookClick : () -> Unit,   // "Reserve Your Stay" → PreBooking
-    onCardClick : () -> Unit    // card tap → PropertyDetail
+    onBookClick : () -> Unit,
+    onCardClick : () -> Unit
 ) {
+    val primary   = MaterialTheme.colorScheme.primary
+    val tertiary  = MaterialTheme.colorScheme.tertiary
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+
     Card(
         modifier  = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 12.dp)
             .clickable { onCardClick() },
         shape     = RoundedCornerShape(24.dp),
-        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        colors    = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column {
             // ── Image ──────────────────────────────────────────────────────
             Box(modifier = Modifier.fillMaxWidth().height(210.dp)) {
                 Image(
-                    painter        = painterResource(id = getPropertyImage(propertyId)),
+                    painter            = painterResource(id = getPropertyImage(propertyId)),
                     contentDescription = null,
-                    modifier       = Modifier.fillMaxSize(),
-                    contentScale   = ContentScale.Crop
+                    modifier           = Modifier.fillMaxSize(),
+                    contentScale       = ContentScale.Crop
                 )
                 // Rating badge
                 Surface(
                     modifier = Modifier.padding(12.dp).align(Alignment.TopEnd),
-                    color    = Color.Black.copy(0.6f),
+                    color    = MaterialTheme.colorScheme.inverseSurface.copy(0.6f),
                     shape    = RoundedCornerShape(8.dp)
                 ) {
                     Row(
                         Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Star, null, tint = VGold, modifier = Modifier.size(14.dp))
+                        Icon(
+                            Icons.Default.Star, null,
+                            tint     = tertiary,
+                            modifier = Modifier.size(14.dp)
+                        )
                         Text(
                             " ${"%.1f".format(rating)}",
-                            color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                            color      = MaterialTheme.colorScheme.inverseOnSurface,
+                            fontSize   = 12.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -328,41 +356,61 @@ fun VacationPropertyCard(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(12.dp)
-                        .background(VNavy.copy(0.9f), RoundedCornerShape(10.dp))
+                        .background(primary.copy(0.9f), RoundedCornerShape(10.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
                         "PKR ${"%.0f".format(price)}/night",
-                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp
+                        color      = onPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 13.sp
                     )
                 }
             }
 
             // ── Info ───────────────────────────────────────────────────────
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(location.uppercase(), color = VGold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                 Text(
-                    title, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp,
-                    color = VNavy, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    location.uppercase(),
+                    color      = tertiary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 10.sp
+                )
+                Text(
+                    title,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize   = 18.sp,
+                    color      = MaterialTheme.colorScheme.onSurface,
+                    maxLines   = 1,
+                    overflow   = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(12.dp))
 
                 // Amenities
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (amenities.isEmpty()) {
-                        Text("Basic Amenities Included", fontSize = 11.sp, color = VMuted)
+                        Text(
+                            "Basic Amenities Included",
+                            fontSize = 11.sp,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     } else {
                         amenities.take(3).forEach { feature ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     Icons.Default.CheckCircle, null,
-                                    tint = VGold, modifier = Modifier.size(12.dp)
+                                    tint     = tertiary,
+                                    modifier = Modifier.size(12.dp)
                                 )
                                 Spacer(Modifier.width(4.dp))
-                                Text(feature, fontSize = 11.sp, color = VMuted)
+                                Text(
+                                    feature,
+                                    fontSize = 11.sp,
+                                    color    = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -370,29 +418,27 @@ fun VacationPropertyCard(
 
                 Spacer(Modifier.height(16.dp))
 
-                // ── Two buttons: Detail + Book ──────────────────────────────
+                // ── Two buttons ──────────────────────────────────────────────
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // View Details (outline)
                     OutlinedButton(
-                        onClick = onCardClick,
+                        onClick  = onCardClick,
                         modifier = Modifier.weight(1f).height(48.dp),
-                        shape  = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.5.dp, VNavy)
+                        shape    = RoundedCornerShape(12.dp),
+                        border   = BorderStroke(1.5.dp, primary)
                     ) {
-                        Text("Details", color = VNavy, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("Details", color = primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
 
-                    // ✦ Reserve → PreBooking
                     Button(
                         onClick   = onBookClick,
                         modifier  = Modifier.weight(2f).height(48.dp),
                         shape     = RoundedCornerShape(12.dp),
                         colors    = ButtonDefaults.buttonColors(
-                            containerColor = VNavy,
-                            contentColor   = VGold
+                            containerColor = primary,
+                            contentColor   = onPrimary  // ← YAHAN SIRF YEH BADLA HAI
                         ),
                         elevation = ButtonDefaults.buttonElevation(4.dp)
                     ) {

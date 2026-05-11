@@ -22,25 +22,34 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.havenhub.R
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.PropertyViewModel
+
+// Semantic status colors — intentional, not themed
+private val StatusApproved = Color(0xFF4CAF50)
+private val StatusPending  = Color(0xFFFF9800)
+private val StatusRejected = Color(0xFFF44336)
+private val StatusDefault  = Color(0xFF9E9E9E)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyPropertiesScreen(
     navController: NavController,
-    viewModel: PropertyViewModel = hiltViewModel()
+    viewModel    : PropertyViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    var showDeleteDialog by remember { mutableStateOf(false) }
+    val uiState            by viewModel.uiState.collectAsState()
+    var showDeleteDialog   by remember { mutableStateOf(false) }
     var selectedPropertyId by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadMyProperties()
-    }
+    LaunchedEffect(Unit) { viewModel.loadMyProperties() }
+
+    val primary      = MaterialTheme.colorScheme.primary
+    val onPrimary    = MaterialTheme.colorScheme.onPrimary
+    val background   = MaterialTheme.colorScheme.background
+    val onBackground = MaterialTheme.colorScheme.onBackground          // ✅ Fixed
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant  // ✅ Kept (used)
+    // Removed unused: tertiary, surface, onSurface                    // ✅ Cleaned
 
     Scaffold(
         topBar = {
@@ -52,18 +61,18 @@ fun MyPropertiesScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF0D1B3E),
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor             = primary,
+                    titleContentColor          = onPrimary,
+                    navigationIconContentColor = onPrimary
                 )
             )
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { navController.navigate(Screen.AddProperty.route) },
-                containerColor = Color(0xFF0D1B3E)
+                onClick        = { navController.navigate(Screen.AddProperty.route) },
+                containerColor = primary
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.White)
+                Icon(Icons.Default.Add, contentDescription = "Add", tint = onPrimary)
             }
         }
     ) { padding ->
@@ -71,60 +80,62 @@ fun MyPropertiesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFFF5F7FA))
+                .background(background)
         ) {
             when {
+                // ── Loading ───────────────────────────────────────────────────
                 uiState.isLoading -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
-                        color = Color(0xFF0D1B3E)
+                        color    = primary
                     )
                 }
+
+                // ── Empty state ───────────────────────────────────────────────
                 uiState.myProperties.isEmpty() -> {
                     Column(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier            = Modifier.fillMaxSize(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
                             Icons.Default.Home,
                             contentDescription = null,
-                            modifier = Modifier.size(80.dp),
-                            tint = Color(0xFFE0E0E0)
+                            modifier           = Modifier.size(80.dp),
+                            tint               = onSurfaceVariant.copy(alpha = 0.4f)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             "No properties yet",
-                            fontSize = 18.sp,
+                            fontSize   = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF0D1B3E)
+                            color      = onBackground  // ✅ Fixed: was unresolved
                         )
                     }
                 }
+
+                // ── Property list ─────────────────────────────────────────────
                 else -> {
                     LazyColumn(
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding      = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(
-                            items = uiState.myProperties,
-                            key = { it.propertyId }
-                        ) { property ->
+                        items(items = uiState.myProperties, key = { it.propertyId }) { property ->
                             MyPropertyCard(
                                 property = property,
-                                onClick = {
+                                onClick  = {
                                     navController.navigate(
                                         Screen.PropertyDetail.createRoute(property.propertyId)
                                     )
                                 },
-                                onEdit = {
+                                onEdit   = {
                                     navController.navigate(
                                         Screen.EditProperty.createRoute(property.propertyId)
                                     )
                                 },
                                 onDelete = {
                                     selectedPropertyId = property.propertyId
-                                    showDeleteDialog = true
+                                    showDeleteDialog   = true
                                 }
                             )
                         }
@@ -134,87 +145,91 @@ fun MyPropertiesScreen(
         }
     }
 
+    // ── Delete confirmation dialog ────────────────────────────────────────────
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Property") },
-            text = { Text("Are you sure you want to delete this property?") },
-            confirmButton = {
+            title            = { Text("Delete Property") },
+            text             = { Text("Are you sure you want to delete this property?") },
+            confirmButton    = {
                 TextButton(onClick = {
                     selectedPropertyId?.let { viewModel.deleteProperty(it) }
                     showDeleteDialog = false
-                }) { Text("Delete", color = Color.Red) }
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
             }
         )
     }
 }
 
+// ── Property card composable ──────────────────────────────────────────────────
 @Composable
 fun MyPropertyCard(
     property: Property,
-    onClick: () -> Unit,
-    onEdit: () -> Unit,
+    onClick : () -> Unit,
+    onEdit  : () -> Unit,
     onDelete: () -> Unit
 ) {
+    val onSurface        = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val primary          = MaterialTheme.colorScheme.primary
+    val error            = MaterialTheme.colorScheme.error
+
     Card(
-        modifier = Modifier
+        modifier  = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
+            Box(modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
             ) {
-                // ✅ FIX: AsyncImage se imgbb URL load karo
-                // Fallback: agar imageUrls empty ho to placeholder dikhao
                 val imageUrl = property.imageUrls.firstOrNull()
 
                 if (imageUrl != null) {
                     AsyncImage(
-                        model            = imageUrl,
+                        model              = imageUrl,
                         contentDescription = property.title,
-                        modifier         = Modifier.fillMaxSize(),
-                        contentScale     = ContentScale.Crop,
-                        // ✅ Load hone tak aur error pe placeholder
-                        placeholder      = coil.compose.AsyncImagePainter.State.Empty.painter,
-                        error            = coil.compose.AsyncImagePainter.State.Empty.painter
+                        modifier           = Modifier.fillMaxSize(),
+                        contentScale       = ContentScale.Crop
                     )
                 } else {
-                    // ✅ Koi image nahi — grey placeholder dikhao
                     Box(
-                        modifier = Modifier
+                        modifier         = Modifier
                             .fillMaxSize()
-                            .background(Color(0xFFEEEEEE)),
+                            .background(onSurfaceVariant.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector   = Icons.Default.Home,
+                            Icons.Default.Home,
                             contentDescription = null,
-                            modifier      = Modifier.size(48.dp),
-                            tint          = Color(0xFFBBBBBB)
+                            modifier           = Modifier.size(48.dp),
+                            tint               = onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                 }
 
-                // ✅ Status Badge
+                // Status badge overlay
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(10.dp)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(getLocalStatusColor(property.status).copy(alpha = 0.9f))
+                        .background(getMyPropStatusColor(property.status).copy(alpha = 0.9f))
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text       = getLocalStatusLabel(property.status),
+                        text       = getMyPropStatusLabel(property.status),
                         fontSize   = 11.sp,
                         color      = Color.White,
                         fontWeight = FontWeight.Bold
@@ -223,82 +238,86 @@ fun MyPropertyCard(
             }
 
             Column(modifier = Modifier.padding(14.dp)) {
+                // Title
                 Text(
                     text       = property.title,
                     fontWeight = FontWeight.Bold,
-                    fontSize   = 16.sp
+                    fontSize   = 16.sp,
+                    color      = onSurface
                 )
 
-                // ✅ City aur price bhi dikhao
+                // City
                 if (property.city.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.LocationOn,
-                            null,
-                            modifier = Modifier.size(14.dp),
-                            tint     = Color(0xFF8899AA)
+                            contentDescription = null,
+                            modifier           = Modifier.size(14.dp),
+                            tint               = onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.width(2.dp))
                         Text(
                             text     = property.city,
                             fontSize = 12.sp,
-                            color    = Color(0xFF8899AA)
+                            color    = onSurfaceVariant
                         )
                     }
                 }
 
+                // Price
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text       = property.formattedPrice + "/night",
                     fontSize   = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color      = Color(0xFF0D1B3E)
+                    color      = primary
                 )
 
-                // ✅ PT-1 status dikhao
+                // PT-1 document status
                 if (property.hasPt1Document) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.VerifiedUser,
-                            null,
-                            modifier = Modifier.size(13.dp),
-                            tint     = Color(0xFF4CAF50)
+                            contentDescription = null,
+                            modifier           = Modifier.size(13.dp),
+                            tint               = StatusApproved
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             text     = "PT-1 Uploaded",
                             fontSize = 11.sp,
-                            color    = Color(0xFF4CAF50)
+                            color    = StatusApproved
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = Color(0xFFEEEEEE))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // Edit / Delete buttons
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier            = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onEdit,
+                        onClick  = onEdit,
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp)
+                        shape    = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Edit", fontSize = 13.sp)
                     }
                     OutlinedButton(
-                        onClick = onDelete,
+                        onClick  = onDelete,
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
+                        shape    = RoundedCornerShape(8.dp),
+                        colors   = ButtonDefaults.outlinedButtonColors(contentColor = error)
                     ) {
-                        Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Delete", fontSize = 13.sp)
                     }
@@ -308,14 +327,16 @@ fun MyPropertyCard(
     }
 }
 
-private fun getLocalStatusColor(status: String): Color = when (status.uppercase()) {
-    "APPROVED" -> Color(0xFF4CAF50)
-    "PENDING"  -> Color(0xFFFF9800)
-    "REJECTED" -> Color(0xFFF44336)
-    else       -> Color(0xFF9E9E9E)
+// ── Status color helper ───────────────────────────────────────────────────────
+private fun getMyPropStatusColor(status: String): Color = when (status.uppercase()) {
+    "APPROVED" -> StatusApproved
+    "PENDING"  -> StatusPending
+    "REJECTED" -> StatusRejected
+    else       -> StatusDefault
 }
 
-private fun getLocalStatusLabel(status: String): String = when (status.uppercase()) {
+// ── Status label helper ───────────────────────────────────────────────────────
+private fun getMyPropStatusLabel(status: String): String = when (status.uppercase()) {
     "APPROVED" -> "✓ Approved"
     "PENDING"  -> "⏳ Pending"
     "REJECTED" -> "✗ Rejected"

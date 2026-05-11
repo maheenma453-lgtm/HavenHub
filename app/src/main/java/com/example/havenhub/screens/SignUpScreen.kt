@@ -36,6 +36,9 @@ import coil.compose.AsyncImage
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.AuthViewModel
 
+// ════════════════════════════════════════════════════════════════════
+// LIGHT THEME TOKENS — unchanged
+// ════════════════════════════════════════════════════════════════════
 private val SU_NavyDark    = Color(0xFF0D1B3E)
 private val SU_NavyPrimary = Color(0xFF1A2A6C)
 private val SU_GoldPrimary = Color(0xFFC9A84C)
@@ -46,6 +49,21 @@ private val SU_Surface     = Color(0xFFF4F6FB)
 private val SU_TextMuted   = Color(0xFF8A94A6)
 private val SU_BorderGray  = Color(0xFFDDE2EF)
 private val SU_ErrorRed    = Color(0xFFD94040)
+
+// ════════════════════════════════════════════════════════════════════
+// DARK THEME TOKENS — deep navy + logo gold
+// ════════════════════════════════════════════════════════════════════
+private val SUK_BgDeep      = Color(0xFF060D1A)
+private val SUK_BgPrimary   = Color(0xFF0D1B3E)
+private val SUK_BgCard      = Color(0xFF112038)
+private val SUK_BgField     = Color(0xFF0F1D38)
+private val SUK_GoldPrimary = Color(0xFFD4AF37)
+private val SUK_GoldLight   = Color(0xFFF5D060)
+private val SUK_GoldDark    = Color(0xFFB8962E)
+private val SUK_TextPrimary = Color(0xFFF0F4FF)
+private val SUK_TextMuted   = Color(0xFF6A7A9A)
+private val SUK_Border      = Color(0xFF1E2E50)
+private val SUK_ErrorRed    = Color(0xFFCF6679)
 
 @Composable
 fun SignUpScreen(
@@ -70,22 +88,22 @@ fun SignUpScreen(
     val passwordError   by viewModel.passwordError.collectAsState()
     val cnicError       by viewModel.cnicError.collectAsState()
 
-    val role      = uiState.selectedRole.lowercase()
-    val isTenant  = role == "tenant"
-    val isLandlord = role == "landlord"
-
-    // CNIC section show karo agar tenant ya landlord ho
+    val role            = uiState.selectedRole.lowercase()
+    val isTenant        = role == "tenant"
+    val isLandlord      = role == "landlord"
     val showCnicSection = isTenant || isLandlord
 
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmVisible  by remember { mutableStateOf(false) }
     var visible         by remember { mutableStateOf(false) }
 
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+
     LaunchedEffect(Unit) { visible = true }
 
     val heroAlpha by animateFloatAsState(
-        targetValue    = if (visible) 1f else 0f,
-        animationSpec  = tween(500, easing = EaseOut), label = "ha"
+        targetValue   = if (visible) 1f else 0f,
+        animationSpec = tween(500, easing = EaseOut), label = "ha"
     )
     val cardAlpha by animateFloatAsState(
         targetValue   = if (visible) 1f else 0f,
@@ -96,12 +114,29 @@ fun SignUpScreen(
         animationSpec = tween(550, delayMillis = 180, easing = EaseOutCubic), label = "cs"
     )
 
-    // Profile image launcher
+    // Theme-aware values
+    val screenBg    = if (isDark) SUK_BgDeep     else SU_Surface
+    val heroGrad    = if (isDark)
+        Brush.verticalGradient(listOf(SUK_BgDeep, SUK_BgPrimary))
+    else
+        Brush.verticalGradient(listOf(SU_NavyDark, SU_NavyPrimary))
+    val cardBg      = if (isDark) SUK_BgCard     else SU_White
+    val fieldBg     = if (isDark) SUK_BgField    else SU_White
+    val goldP       = if (isDark) SUK_GoldPrimary else SU_GoldPrimary
+    val goldL       = if (isDark) SUK_GoldLight   else SU_GoldLight
+    val goldDk      = if (isDark) SUK_GoldDark    else SU_GoldDark
+    val textPrimary = if (isDark) SUK_TextPrimary else Color(0xFF0D1B3E)
+    val textMuted   = if (isDark) SUK_TextMuted   else SU_TextMuted
+    val border      = if (isDark) SUK_Border      else SU_BorderGray
+    val borderFocus = if (isDark) SUK_GoldPrimary else SU_NavyPrimary
+    val errorRed    = if (isDark) SUK_ErrorRed    else SU_ErrorRed
+    val navyP       = if (isDark) SUK_BgPrimary   else SU_NavyPrimary
+
+    // Image launchers
     val profileImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> viewModel.onProfileImageSelected(uri) }
 
-    // CNIC image launcher
     val cnicImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> viewModel.onCnicImageSelected(uri) }
@@ -116,16 +151,21 @@ fun SignUpScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(SU_Surface)) {
+    Box(modifier = Modifier.fillMaxSize().background(screenBg)) {
         Column(
             modifier            = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ── Hero Header ──────────────────────────────────────────────────
-            Box(
-                modifier = Modifier.fillMaxWidth().alpha(heroAlpha)
-                    .background(Brush.verticalGradient(listOf(SU_NavyDark, SU_NavyPrimary)))
-            ) {
+            // ── Hero Header ──────────────────────────────────────
+            Box(modifier = Modifier.fillMaxWidth().alpha(heroAlpha).background(heroGrad)) {
+                // Gold bottom line
+                Box(
+                    Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter)
+                        .background(
+                            Brush.horizontalGradient(listOf(goldP.copy(0.9f), goldL.copy(0.4f), goldP.copy(0.9f)))
+                        )
+                )
+
                 Column(
                     modifier = Modifier.fillMaxWidth().statusBarsPadding()
                         .padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 36.dp)
@@ -136,88 +176,106 @@ fun SignUpScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.Default.ArrowBack, null,
+                            Icon(
+                                Icons.Default.ArrowBack, null,
                                 tint     = Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.size(22.dp))
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("HAVEN", fontSize = 18.sp, fontWeight = FontWeight.Black,
-                                color = Color.White, letterSpacing = 1.5.sp)
-                            Text("HUB", fontSize = 18.sp, fontWeight = FontWeight.Black,
-                                color = SU_GoldPrimary, letterSpacing = 1.5.sp)
+                            Text("HAVEN", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 1.5.sp)
+                            Text("HUB", fontSize = 18.sp, fontWeight = FontWeight.Black, color = goldP, letterSpacing = 1.5.sp)
                         }
                         Spacer(modifier = Modifier.width(48.dp))
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Create Account", fontSize = 26.sp, fontWeight = FontWeight.Black,
-                        color = Color.White, modifier = Modifier.padding(start = 6.dp))
+                    Text("Create Account", fontSize = 26.sp, fontWeight = FontWeight.Black, color = Color.White, modifier = Modifier.padding(start = 6.dp))
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Join thousands of happy renters", fontSize = 13.sp,
-                        color = Color.White.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(start = 6.dp))
+                    Text("Join thousands of happy renters", fontSize = 13.sp, color = Color.White.copy(alpha = 0.5f), modifier = Modifier.padding(start = 6.dp))
                     Spacer(modifier = Modifier.height(14.dp))
-                    Row(modifier = Modifier.padding(start = 6.dp),
+                    Row(
+                        modifier              = Modifier.padding(start = 6.dp),
                         verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Box(modifier = Modifier.width(36.dp).height(3.dp).clip(CircleShape)
-                            .background(Brush.horizontalGradient(
-                                listOf(SU_GoldDark, SU_GoldPrimary, SU_GoldLight))))
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.width(36.dp).height(3.dp).clip(CircleShape)
+                                .background(Brush.horizontalGradient(listOf(goldDk, goldP, goldL)))
+                        )
                         if (uiState.selectedRole.isNotEmpty()) {
-                            Box(modifier = Modifier.clip(RoundedCornerShape(20.dp))
-                                .background(SU_GoldPrimary.copy(alpha = 0.18f))
-                                .padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                Text(uiState.selectedRole.replaceFirstChar { it.uppercase() },
-                                    fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                                    color = SU_GoldLight)
+                            Box(
+                                modifier = Modifier.clip(RoundedCornerShape(20.dp))
+                                    .background(goldP.copy(alpha = 0.18f))
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    uiState.selectedRole.replaceFirstChar { it.uppercase() },
+                                    fontSize   = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = goldL
+                                )
                             }
                         }
                     }
                 }
-                Box(modifier = Modifier.fillMaxWidth().height(24.dp)
-                    .align(Alignment.BottomCenter).background(SU_Surface))
+                Box(modifier = Modifier.fillMaxWidth().height(24.dp).align(Alignment.BottomCenter).background(screenBg))
             }
 
-            // ── Form Card ────────────────────────────────────────────────────
+            // ── Form Card ─────────────────────────────────────────
             Card(
                 modifier  = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
                     .offset(y = (-12).dp).alpha(cardAlpha).offset(y = cardSlide.dp),
                 shape     = RoundedCornerShape(22.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
-                colors    = CardDefaults.cardColors(containerColor = SU_White)
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 10.dp),
+                colors    = CardDefaults.cardColors(containerColor = cardBg)
             ) {
+                if (isDark) {
+                    Box(
+                        Modifier.fillMaxWidth().height(1.5.dp)
+                            .background(Brush.horizontalGradient(listOf(goldP.copy(0.8f), goldL.copy(0.3f), goldP.copy(0.8f))))
+                    )
+                }
                 Column(modifier = Modifier.padding(24.dp)) {
 
-                    Text("Your Details", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold,
-                        color = SU_NavyPrimary)
+                    Text(
+                        "Your Details",
+                        fontSize   = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color      = if (isDark) SUK_TextPrimary else SU_NavyPrimary
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Fill in your information to get started",
-                        fontSize = 12.sp, color = SU_TextMuted)
+                    Text(
+                        "Fill in your information to get started",
+                        fontSize = 12.sp,
+                        color    = textMuted
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
 
                     val fieldColors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor   = SU_NavyPrimary,
-                        focusedLabelColor    = SU_NavyPrimary,
-                        unfocusedBorderColor = SU_BorderGray,
-                        unfocusedLabelColor  = SU_TextMuted,
-                        errorBorderColor     = SU_ErrorRed,
-                        cursorColor          = SU_NavyPrimary,
-                        //cursorColor             = SU_NavyPrimary,
-                        focusedTextColor        = Color(0xFF0D1B3E),
-                        unfocusedTextColor      = Color(0xFF0D1B3E),
-                        focusedContainerColor   = SU_White,
-                        unfocusedContainerColor = SU_White,
+                        focusedBorderColor      = borderFocus,
+                        focusedLabelColor       = borderFocus,
+                        unfocusedBorderColor    = border,
+                        unfocusedLabelColor     = textMuted,
+                        errorBorderColor        = errorRed,
+                        cursorColor             = borderFocus,
+                        focusedTextColor        = textPrimary,
+                        unfocusedTextColor      = textPrimary,
+                        focusedContainerColor   = fieldBg,
+                        unfocusedContainerColor = fieldBg,
                     )
 
-                    // ── Profile Image ────────────────────────────────────────
-                    Text("Profile Photo", fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold, color = SU_NavyPrimary)
+                    // ── Profile image ────────────────────────────
+                    Text("Profile Photo", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (isDark) SUK_TextPrimary else SU_NavyPrimary)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Box(modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Box(
                             modifier = Modifier.size(90.dp).clip(CircleShape)
-                                .background(SU_BorderGray)
-                                .border(2.dp, SU_NavyPrimary.copy(alpha = 0.3f), CircleShape)
+                                .background(if (isDark) SUK_Border else SU_BorderGray)
+                                .border(
+                                    2.dp,
+                                    if (isDark) goldP.copy(0.5f) else SU_NavyPrimary.copy(alpha = 0.3f),
+                                    CircleShape
+                                )
                                 .clickable { profileImageLauncher.launch("image/*") },
                             contentAlignment = Alignment.Center
                         ) {
@@ -226,48 +284,41 @@ fun SignUpScreen(
                                     model              = profileImageUri,
                                     contentDescription = null,
                                     modifier           = Modifier.fillMaxSize().clip(CircleShape),
-                                    contentScale       = ContentScale.Crop)
+                                    contentScale       = ContentScale.Crop
+                                )
                             } else {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.CameraAlt, null,
-                                        tint     = SU_TextMuted,
-                                        modifier = Modifier.size(28.dp))
-                                    Text("Add Photo", fontSize = 10.sp, color = SU_TextMuted)
+                                    Icon(Icons.Default.CameraAlt, null, tint = textMuted, modifier = Modifier.size(28.dp))
+                                    Text("Add Photo", fontSize = 10.sp, color = textMuted)
                                 }
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // ── Full Name ────────────────────────────────────────────
+                    // ── Full name ────────────────────────────────
                     OutlinedTextField(
-                        value         = fullName,
-                        onValueChange = { viewModel.onFullNameChange(it) },
-                        label         = { Text("Full Name", fontSize = 13.sp) },
-                        isError       = nameError != null,
-                        supportingText = { nameError?.let {
-                            Text(it, color = SU_ErrorRed, fontSize = 11.sp)
-                        }},
-                        leadingIcon   = { Icon(Icons.Default.Person, null,
-                            tint = SU_NavyPrimary.copy(alpha = 0.6f), modifier = Modifier.size(20.dp)) },
-                        singleLine    = true,
-                        modifier      = Modifier.fillMaxWidth(),
-                        shape         = RoundedCornerShape(14.dp),
-                        colors        = fieldColors
+                        value          = fullName,
+                        onValueChange  = { viewModel.onFullNameChange(it) },
+                        label          = { Text("Full Name", fontSize = 13.sp) },
+                        isError        = nameError != null,
+                        supportingText = { nameError?.let { Text(it, color = errorRed, fontSize = 11.sp) } },
+                        leadingIcon    = { Icon(Icons.Default.Person, null, tint = borderFocus.copy(0.6f), modifier = Modifier.size(20.dp)) },
+                        singleLine     = true,
+                        modifier       = Modifier.fillMaxWidth(),
+                        shape          = RoundedCornerShape(14.dp),
+                        colors         = fieldColors
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // ── Email ────────────────────────────────────────────────
+                    // ── Email ────────────────────────────────────
                     OutlinedTextField(
                         value           = email,
                         onValueChange   = { viewModel.onEmailChange(it) },
                         label           = { Text("Email Address", fontSize = 13.sp) },
                         isError         = emailError != null,
-                        supportingText  = { emailError?.let {
-                            Text(it, color = SU_ErrorRed, fontSize = 11.sp)
-                        }},
-                        leadingIcon     = { Icon(Icons.Default.Email, null,
-                            tint = SU_NavyPrimary.copy(alpha = 0.6f), modifier = Modifier.size(20.dp)) },
+                        supportingText  = { emailError?.let { Text(it, color = errorRed, fontSize = 11.sp) } },
+                        leadingIcon     = { Icon(Icons.Default.Email, null, tint = borderFocus.copy(0.6f), modifier = Modifier.size(20.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine      = true,
                         modifier        = Modifier.fillMaxWidth(),
@@ -276,98 +327,88 @@ fun SignUpScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // ── Password ─────────────────────────────────────────────
+                    // ── Password ─────────────────────────────────
                     OutlinedTextField(
-                        value         = password,
-                        onValueChange = { viewModel.onPasswordChange(it) },
-                        label         = { Text("Password", fontSize = 13.sp) },
-                        isError       = passwordError != null,
-                        supportingText = { passwordError?.let {
-                            Text(it, color = SU_ErrorRed, fontSize = 11.sp)
-                        }},
-                        leadingIcon   = { Icon(Icons.Default.Lock, null,
-                            tint = SU_NavyPrimary.copy(alpha = 0.6f), modifier = Modifier.size(20.dp)) },
-                        trailingIcon  = {
+                        value          = password,
+                        onValueChange  = { viewModel.onPasswordChange(it) },
+                        label          = { Text("Password", fontSize = 13.sp) },
+                        isError        = passwordError != null,
+                        supportingText = { passwordError?.let { Text(it, color = errorRed, fontSize = 11.sp) } },
+                        leadingIcon    = { Icon(Icons.Default.Lock, null, tint = borderFocus.copy(0.6f), modifier = Modifier.size(20.dp)) },
+                        trailingIcon   = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
-                                    if (passwordVisible) Icons.Default.Visibility
-                                    else Icons.Default.VisibilityOff, null,
-                                    tint     = SU_TextMuted,
-                                    modifier = Modifier.size(20.dp))
+                                    if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    null, tint = textMuted, modifier = Modifier.size(20.dp)
+                                )
                             }
                         },
-                        visualTransformation = if (passwordVisible) VisualTransformation.None
-                        else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        singleLine      = true,
-                        modifier        = Modifier.fillMaxWidth(),
-                        shape           = RoundedCornerShape(14.dp),
-                        colors          = fieldColors
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions      = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine           = true,
+                        modifier             = Modifier.fillMaxWidth(),
+                        shape                = RoundedCornerShape(14.dp),
+                        colors               = fieldColors
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // ── Confirm Password ─────────────────────────────────────
+                    // ── Confirm password ─────────────────────────
                     OutlinedTextField(
-                        value         = confirmPassword,
-                        onValueChange = { viewModel.onConfirmPasswordChange(it) },
-                        label         = { Text("Confirm Password", fontSize = 13.sp) },
-                        isError       = confirmPassword.isNotEmpty() && password != confirmPassword,
+                        value          = confirmPassword,
+                        onValueChange  = { viewModel.onConfirmPasswordChange(it) },
+                        label          = { Text("Confirm Password", fontSize = 13.sp) },
+                        isError        = confirmPassword.isNotEmpty() && password != confirmPassword,
                         supportingText = {
                             if (confirmPassword.isNotEmpty() && password != confirmPassword)
-                                Text("Passwords do not match", color = SU_ErrorRed, fontSize = 11.sp)
+                                Text("Passwords do not match", color = errorRed, fontSize = 11.sp)
                         },
-                        leadingIcon  = { Icon(Icons.Default.LockOpen, null,
-                            tint = SU_NavyPrimary.copy(alpha = 0.6f), modifier = Modifier.size(20.dp)) },
+                        leadingIcon  = { Icon(Icons.Default.LockOpen, null, tint = borderFocus.copy(0.6f), modifier = Modifier.size(20.dp)) },
                         trailingIcon = {
                             IconButton(onClick = { confirmVisible = !confirmVisible }) {
                                 Icon(
-                                    if (confirmVisible) Icons.Default.Visibility
-                                    else Icons.Default.VisibilityOff, null,
-                                    tint     = SU_TextMuted,
-                                    modifier = Modifier.size(20.dp))
+                                    if (confirmVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    null, tint = textMuted, modifier = Modifier.size(20.dp)
+                                )
                             }
                         },
-                        visualTransformation = if (confirmVisible) VisualTransformation.None
-                        else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        singleLine      = true,
-                        modifier        = Modifier.fillMaxWidth(),
-                        shape           = RoundedCornerShape(14.dp),
-                        colors          = fieldColors
+                        visualTransformation = if (confirmVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions      = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine           = true,
+                        modifier             = Modifier.fillMaxWidth(),
+                        shape                = RoundedCornerShape(14.dp),
+                        colors               = fieldColors
                     )
 
-                    // ── CNIC Section (Tenant aur Landlord dono ke liye) ──────
+                    // ── CNIC section ─────────────────────────────
                     if (showCnicSection) {
                         Spacer(modifier = Modifier.height(20.dp))
-                        HorizontalDivider(color = SU_BorderGray)
+                        HorizontalDivider(color = border)
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Text("Identity Verification", fontSize = 15.sp,
-                            fontWeight = FontWeight.ExtraBold, color = SU_NavyPrimary)
+                        Text(
+                            "Identity Verification",
+                            fontSize   = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color      = if (isDark) SUK_TextPrimary else SU_NavyPrimary
+                        )
                         Spacer(modifier = Modifier.height(4.dp))
-
-                        // Description role ke hisaab se alag hogi
-                        val cnicDescription = if (isLandlord)
-                            "Required for landlord verification by admin"
-                        else
-                            "Required for tenant verification by admin"
-
-                        Text(cnicDescription, fontSize = 12.sp, color = SU_TextMuted)
+                        Text(
+                            if (isLandlord) "Required for landlord verification by admin"
+                            else "Required for tenant verification by admin",
+                            fontSize = 12.sp,
+                            color    = textMuted
+                        )
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // ── CNIC Number ──────────────────────────────────────
+                        // CNIC number
                         OutlinedTextField(
                             value           = cnicNumber,
                             onValueChange   = { viewModel.onCnicNumberChange(it) },
                             label           = { Text("CNIC Number *", fontSize = 13.sp) },
                             isError         = cnicError != null,
-                            supportingText  = { cnicError?.let {
-                                Text(it, color = SU_ErrorRed, fontSize = 11.sp)
-                            }},
-                            leadingIcon     = { Icon(Icons.Default.Badge, null,
-                                tint = SU_NavyPrimary.copy(alpha = 0.6f), modifier = Modifier.size(20.dp)) },
-                            placeholder     = { Text("e.g. 35201-1234567-1",
-                                fontSize = 12.sp, color = SU_TextMuted) },
+                            supportingText  = { cnicError?.let { Text(it, color = errorRed, fontSize = 11.sp) } },
+                            leadingIcon     = { Icon(Icons.Default.Badge, null, tint = borderFocus.copy(0.6f), modifier = Modifier.size(20.dp)) },
+                            placeholder     = { Text("e.g. 35201-1234567-1", fontSize = 12.sp, color = textMuted) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine      = true,
                             modifier        = Modifier.fillMaxWidth(),
@@ -376,9 +417,7 @@ fun SignUpScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // ── CNIC Image Upload ────────────────────────────────
-                        Text("CNIC Image *", fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold, color = SU_NavyPrimary)
+                        Text("CNIC Image *", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (isDark) SUK_TextPrimary else SU_NavyPrimary)
                         Spacer(modifier = Modifier.height(8.dp))
 
                         if (cnicImageUri != null) {
@@ -386,120 +425,127 @@ fun SignUpScreen(
                                 AsyncImage(
                                     model              = cnicImageUri,
                                     contentDescription = null,
-                                    modifier           = Modifier.fillMaxWidth().height(160.dp)
-                                        .clip(RoundedCornerShape(12.dp)),
+                                    modifier           = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)),
                                     contentScale       = ContentScale.Crop
                                 )
                                 IconButton(
                                     onClick  = { viewModel.onCnicImageSelected(null) },
-                                    modifier = Modifier.align(Alignment.TopEnd)
-                                        .padding(4.dp).size(32.dp)
+                                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(32.dp)
                                         .background(Color.Red.copy(0.8f), CircleShape)
                                 ) {
-                                    Icon(Icons.Default.Close, null,
-                                        tint     = Color.White,
-                                        modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 }
                             }
                             Spacer(modifier = Modifier.height(6.dp))
-                            Row(verticalAlignment     = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.CheckCircle, null,
-                                    tint     = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(16.dp))
-                                Text("CNIC image uploaded", fontSize = 12.sp,
-                                    color = Color(0xFF4CAF50))
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                                Text("CNIC image uploaded", fontSize = 12.sp, color = Color(0xFF4CAF50))
                             }
                         } else {
                             OutlinedButton(
                                 onClick  = { cnicImageLauncher.launch("image/*") },
                                 modifier = Modifier.fillMaxWidth().height(50.dp),
                                 shape    = RoundedCornerShape(14.dp),
+                                border   = androidx.compose.foundation.BorderStroke(1.dp, border),
                                 colors   = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = SU_NavyPrimary)
+                                    contentColor    = if (isDark) goldP else SU_NavyPrimary,
+                                    containerColor  = fieldBg
+                                )
                             ) {
-                                Icon(Icons.Default.UploadFile, null,
-                                    modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Upload CNIC Photo (JPG/PNG) *", fontSize = 13.sp)
                             }
                         }
 
-                        // ── Info Box ─────────────────────────────────────────
+                        // Info box
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFFFFF8E1))
+                                .background(if (isDark) Color(0xFF1A1608) else Color(0xFFFFF8E1))
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Info, null,
-                                tint     = Color(0xFFD4AF37),
-                                modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Info, null, tint = if (isDark) goldP else Color(0xFFD4AF37), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            val infoText = if (isLandlord)
-                                "Admin will verify your CNIC before you can list properties."
-                            else
-                                "Admin will verify your CNIC before account activation."
-                            Text(infoText, fontSize = 11.sp, color = Color(0xFF8A7040))
+                            Text(
+                                if (isLandlord) "Admin will verify your CNIC before you can list properties."
+                                else "Admin will verify your CNIC before account activation.",
+                                fontSize = 11.sp,
+                                color    = if (isDark) goldP.copy(0.7f) else Color(0xFF8A7040)
+                            )
                         }
                     }
 
-                    // ── Error Box ────────────────────────────────────────────
+                    // ── Error box ────────────────────────────────
                     uiState.errorMessage?.let { errMsg ->
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(SU_ErrorRed.copy(alpha = 0.07f))
+                                .background(errorRed.copy(alpha = 0.07f))
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.Warning, null,
-                                tint     = SU_ErrorRed,
-                                modifier = Modifier.size(16.dp))
-                            Text(errMsg, color = SU_ErrorRed, fontSize = 12.sp)
+                            Icon(Icons.Default.Warning, null, tint = errorRed, modifier = Modifier.size(16.dp))
+                            Text(errMsg, color = errorRed, fontSize = 12.sp)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(22.dp))
 
-                    // ── Submit Button ────────────────────────────────────────
-                    Button(
-                        onClick   = { viewModel.signUp() },
-                        enabled   = !uiState.isLoading,
-                        modifier  = Modifier.fillMaxWidth().height(54.dp),
-                        shape     = RoundedCornerShape(15.dp),
-                        colors    = ButtonDefaults.buttonColors(
-                            containerColor         = SU_NavyPrimary,
-                            disabledContainerColor = SU_BorderGray),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    // ── Submit button ────────────────────────────
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(54.dp)
+                            .clip(RoundedCornerShape(15.dp))
+                            .background(
+                                if (isDark && !uiState.isLoading)
+                                    Brush.horizontalGradient(listOf(SUK_GoldPrimary, SUK_GoldLight, SUK_GoldPrimary))
+                                else if (isDark)
+                                    Brush.linearGradient(listOf(SUK_Border, SUK_Border))
+                                else
+                                    Brush.linearGradient(listOf(navyP, navyP))
+                            )
+                            .clickable(enabled = !uiState.isLoading) { viewModel.signUp() },
+                        contentAlignment = Alignment.Center
                     ) {
                         if (uiState.isLoading) {
                             CircularProgressIndicator(
-                                color    = Color.White,
-                                modifier = Modifier.size(22.dp),
-                                strokeWidth = 2.dp)
+                                color       = if (isDark) SUK_GoldPrimary else Color.White,
+                                modifier    = Modifier.size(22.dp),
+                                strokeWidth = 2.dp
+                            )
                         } else {
-                            Text("Create Account", fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(
+                                "Create Account",
+                                fontSize   = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = if (isDark) SUK_BgDeep else Color.White
+                            )
                         }
                     }
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 4.dp, bottom = 36.dp)) {
-                Text("Already have an account? ", color = SU_TextMuted, fontSize = 13.sp)
-                Text("Sign In", color = SU_GoldDark, fontSize = 13.sp,
+            // ── Sign in link ──────────────────────────────────────
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier          = Modifier.padding(top = 4.dp, bottom = 36.dp)
+            ) {
+                Text("Already have an account? ", color = textMuted, fontSize = 13.sp)
+                Text(
+                    "Sign In",
+                    color      = goldDk,
+                    fontSize   = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier   = Modifier.clickable {
                         navController.navigate(Screen.SignIn.route) {
                             popUpTo(Screen.RoleSelection.route) { inclusive = true }
                         }
-                    })
+                    }
+                )
             }
         }
     }

@@ -28,7 +28,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.ProfileViewModel
 
@@ -68,31 +67,36 @@ fun ProfileScreen(
     val isLandlord = userRole == "landlord"
     val roleText   = userRole.replaceFirstChar { it.uppercase() }
 
+    val primary      = MaterialTheme.colorScheme.primary
+    val onPrimary    = MaterialTheme.colorScheme.onPrimary
+    val background   = MaterialTheme.colorScheme.background
+    val surface      = MaterialTheme.colorScheme.surface
+    val onSurface    = MaterialTheme.colorScheme.onSurface
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+    val error        = MaterialTheme.colorScheme.error
+
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),  // ✅ insets zero
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = {
-                    Text("Profile", color = Color.White, fontWeight = FontWeight.Bold)
-                },
+                title = { Text("Profile", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = onPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor    = primary,
+                    titleContentColor = onPrimary
+                )
             )
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = padding.calculateTopPadding())  // ✅ sirf top padding
-                .background(Color(0xFFF2F4F7))
+                .padding(top = padding.calculateTopPadding())
+                .background(background)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -101,7 +105,7 @@ fun ProfileScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFE4E8EF))
+                    .background(surfaceVariant)
                     .padding(vertical = heroPadV),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -109,13 +113,13 @@ fun ProfileScreen(
                     modifier         = Modifier
                         .size(avatarSize)
                         .clip(CircleShape)
-                        .background(PrimaryBlue),
+                        .background(primary),
                     contentAlignment = Alignment.Center
                 ) {
                     when {
                         uiState.isLoading -> {
                             CircularProgressIndicator(
-                                color       = Color.White,
+                                color       = onPrimary,
                                 modifier    = Modifier.size(avatarSize * 0.35f),
                                 strokeWidth = 3.dp
                             )
@@ -124,9 +128,7 @@ fun ProfileScreen(
                             AsyncImage(
                                 model              = uiState.user!!.profileImageUrl,
                                 contentDescription = null,
-                                modifier           = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape),
+                                modifier           = Modifier.fillMaxSize().clip(CircleShape),
                                 contentScale       = ContentScale.Crop
                             )
                         }
@@ -135,7 +137,7 @@ fun ProfileScreen(
                                 text       = uiState.user?.initials ?: "?",
                                 fontSize   = (avatarSize.value * 0.37f).sp,
                                 fontWeight = FontWeight.Bold,
-                                color      = Color.White
+                                color      = onPrimary
                             )
                         }
                     }
@@ -144,17 +146,16 @@ fun ProfileScreen(
                 Spacer(Modifier.height(12.dp))
 
                 Text(
-                    text       = if (uiState.isLoading) "Loading..."
-                    else uiState.user?.fullName ?: "—",
+                    text       = if (uiState.isLoading) "Loading..." else uiState.user?.fullName ?: "—",
                     fontSize   = nameFontSize,
                     fontWeight = FontWeight.Bold,
-                    color      = PrimaryBlue
+                    color      = MaterialTheme.colorScheme.onBackground
                 )
 
                 Text(
                     text     = uiState.user?.email ?: "",
                     fontSize = (screenWidth * 0.032f).coerceIn(11f, 14f).sp,
-                    color    = Color.Gray
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(Modifier.height(8.dp))
@@ -162,13 +163,10 @@ fun ProfileScreen(
                 val verStatus = uiState.user?.verificationStatus?.uppercase() ?: "PENDING"
                 val (badgeColor, badgeText) = when (verStatus) {
                     "VERIFIED", "APPROVED" -> Color(0xFF4CAF50) to "Verified"
-                    "REJECTED"             -> Color(0xFFE53935) to "Rejected"
+                    "REJECTED"             -> error to "Rejected"
                     else                   -> Color(0xFFFFA726) to "Pending Verification"
                 }
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = badgeColor.copy(alpha = 0.15f)
-                ) {
+                Surface(shape = RoundedCornerShape(50), color = badgeColor.copy(alpha = 0.15f)) {
                     Text(
                         text       = badgeText,
                         modifier   = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
@@ -182,13 +180,13 @@ fun ProfileScreen(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = if (isAdmin) Color(0xFFFFD700) else Color(0xFFCDD4DF)
+                    color = if (isAdmin) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline.copy(0.3f)
                 ) {
                     Text(
                         text       = roleText,
                         modifier   = Modifier.padding(horizontal = 24.dp, vertical = 7.dp),
                         fontSize   = 13.sp,
-                        color      = PrimaryBlue,
+                        color      = primary,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -196,10 +194,7 @@ fun ProfileScreen(
 
             // ── Stats Row ─────────────────────────────────────────
             Row(
-                modifier              = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(vertical = 16.dp),
+                modifier              = Modifier.fillMaxWidth().background(surface).padding(vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
@@ -210,9 +205,10 @@ fun ProfileScreen(
                         else       -> "0"
                     },
                     label    = "Reviews",
-                    fontSize = statFontSize
+                    fontSize = statFontSize,
+                    color    = primary
                 )
-                VerticalDivider()
+                PVerticalDivider()
                 ProfileStat(
                     value = when {
                         isAdmin    -> "N/A"
@@ -220,10 +216,11 @@ fun ProfileScreen(
                         else       -> "0.0"
                     },
                     label    = "Rating",
-                    fontSize = statFontSize
+                    fontSize = statFontSize,
+                    color    = primary
                 )
-                VerticalDivider()
-                ProfileStat(value = roleText, label = "Role", fontSize = statFontSize)
+                PVerticalDivider()
+                ProfileStat(value = roleText, label = "Role", fontSize = statFontSize, color = primary)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -231,12 +228,9 @@ fun ProfileScreen(
             // ── Edit Profile Button ───────────────────────────────
             OutlinedButton(
                 onClick  = { navController.navigate(Screen.EditProfile.route) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = horizontalPadding)
-                    .height(46.dp),
-                shape  = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding).height(46.dp),
+                shape    = RoundedCornerShape(10.dp),
+                colors   = ButtonDefaults.outlinedButtonColors(contentColor = primary)
             ) {
                 Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
@@ -247,157 +241,86 @@ fun ProfileScreen(
 
             // ── Admin Menu ────────────────────────────────────────
             if (isAdmin) {
-                SectionHeader("Administration")
-                ProfileMenuItem(
-                    icon    = Icons.Default.Dashboard,
-                    label   = "Admin Dashboard",
-                    onClick = { navController.navigate("admin_dashboard") }
-                )
-                ProfileMenuItem(
-                    icon    = Icons.Default.VerifiedUser,
-                    label   = "Verification Requests",
-                    onClick = { navController.navigate("verify_users") }
-                )
-                ProfileMenuItem(
-                    icon    = Icons.Default.People,
-                    label   = "Manage Users",
-                    onClick = { navController.navigate("manage_users") }
-                )
+                PSectionHeader("Administration", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                PProfileMenuItem(icon = Icons.Default.Dashboard,    label = "Admin Dashboard",        primaryColor = primary, surfaceColor = surface, onSurfaceColor = onSurface, onClick = { navController.navigate("admin_dashboard") })
+                PProfileMenuItem(icon = Icons.Default.VerifiedUser, label = "Verification Requests",  primaryColor = primary, surfaceColor = surface, onSurfaceColor = onSurface, onClick = { navController.navigate("verify_users") })
+                PProfileMenuItem(icon = Icons.Default.People,       label = "Manage Users",           primaryColor = primary, surfaceColor = surface, onSurfaceColor = onSurface, onClick = { navController.navigate("manage_users") })
             }
 
-            // ── Account Settings ──────────────────────────────────
-            SectionHeader("Account Settings")
+            PSectionHeader("Account Settings", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             if (!isAdmin) {
-                ProfileMenuItem(
-                    icon    = Icons.Default.BookOnline,
-                    label   = "My Bookings",
-                    onClick = { navController.navigate(Screen.MyBookings.route) }
-                )
+                PProfileMenuItem(icon = Icons.Default.BookOnline, label = "My Bookings", primaryColor = primary, surfaceColor = surface, onSurfaceColor = onSurface, onClick = { navController.navigate(Screen.MyBookings.route) })
             }
             if (isLandlord) {
-                ProfileMenuItem(
-                    icon    = Icons.Default.Home,
-                    label   = "My Properties",
-                    onClick = { navController.navigate(Screen.MyProperties.route) }
-                )
+                PProfileMenuItem(icon = Icons.Default.Home, label = "My Properties", primaryColor = primary, surfaceColor = surface, onSurfaceColor = onSurface, onClick = { navController.navigate(Screen.MyProperties.route) })
             }
-            ProfileMenuItem(
-                icon    = Icons.Default.Settings,
-                label   = "Settings",
-                onClick = { navController.navigate(Screen.Settings.route) }
-            )
-            ProfileMenuItem(
-                icon    = Icons.AutoMirrored.Filled.HelpOutline,
-                label   = "Help & Support",
-                onClick = { navController.navigate(Screen.HelpAndSupport.route) }
-            )
+            PProfileMenuItem(icon = Icons.Default.Settings,                   label = "Settings",       primaryColor = primary, surfaceColor = surface, onSurfaceColor = onSurface, onClick = { navController.navigate(Screen.Settings.route) })
+            PProfileMenuItem(icon = Icons.AutoMirrored.Filled.HelpOutline,    label = "Help & Support", primaryColor = primary, surfaceColor = surface, onSurfaceColor = onSurface, onClick = { navController.navigate(Screen.HelpAndSupport.route) })
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Logout Button ─────────────────────────────────────
             Button(
                 onClick  = { authViewModel.signOut() },
-                colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = horizontalPadding),
-                shape = RoundedCornerShape(10.dp)
+                colors   = ButtonDefaults.buttonColors(containerColor = error),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
+                shape    = RoundedCornerShape(10.dp)
             ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.Logout, null, tint = onPrimary)
                 Spacer(Modifier.width(8.dp))
-                Text("Logout", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Logout", color = onPrimary, fontWeight = FontWeight.SemiBold)
             }
 
-            // ✅ Bottom nav bar ke liye space
             Spacer(Modifier.height(80.dp))
         }
     }
 }
 
-// ── Helper Composables ────────────────────────────────────────────
-
 @Composable
-private fun SectionHeader(title: String) {
+private fun PSectionHeader(title: String, color: Color) {
     Text(
         text       = title,
-        modifier   = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier   = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         fontSize   = 12.sp,
         fontWeight = FontWeight.Bold,
-        color      = Color.Gray
+        color      = color
     )
 }
 
 @Composable
-private fun ProfileStat(
-    value   : String,
-    label   : String,
-    fontSize: TextUnit
-) {
+private fun ProfileStat(value: String, label: String, fontSize: TextUnit, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text       = value,
-            fontSize   = fontSize,
-            fontWeight = FontWeight.Bold,
-            color      = PrimaryBlue
-        )
-        Text(
-            text     = label,
-            fontSize = 12.sp,
-            color    = Color.Gray
-        )
+        Text(text = value, fontSize = fontSize, fontWeight = FontWeight.Bold, color = color)
+        Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-private fun VerticalDivider() {
-    Box(
-        modifier = Modifier
-            .width(1.dp)
-            .height(30.dp)
-            .background(Color.LightGray)
-    )
+private fun PVerticalDivider() {
+    Box(modifier = Modifier.width(1.dp).height(30.dp).background(MaterialTheme.colorScheme.outline.copy(0.4f)))
 }
 
 @Composable
-private fun ProfileMenuItem(
-    icon   : ImageVector,
-    label  : String,
-    onClick: () -> Unit
+private fun PProfileMenuItem(
+    icon          : ImageVector,
+    label         : String,
+    primaryColor  : Color,
+    surfaceColor  : Color,
+    onSurfaceColor: Color,
+    onClick       : () -> Unit
 ) {
-    Surface(
-        onClick  = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        color    = Color.White
-    ) {
+    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth(), color = surfaceColor) {
         Column {
             Row(
-                modifier          = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                modifier          = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    icon, null,
-                    tint     = PrimaryBlue,
-                    modifier = Modifier.size(22.dp)
-                )
+                Icon(icon, null, tint = primaryColor, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(16.dp))
-                Text(
-                    label,
-                    fontSize = 15.sp,
-                    color    = Color.DarkGray,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    Icons.Default.ChevronRight, null,
-                    tint     = Color.LightGray,
-                    modifier = Modifier.size(20.dp)
-                )
+                Text(label, fontSize = 15.sp, color = onSurfaceColor, modifier = Modifier.weight(1f))
+                Icon(Icons.Default.ChevronRight, null, tint = onSurfaceColor.copy(0.4f), modifier = Modifier.size(20.dp))
             }
-            HorizontalDivider(color = Color(0xFFF1F1F1), thickness = 1.dp)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.15f), thickness = 1.dp)
         }
     }
 }

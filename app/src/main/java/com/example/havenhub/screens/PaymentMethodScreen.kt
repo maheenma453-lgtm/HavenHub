@@ -11,25 +11,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.havenhub.data.PaymentMethod
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.PaymentViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentMethodScreen(
     navController: NavController,
-    viewModel: PaymentViewModel = hiltViewModel()
+    viewModel    : PaymentViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Available payment methods list
     val methods = remember {
         listOf(
             PaymentMethod.JAZZCASH,
@@ -51,26 +48,25 @@ fun PaymentMethodScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryBlue,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor             = MaterialTheme.colorScheme.primary,
+                    titleContentColor          = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
 
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = PrimaryBlue)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             return@Scaffold
         }
 
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier            = Modifier.fillMaxSize().padding(padding),
+            contentPadding      = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -78,7 +74,7 @@ fun PaymentMethodScreen(
                     "Select Payment Method",
                     fontWeight = FontWeight.SemiBold,
                     fontSize   = 14.sp,
-                    color      = TextSecondary
+                    color      = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(4.dp))
             }
@@ -91,25 +87,25 @@ fun PaymentMethodScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(12.dp),
                     colors   = CardDefaults.cardColors(
-                        containerColor = if (isDefault) PrimaryBlue.copy(alpha = 0.1f)
-                        else SurfaceVariantLight
+                        containerColor = if (isDefault)
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
                     Row(
-                        modifier          = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier          = Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = when (method) {
                                 PaymentMethod.CREDIT_CARD,
-                                PaymentMethod.DEBIT_CARD   -> Icons.Default.CreditCard
+                                PaymentMethod.DEBIT_CARD    -> Icons.Default.CreditCard
                                 PaymentMethod.BANK_TRANSFER -> Icons.Default.AccountBalance
                                 else                        -> Icons.Default.Payment
                             },
                             contentDescription = null,
-                            tint     = PrimaryBlue,
+                            tint     = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(28.dp)
                         )
                         Spacer(Modifier.width(12.dp))
@@ -118,36 +114,45 @@ fun PaymentMethodScreen(
                                 method.displayName(),
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize   = 14.sp,
-                                color      = TextPrimary
+                                color      = MaterialTheme.colorScheme.onSurface
                             )
                             if (isDefault) {
                                 Text(
                                     "Default",
                                     fontSize   = 11.sp,
-                                    color      = PrimaryBlue,
+                                    color      = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
                         }
                         if (!isDefault) {
                             TextButton(onClick = { viewModel.setDefaultMethod(method) }) {
-                                Text("Set Default", fontSize = 12.sp, color = PrimaryBlue)
+                                Text(
+                                    "Set Default",
+                                    fontSize = 12.sp,
+                                    color    = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                         RadioButton(
                             selected = isSelected,
                             onClick  = { viewModel.selectPaymentMethod(method) },
-                            colors   = RadioButtonDefaults.colors(selectedColor = PrimaryBlue)
+                            colors   = RadioButtonDefaults.colors(
+                                selectedColor = MaterialTheme.colorScheme.primary
+                            )
                         )
                     }
                 }
             }
 
-            // Error Message
             item {
                 uiState.errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
-                    Text(text = error, color = ErrorRed, fontSize = 14.sp)
+                    Text(
+                        text  = error,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 14.sp
+                    )
                 }
             }
         }
