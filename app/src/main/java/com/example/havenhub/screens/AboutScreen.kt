@@ -1,6 +1,7 @@
 package com.example.havenhub.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +25,21 @@ import com.example.havenhub.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(navController: NavController) {
+
+    // ── Dark / Light theme detection ──────────────────────────────
+    val isDark = isSystemInDarkTheme()
+
+    // Theme-aware color tokens
+    val screenBg    = if (isDark) DarkBg           else Color(0xFFF5F7FA)
+    val cardBg      = if (isDark) DarkSurface       else Color.White
+    val textPrimary = if (isDark) DarkTextPrimary   else TextPrimary
+    val textSecond  = if (isDark) DarkTextSecondary else TextSecondary
+    val dividerCol  = if (isDark) DarkBorder        else BorderGray
+    val iconBg      = if (isDark) DarkBgElevated    else PrimaryBlue
+    val topBarBg    = if (isDark) DarkBgSecondary   else PrimaryBlue
+
     Scaffold(
+        containerColor = screenBg,
         topBar = {
             TopAppBar(
                 title = { Text("About", fontWeight = FontWeight.Bold) },
@@ -34,7 +49,7 @@ fun AboutScreen(navController: NavController) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = PrimaryBlue,
+                    containerColor             = topBarBg,
                     titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White
                 )
@@ -52,48 +67,80 @@ fun AboutScreen(navController: NavController) {
         ) {
             Spacer(Modifier.height(8.dp))
 
-            // App Logo
+            // ── App Logo ──────────────────────────────────────────
             Box(
                 modifier         = Modifier
                     .size(90.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(PrimaryBlue),
+                    .background(iconBg),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Home, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(
+                    Icons.Default.Home,
+                    contentDescription = null,
+                    tint     = if (isDark) DarkGoldPrimary else Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
             }
 
-            Text("HavenHub", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text("Version 1.0.0", fontSize = 13.sp, color = TextSecondary)
+            // ── App Name & Version ────────────────────────────────
+            Text(
+                "HavenHub",
+                fontSize   = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color      = textPrimary
+            )
+            Text(
+                "Version 1.0.0",
+                fontSize = 13.sp,
+                color    = textSecond
+            )
             Text(
                 "HavenHub is a modern property rental platform connecting tenants with property owners across Pakistan.",
                 fontSize   = 14.sp,
-                color      = TextSecondary,
+                color      = textSecond,
                 textAlign  = TextAlign.Center,
                 lineHeight = 22.sp
             )
 
-            HorizontalDivider(color = BorderGray)
+            HorizontalDivider(color = dividerCol)
 
-            // App Info
+            // ── App Info Group ────────────────────────────────────
             SettingsGroup(title = "App Info") {
-                SettingsItem(icon = Icons.Default.Code,    label = "Version",      subtitle = "1.0.0 (Build 100)", onClick = {})
-                SettingsItem(icon = Icons.Default.Update,  label = "Last Updated", subtitle = "November 2024",     onClick = {})
-                SettingsItem(icon = Icons.Default.Android, label = "Platform",     subtitle = "Android",           onClick = {})
+                SettingsItem(
+                    icon     = Icons.Default.Code,
+                    label    = "Version",
+                    subtitle = "1.0.0 (Build 100)",
+                    onClick  = {}
+                )
+                SettingsItem(
+                    icon     = Icons.Default.Update,
+                    label    = "Last Updated",
+                    subtitle = "November 2024",
+                    onClick  = {}
+                )
+                SettingsItem(
+                    icon     = Icons.Default.Android,
+                    label    = "Platform",
+                    subtitle = "Android",
+                    onClick  = {}
+                )
             }
 
-            // Legal
+            // ── Legal Group ───────────────────────────────────────
             SettingsGroup(title = "Legal") {
-                SettingsItem(icon = Icons.Default.Policy,    label = "Privacy Policy",  onClick = {})
-                SettingsItem(icon = Icons.Default.Gavel,     label = "Terms of Service",onClick = {})
-                SettingsItem(icon = Icons.Default.Copyright, label = "Licenses",        onClick = {})
+                SettingsItem(icon = Icons.Default.Policy,    label = "Privacy Policy",   onClick = {})
+                SettingsItem(icon = Icons.Default.Gavel,     label = "Terms of Service", onClick = {})
+                SettingsItem(icon = Icons.Default.Copyright, label = "Licenses",          onClick = {})
             }
 
             Spacer(Modifier.height(8.dp))
+
+            // ── Copyright ─────────────────────────────────────────
             Text(
                 "© 2024 HavenHub. All rights reserved.",
                 fontSize  = 12.sp,
-                color     = TextSecondary,
+                color     = textSecond,
                 textAlign = TextAlign.Center
             )
         }

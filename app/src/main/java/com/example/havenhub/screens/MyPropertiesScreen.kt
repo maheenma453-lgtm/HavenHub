@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,6 +26,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
+import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.PropertyViewModel
 
 // Semantic status colors — intentional, not themed
@@ -44,12 +47,11 @@ fun MyPropertiesScreen(
 
     LaunchedEffect(Unit) { viewModel.loadMyProperties() }
 
-    val primary      = MaterialTheme.colorScheme.primary
-    val onPrimary    = MaterialTheme.colorScheme.onPrimary
-    val background   = MaterialTheme.colorScheme.background
-    val onBackground = MaterialTheme.colorScheme.onBackground          // ✅ Fixed
-    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant  // ✅ Kept (used)
-    // Removed unused: tertiary, surface, onSurface                    // ✅ Cleaned
+    val primary          = MaterialTheme.colorScheme.primary
+    val onPrimary        = MaterialTheme.colorScheme.onPrimary
+    val background       = MaterialTheme.colorScheme.background
+    val onBackground     = MaterialTheme.colorScheme.onBackground
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
 
     Scaffold(
         topBar = {
@@ -109,7 +111,7 @@ fun MyPropertiesScreen(
                             "No properties yet",
                             fontSize   = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color      = onBackground  // ✅ Fixed: was unresolved
+                            color      = onBackground
                         )
                     }
                 }
@@ -190,31 +192,41 @@ fun MyPropertyCard(
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column {
-            Box(modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
             ) {
-                val imageUrl = property.imageUrls.firstOrNull()
+                // ✦ FIX: Pehle remote URL check karo, agar nahi toh drawable fallback
+                // Exactly wahi logic jo HomeScreen aur PropertyDetailScreen mein use hota hai
+                val remoteUrl = property.imageUrls.firstOrNull { it.isNotBlank() }
 
-                if (imageUrl != null) {
-                    AsyncImage(
-                        model              = imageUrl,
-                        contentDescription = property.title,
-                        modifier           = Modifier.fillMaxSize(),
-                        contentScale       = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier         = Modifier
-                            .fillMaxSize()
-                            .background(onSurfaceVariant.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Home,
-                            contentDescription = null,
-                            modifier           = Modifier.size(48.dp),
-                            tint               = onSurfaceVariant.copy(alpha = 0.5f)
+                when {
+                    // Case 1: ImgBB ya koi bhi remote URL available hai → Coil se load karo
+                    !remoteUrl.isNullOrEmpty() -> {
+                        AsyncImage(
+                            model              = remoteUrl,
+                            contentDescription = property.title,
+                            modifier           = Modifier.fillMaxSize(),
+                            contentScale       = ContentScale.Crop
+                        )
+                    }
+
+                    // Case 2: Remote URL nahi, drawable name ya propertyId se local image load karo
+                    // drawableImageName → resolvedDrawableName → propertyId — isi order mein try karo
+                    else -> {
+                        val drawableRes = getPropertyImage(
+                            property.drawableImageName.ifEmpty {
+                                property.resolvedDrawableName.ifEmpty {
+                                    property.propertyId
+                                }
+                            }
+                        )
+                        Image(
+                            painter            = painterResource(id = drawableRes),
+                            contentDescription = property.title,
+                            modifier           = Modifier.fillMaxSize(),
+                            contentScale       = ContentScale.Crop
                         )
                     }
                 }
@@ -299,7 +311,7 @@ fun MyPropertyCard(
 
                 // Edit / Delete buttons
                 Row(
-                    modifier            = Modifier.fillMaxWidth(),
+                    modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(

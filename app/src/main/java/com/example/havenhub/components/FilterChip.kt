@@ -1,5 +1,6 @@
 package com.example.havenhub.components
-import  androidx.compose.foundation.horizontalScroll
+
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -54,10 +55,13 @@ fun HavenFilterChip(
             }
             else -> null
         },
-        shape = MaterialTheme.shapes.extraLarge,
+        // ✅ CRASH FIX: shape = MaterialTheme.shapes.extraLarge HATA DIYA
+        // compose-bom:2024.09.00 mein FilterChip ka shape parameter
+        // internally border ke saath conflict karta hai — INSTANT CRASH hoti hai
+        // Default shape (RoundedCornerShape 8dp) theek kaam karta hai
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+            selectedContainerColor  = MaterialTheme.colorScheme.primary,
+            selectedLabelColor      = MaterialTheme.colorScheme.onPrimary,
             selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
         ),
         modifier = modifier
@@ -129,4 +133,3 @@ fun MultiSelectFilterChipRow(
         }
     }
 }
-

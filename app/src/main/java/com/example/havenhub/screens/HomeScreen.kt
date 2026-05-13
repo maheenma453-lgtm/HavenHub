@@ -120,11 +120,33 @@ fun HomeScreen(
     val authState  by authViewModel.uiState.collectAsState()
     val vacUiState by vacationViewModel.uiState.collectAsState()
 
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+
+    // ════════════════════════════════════════════════════════════════
+    // BUG FIX: isAuthReady check — jab tak Firebase se role nahi aaya
+    // tab tak TenantScreen bilkul nahi dikhegi. Ek simple loading
+    // spinner dikhao aur wait karo. Yahi "Tenant flash" ka root cause tha.
+    // ════════════════════════════════════════════════════════════════
+    if (!authState.isAuthReady) {
+        val bgColor = if (isDark) D_BgDeep else PageBg
+        val spinnerColor = if (isDark) D_GoldPrimary else GoldPrime
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(bgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                color            = spinnerColor,
+                strokeWidth      = 3.dp,
+                modifier         = Modifier.size(40.dp)
+            )
+        }
+        return // yahan se wapas — koi bhi screen render nahi hogi
+    }
+
     val userRole = authState.userRole.lowercase().trim()
     val userId   = authState.currentUser?.uid ?: ""
-
-    // Detect dark theme
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
 
     LaunchedEffect(userId, userRole) {
         when {
@@ -195,7 +217,6 @@ private fun LandlordHomeScreen(
     uiState      : HomeUiState,
     isDark       : Boolean = false
 ) {
-    // Theme-aware tokens
     val pageBg        = if (isDark) D_BgDeep      else PageBg
     val headerGrad    = if (isDark) D_NavyGradient else NavyGradient
     val goldBorder    = if (isDark) D_GoldBorderBrush else GoldBorderBrush
@@ -239,7 +260,6 @@ private fun LandlordHomeScreen(
         // ── 1. HEADER ─────────────────────────────────────────────
         item {
             Box(modifier = Modifier.fillMaxWidth().background(headerGrad)) {
-                // Decorative circles
                 Box(
                     Modifier.size(200.dp).align(Alignment.TopEnd)
                         .offset(x = 70.dp, y = (-70).dp).clip(CircleShape)
@@ -250,7 +270,6 @@ private fun LandlordHomeScreen(
                         .offset(x = (-30).dp, y = 40.dp).clip(CircleShape)
                         .background(goldP.copy(alpha = 0.04f))
                 )
-                // Gold bottom border line
                 Box(
                     Modifier.fillMaxWidth().height(2.dp)
                         .align(Alignment.BottomCenter).background(goldBorder)
@@ -285,7 +304,6 @@ private fun LandlordHomeScreen(
                                 fontSize = 12.sp
                             )
                         }
-                        // Notification bell with badge
                         Box(
                             modifier = Modifier.size(50.dp)
                                 .clickable { navController.navigate(Screen.Notifications.route) }
@@ -322,7 +340,6 @@ private fun LandlordHomeScreen(
 
                     Spacer(Modifier.height(22.dp))
 
-                    // Stats strip — 3 cards
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         LandlordStatCard(
                             icon       = Icons.Default.People,
@@ -479,7 +496,6 @@ private fun LandlordHomeScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Add new property
                 Box(
                     modifier = Modifier
                         .fillMaxWidth().height(80.dp)
@@ -530,7 +546,6 @@ private fun LandlordHomeScreen(
                     }
                 }
 
-                // Active bookings + my properties row
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
                         modifier = Modifier
@@ -807,7 +822,6 @@ private fun PremiumLandlordPropertyCard(
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box {
-                // Availability indicator bar
                 Box(
                     Modifier.width(4.dp).height(88.dp).align(Alignment.CenterStart)
                         .clip(RoundedCornerShape(2.dp))
@@ -919,7 +933,6 @@ private fun TenantHomeScreen(
     val featScrollState  = rememberScrollState()
     val scope            = rememberCoroutineScope()
 
-    // Theme-aware tokens
     val pageBg   = if (isDark) D_BgDeep      else PageBg
     val cardBg   = if (isDark) D_BgCard      else CardWhite
     val navyP    = if (isDark) D_TextPrimary  else NavyPrime
@@ -953,7 +966,6 @@ private fun TenantHomeScreen(
             )
         }
 
-        // ── Category filter ──────────────────────────────────────
         item {
             Spacer(Modifier.height(22.dp))
             Row(
@@ -1020,7 +1032,6 @@ private fun TenantHomeScreen(
             }
         }
 
-        // ── Featured properties ──────────────────────────────────
         item {
             Spacer(Modifier.height(28.dp))
             Row(
@@ -1086,7 +1097,6 @@ private fun TenantHomeScreen(
                             onClick     = { navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId)) }
                         )
                     }
-                    // See all card
                     Card(
                         Modifier.width(160.dp).height(260.dp)
                             .clickable { navController.navigate(Screen.PropertyList.route) },
@@ -1110,7 +1120,6 @@ private fun TenantHomeScreen(
             }
         }
 
-        // ── Vacation banner ──────────────────────────────────────
         item {
             Spacer(Modifier.height(22.dp))
             val bannerGrad = if (isDark)
@@ -1180,7 +1189,6 @@ private fun TenantHomeScreen(
             }
         }
 
-        // ── Nearby stays ─────────────────────────────────────────
         item {
             Spacer(Modifier.height(26.dp))
             Row(
@@ -1250,10 +1258,8 @@ fun HomeHeaderSection(
     val searchBtn  = if (isDark) D_BgSecondary else NavyPrime
 
     Box(modifier = Modifier.fillMaxWidth().background(headerGrad)) {
-        // Decorative circles
         Box(Modifier.size(160.dp).align(Alignment.TopEnd).offset(x = 50.dp, y = (-50).dp).clip(CircleShape).background(goldP.copy(0.06f)))
         Box(Modifier.size(80.dp).align(Alignment.BottomStart).offset(x = (-20).dp, y = 20.dp).clip(CircleShape).background(goldP.copy(0.04f)))
-        // Gold bottom border
         Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter).background(goldBorder))
 
         Column(
@@ -1292,7 +1298,6 @@ fun HomeHeaderSection(
                 }
             }
             Spacer(Modifier.height(22.dp))
-            // Search bar
             Box(
                 Modifier.fillMaxWidth().height(52.dp)
                     .clip(RoundedCornerShape(14.dp))
@@ -1355,17 +1360,12 @@ fun FeaturedPropertyCard(
         elevation = CardDefaults.cardElevation(if (isDark) 0.dp else 6.dp)
     ) {
         if (isDark) {
-            // Dark border around card
-            Box(
-                Modifier.fillMaxWidth().height(1.dp)
-                    .background(D_GoldBorderBrush)
-            )
+            Box(Modifier.fillMaxWidth().height(1.dp).background(D_GoldBorderBrush))
         }
         Column {
             Box(Modifier.fillMaxWidth().height(155.dp)) {
                 PropertyImage(property = property, modifier = Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.45f)))))
-                // Fav button
                 Box(
                     Modifier.align(Alignment.TopEnd).padding(9.dp).size(32.dp)
                         .clip(CircleShape).background(Color.Black.copy(0.35f))
@@ -1379,7 +1379,6 @@ fun FeaturedPropertyCard(
                         modifier = Modifier.size(17.dp)
                     )
                 }
-                // Price badge
                 Box(
                     Modifier.align(Alignment.TopStart).padding(10.dp)
                         .clip(RoundedCornerShape(10.dp))
@@ -1393,7 +1392,6 @@ fun FeaturedPropertyCard(
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
-                // Type badge
                 Box(
                     Modifier.align(Alignment.BottomStart).padding(10.dp)
                         .clip(RoundedCornerShape(6.dp))
@@ -1558,28 +1556,3 @@ fun LoadingShimmer(isDark: Boolean = false) {
         CircularProgressIndicator(color = if (isDark) D_GoldPrimary else GoldPrime)
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

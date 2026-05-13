@@ -25,21 +25,41 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.example.havenhub.data.User
 import com.example.havenhub.viewmodel.ManagementViewModel
 
-// Semantic status colors — intentional
 private val GreenOk = Color(0xFF27AE60)
 private val RedErr  = Color(0xFFE74C3C)
 
 private const val SUPER_ADMIN_EMAIL = "admin@havenhub.com"
 
-// ✅ FIX: role String ko display-friendly naam mein convert karne ka helper
-private fun roleDisplayName(role: String): String {
-    return when (role.uppercase().trim()) {
-        "TENANT"   -> "Tenant"
-        "LANDLORD" -> "Landlord"
-        "ADMIN"    -> "Admin"
-        else       -> role.lowercase().replaceFirstChar { it.uppercase() }
+// ✅ Role ko lowercase trim karke normalize karo
+// Firebase mein "TENANT", "tenant", "Tenant" — sab handle hoga
+private fun normalizeRole(role: String?): String {
+    if (role.isNullOrBlank()) return "user"
+    return role.trim().lowercase()
+}
+
+private fun roleDisplayName(role: String?): String {
+    return when (normalizeRole(role)) {
+        "tenant"   -> "Tenant"
+        "landlord" -> "Landlord"
+        "admin"    -> "Admin"
+        else       -> if (!role.isNullOrBlank()) role.trim() else "User"
+    }
+}
+
+private fun getUserRole(user: User): String {
+    return roleDisplayName(user.role)
+}
+
+// ✅ FIX: Stable unique key banao har user ke liye
+// Pehle hashCode() use ho raha tha jo recomposition pe change hota tha → LazyColumn crash
+private fun stableUserKey(user: User, index: Int): String {
+    return when {
+        user.userId.isNotBlank()  -> "uid_${user.userId}"
+        user.email.isNotBlank()   -> "email_${user.email}"
+        else                      -> "idx_$index"  // index-based fallback — stable per session
     }
 }
 
@@ -61,13 +81,24 @@ fun ManageUsersScreen(
     val onSurface        = MaterialTheme.colorScheme.onSurface
     val background       = MaterialTheme.colorScheme.background
 
-    // ✅ FIX: user.userRole.displayName() ki jagah user.role use karo
-    val filteredUsers = remember(uiState.users, searchQuery, selectedRole) {
-        uiState.users.filter { user ->
-            val matchesSearch = user.fullName.contains(searchQuery, ignoreCase = true) ||
-                    user.email.contains(searchQuery, ignoreCase = true)
+    // ✅ FIX: Users ki list index ke saath zip karo taake stable key mil sake
+    val indexedUsers = remember(uiState.users) {
+        uiState.users.mapIndexed { index, user -> Pair(index, user) }
+    }
+
+    // ✅ FIX: Filter stable indexedUsers se karo
+    val filteredIndexedUsers = remember(indexedUsers, searchQuery, selectedRole) {
+        indexedUsers.filter { (_, user) ->
+            val name  = user.fullName.orEmpty()
+            val email = user.email.orEmpty()
+
+            val matchesSearch = searchQuery.isBlank() ||
+                    name.contains(searchQuery, ignoreCase = true) ||
+                    email.contains(searchQuery, ignoreCase = true)
+
             val matchesRole = selectedRole == "All" ||
-                    roleDisplayName(user.role) == selectedRole
+                    normalizeRole(user.role) == selectedRole.lowercase()
+
             matchesSearch && matchesRole
         }
     }
@@ -94,9 +125,9 @@ fun ManageUsersScreen(
                     Column {
                         Text(
                             "Manage Users",
-                            color      = onPrimary,
-                            fontSize   = 20.sp,
-                            fontWeight = FontWeight.Bold,
+                            color         = onPrimary,
+                            fontSize      = 20.sp,
+                            fontWeight    = FontWeight.Bold,
                             letterSpacing = 0.3.sp
                         )
                         Text(
@@ -106,7 +137,6 @@ fun ManageUsersScreen(
                         )
                     }
                 }
-                // Gold shimmer line
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -124,7 +154,6 @@ fun ManageUsersScreen(
 
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-            // ── Search + Role filter banner ───────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -157,7 +186,9 @@ fun ManageUsersScreen(
                         )
                     )
 
-                    // Role filter chips
+                    // ✅ FIX: FilterChip mein border parameter bilkul nahi dena
+                    // compose-bom 2024.x mein FilterChipDefaults.filterChipBorder()
+                    // ka signature change ho gaya — click par INSTANT CRASH deta tha
                     val roles = listOf("All", "Tenant", "Landlord", "Admin")
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(roles) { role ->
@@ -175,24 +206,16 @@ fun ManageUsersScreen(
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = tertiary,
                                     selectedLabelColor     = onPrimary,
-                                    containerColor         = onPrimary.copy(0.12f),
+                                    containerColor         = onPrimary.copy(alpha = 0.12f),
                                     labelColor             = onPrimary
-                                ),
-                                border = FilterChipDefaults.filterChipBorder(
-                                    enabled             = true,
-                                    selected            = selected,
-                                    selectedBorderColor = tertiary,
-                                    borderColor         = onPrimary.copy(0.25f),
-                                    selectedBorderWidth = 1.5.dp,
-                                    borderWidth         = 1.dp
                                 )
+                                // ❌ border = ... — mat dena — crash karega
                             )
                         }
                     }
                 }
             }
 
-            // ── Content ───────────────────────────────────────────────────────
             when {
                 uiState.isLoading -> {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -207,8 +230,7 @@ fun ManageUsersScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
-                                Icons.Default.ErrorOutline,
-                                null,
+                                Icons.Default.ErrorOutline, null,
                                 tint     = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(48.dp)
                             )
@@ -228,12 +250,39 @@ fun ManageUsersScreen(
                     }
                 }
 
+                filteredIndexedUsers.isEmpty() && uiState.users.isNotEmpty() -> {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.SearchOff, null,
+                                tint     = tertiary.copy(alpha = 0.5f),
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                if (searchQuery.isBlank())
+                                    "No \"$selectedRole\" users found"
+                                else
+                                    "No users match your search",
+                                color    = onSurface.copy(alpha = 0.5f),
+                                fontSize = 14.sp
+                            )
+                            if (selectedRole != "All") {
+                                TextButton(onClick = { selectedRole = "All" }) {
+                                    Text("Show all users", color = tertiary, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 else -> {
                     LazyColumn(
                         contentPadding      = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Count banner
                         item {
                             Box(
                                 modifier = Modifier
@@ -261,7 +310,7 @@ fun ManageUsersScreen(
                                             .background(tertiary)
                                     )
                                     Text(
-                                        "${filteredUsers.size} user${if (filteredUsers.size != 1) "s" else ""} found",
+                                        "${filteredIndexedUsers.size} user${if (filteredIndexedUsers.size != 1) "s" else ""} found",
                                         fontSize   = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color      = tertiary
@@ -270,13 +319,17 @@ fun ManageUsersScreen(
                             }
                         }
 
-                        // ✅ FIX: user.userRole ki jagah user.role use karo
-                        items(filteredUsers, key = { it.userId }) { user ->
+                        // ✅ FIX: key = stableUserKey() — hashCode() ki jagah stable string key
+                        // hashCode() recomposition par change hota tha → LazyColumn item mismatch → CRASH
+                        items(
+                            items = filteredIndexedUsers,
+                            key   = { (index, user) -> stableUserKey(user, index) }
+                        ) { (index, user) ->
                             val isSuperAdmin = user.email.equals(SUPER_ADMIN_EMAIL, ignoreCase = true)
                             MUPremiumUserCard(
-                                fullName     = user.fullName,
-                                email        = user.email,
-                                role         = roleDisplayName(user.role),   // ✅ FIXED
+                                fullName     = user.fullName.ifBlank { "Unknown User" },
+                                email        = user.email.ifBlank { "No email" },
+                                role         = getUserRole(user),
                                 isVerified   = user.isVerified,
                                 isBanned     = user.isBanned,
                                 isSuperAdmin = isSuperAdmin,
@@ -284,8 +337,12 @@ fun ManageUsersScreen(
                                 tertiary     = tertiary,
                                 surface      = surface,
                                 onSurface    = onSurface,
-                                onBan        = { viewModel.banUser(user.userId) },
-                                onUnban      = { viewModel.unbanUser(user.userId) }
+                                onBan        = {
+                                    if (user.userId.isNotBlank()) viewModel.banUser(user.userId)
+                                },
+                                onUnban      = {
+                                    if (user.userId.isNotBlank()) viewModel.unbanUser(user.userId)
+                                }
                             )
                         }
                     }
@@ -295,7 +352,6 @@ fun ManageUsersScreen(
     }
 }
 
-// ── User Card ─────────────────────────────────────────────────────────────────
 @Composable
 private fun MUPremiumUserCard(
     fullName    : String,
@@ -316,15 +372,15 @@ private fun MUPremiumUserCard(
     val roleColor = when (role.lowercase()) {
         "admin"    -> Color(0xFF6A1B9A)
         "landlord" -> primary
-        else       -> Color(0xFF00796B)
+        "tenant"   -> Color(0xFF00796B)
+        else       -> Color(0xFF546E7A)
     }
 
     Card(
         modifier  = Modifier
             .fillMaxWidth()
             .shadow(
-                4.dp,
-                RoundedCornerShape(16.dp),
+                4.dp, RoundedCornerShape(16.dp),
                 ambientColor = primary.copy(0.08f),
                 spotColor    = primary.copy(0.12f)
             ),
@@ -334,7 +390,6 @@ private fun MUPremiumUserCard(
         ),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
-        // Top accent bar
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -354,7 +409,6 @@ private fun MUPremiumUserCard(
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Avatar circle
             Box(
                 modifier = Modifier
                     .size(50.dp)
@@ -369,15 +423,13 @@ private fun MUPremiumUserCard(
             ) {
                 if (isSuperAdmin) {
                     Icon(
-                        Icons.Default.Shield,
-                        null,
+                        Icons.Default.Shield, null,
                         tint     = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
-                    // ✅ FIX: safe null-check with orEmpty()
                     Text(
-                        fullName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                        fullName.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "?",
                         fontSize   = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color      = tertiary
@@ -386,7 +438,6 @@ private fun MUPremiumUserCard(
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                // Name + super admin badge
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -427,7 +478,6 @@ private fun MUPremiumUserCard(
                 )
                 Spacer(Modifier.height(8.dp))
 
-                // Role / Verified / Banned badges
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(
                         color    = roleColor.copy(0.10f),
@@ -435,7 +485,7 @@ private fun MUPremiumUserCard(
                         modifier = Modifier.border(1.dp, roleColor.copy(0.3f), RoundedCornerShape(20.dp))
                     ) {
                         Text(
-                            role,
+                            role.ifBlank { "User" },
                             fontSize   = 11.sp,
                             color      = roleColor,
                             fontWeight = FontWeight.SemiBold,
@@ -488,7 +538,6 @@ private fun MUPremiumUserCard(
                 }
             }
 
-            // 3-dot menu (not shown for super admin)
             if (!isSuperAdmin) {
                 Box {
                     IconButton(
@@ -498,12 +547,16 @@ private fun MUPremiumUserCard(
                             .clip(CircleShape)
                             .background(primary.copy(0.06f))
                     ) {
-                        Icon(Icons.Default.MoreVert, null, tint = onSurface, modifier = Modifier.size(20.dp))
+                        Icon(
+                            Icons.Default.MoreVert, null,
+                            tint     = onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                     DropdownMenu(
-                        expanded          = menuExpanded,
-                        onDismissRequest  = { menuExpanded = false },
-                        modifier          = Modifier
+                        expanded         = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        modifier         = Modifier
                             .background(surface)
                             .width(160.dp)
                     ) {
@@ -556,3 +609,12 @@ private fun MUPremiumUserCard(
         }
     }
 }
+
+
+
+
+
+
+
+
+

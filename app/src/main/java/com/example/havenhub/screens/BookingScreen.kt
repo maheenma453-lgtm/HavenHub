@@ -2,6 +2,7 @@ package com.example.havenhub.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,17 +35,31 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingScreen(
-    navController: NavController,
-    propertyId: String,
-    viewModel: BookingViewModel = hiltViewModel(),
+    navController    : NavController,
+    propertyId       : String,
+    viewModel        : BookingViewModel  = hiltViewModel(),
     propertyViewModel: PropertyViewModel = hiltViewModel(),
-    authViewModel: AuthViewModel = hiltViewModel()
+    authViewModel    : AuthViewModel     = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState     by viewModel.uiState.collectAsState()
     val authUiState by authViewModel.uiState.collectAsState()
     val propUiState by propertyViewModel.uiState.collectAsState()
 
-    val currentUid = authUiState.currentUser?.uid ?: ""
+    // ── Dark / Light theme detection ──────────────────────────────
+    val isDark = isSystemInDarkTheme()
+
+    // Theme-aware color tokens
+    val screenBg    = if (isDark) DarkBg           else Color(0xFFF5F7FA)
+    val cardBg      = if (isDark) DarkSurface       else Color.White
+    val navyColor   = if (isDark) DarkBgSecondary   else Color(0xFF0D1B3E)
+    val goldColor   = if (isDark) DarkGoldPrimary   else Color(0xFFD4AF37)
+    val textPrimary = if (isDark) DarkTextPrimary   else Color(0xFF0D1B3E)
+    val textSecond  = if (isDark) DarkTextSecondary else Color(0xFF8899AA)
+    val hintColor   = if (isDark) DarkTextSecondary else Color(0xFF8899AA)
+    val categoryBg  = if (isDark) DarkBgElevated    else Color(0xFFF5F7FA)
+    val dividerCol  = if (isDark) DarkBorder        else Color.White.copy(0.2f)
+
+    val currentUid  = authUiState.currentUser?.uid         ?: ""
     val currentName = authUiState.currentUser?.displayName ?: ""
 
     LaunchedEffect(propertyId) {
@@ -53,36 +68,35 @@ fun BookingScreen(
 
     val property = propUiState.propertyDetail
 
-    var selectedDuration by remember { mutableStateOf("Daily") }
-    var nights by remember { mutableIntStateOf(1) }
-    var guests by remember { mutableIntStateOf(1) }
-    var checkInDate by remember { mutableStateOf("") }
-    var checkOutDate by remember { mutableStateOf("") }
-    var selectedPayment by remember { mutableStateOf("JazzCash") }
-    var showCheckInPicker by remember { mutableStateOf(false) }
-    var showCheckOutPicker by remember { mutableStateOf(false) }
+    var selectedDuration     by remember { mutableStateOf("Daily") }
+    var nights               by remember { mutableIntStateOf(1) }
+    var guests               by remember { mutableIntStateOf(1) }
+    var checkInDate          by remember { mutableStateOf("") }
+    var checkOutDate         by remember { mutableStateOf("") }
+    var selectedPayment      by remember { mutableStateOf("JazzCash") }
+    var showCheckInPicker    by remember { mutableStateOf(false) }
+    var showCheckOutPicker   by remember { mutableStateOf(false) }
 
     val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
 
     val totalAmount = remember(nights, selectedDuration, property) {
         when (selectedDuration) {
-            "Weekly" -> (property?.pricePerWeek ?: (property?.pricePerNight?.times(7) ?: 0.0)) * (nights / 7).coerceAtLeast(1)
+            "Weekly"  -> (property?.pricePerWeek  ?: (property?.pricePerNight?.times(7)  ?: 0.0)) * (nights / 7).coerceAtLeast(1)
             "Monthly" -> (property?.pricePerMonth ?: (property?.pricePerNight?.times(30) ?: 0.0)) * (nights / 30).coerceAtLeast(1)
-            else -> (property?.pricePerNight ?: 0.0) * nights
+            else      -> (property?.pricePerNight ?: 0.0) * nights
         }
     }
 
     LaunchedEffect(uiState.actionSuccess, uiState.createdBookingId) {
         if (uiState.actionSuccess && !uiState.createdBookingId.isNullOrEmpty()) {
-            navController.navigate(
-                Screen.BookingConfirmation.createRoute(uiState.createdBookingId!!)
-            ) {
+            navController.navigate(Screen.BookingConfirmation.createRoute(uiState.createdBookingId!!)) {
                 popUpTo(Screen.Booking.route) { inclusive = true }
             }
             viewModel.clearMessages()
         }
     }
 
+    // Check-in date picker dialog
     if (showCheckInPicker) {
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
         DatePickerDialog(
@@ -97,6 +111,7 @@ fun BookingScreen(
         ) { DatePicker(state = datePickerState) }
     }
 
+    // Check-out date picker dialog
     if (showCheckOutPicker) {
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis() + 86400000L)
         DatePickerDialog(
@@ -112,6 +127,7 @@ fun BookingScreen(
     }
 
     Scaffold(
+        containerColor      = screenBg,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
@@ -122,8 +138,8 @@ fun BookingScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF0D1B3E),
-                    titleContentColor = Color.White,
+                    containerColor             = navyColor,
+                    titleContentColor          = if (isDark) DarkGoldPrimary else Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
@@ -133,60 +149,73 @@ fun BookingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = paddingValues.calculateTopPadding())
-                .background(Color(0xFFF5F7FA))
+                .background(screenBg)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when {
                 propUiState.isLoading -> {
-                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color(0xFF0D1B3E))
+                    Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = if (isDark) DarkGoldPrimary else navyColor)
                     }
                 }
-
                 property == null -> {
-                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.fillMaxWidth()) {
-                        Text("Property load nahi ho rahi. Wapas jao aur dobara try karo.", color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(16.dp))
-                    }
-                }
-
-                property.status != "APPROVED" -> {
-                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.fillMaxWidth()) {
-                        Text("Yeh property abhi admin se approve nahi hui — booking nahi ho sakti.", color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(16.dp))
-                    }
-                }
-
-                else -> {
-                    // ── Property Summary ──
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Property load nahi ho rahi. Wapas jao aur dobara try karo.",
+                            color    = Color(0xFFB71C1C),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+                property.status != "APPROVED" -> {
+                    Card(
+                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Yeh property abhi admin se approve nahi hui — booking nahi ho sakti.",
+                            color    = Color(0xFFB71C1C),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+                else -> {
+                    // ── Property Summary ──────────────────────────
+                    Card(
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = cardBg),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Property", fontSize = 13.sp, color = Color(0xFF8899AA))
-                            Text(property.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Text("Property", fontSize = 13.sp, color = hintColor)
+                            Text(property.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textPrimary)
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.LocationOn, null, tint = Color(0xFFD4AF37), modifier = Modifier.size(14.dp))
-                                Text(" ${property.city}", fontSize = 13.sp, color = Color(0xFF8899AA))
+                                Icon(Icons.Default.LocationOn, null, tint = goldColor, modifier = Modifier.size(14.dp))
+                                Text(" ${property.city}", fontSize = 13.sp, color = hintColor)
                                 Spacer(modifier = Modifier.weight(1f))
-                                Text(property.formattedPrice + "/night", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                                Text(property.formattedPrice + "/night", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textPrimary)
                             }
                         }
                     }
 
-                    // ── Duration Type ──
+                    // ── Duration Type ─────────────────────────────
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = cardBg),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Rental Duration Type", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Text("Rental Duration Type", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textPrimary)
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf("Daily", "Weekly", "Monthly").forEach { duration ->
@@ -195,124 +224,140 @@ fun BookingScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(if (isSelected) Color(0xFF0D1B3E) else Color(0xFFF5F7FA))
+                                            .background(if (isSelected) navyColor else categoryBg)
                                             .clickable { selectedDuration = duration }
                                             .padding(vertical = 10.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(duration, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (isSelected) Color(0xFFD4AF37) else Color(0xFF8899AA))
+                                        Text(
+                                            duration,
+                                            fontSize   = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color      = if (isSelected) goldColor else hintColor
+                                        )
                                     }
                                 }
                             }
                         }
                     }
 
-                    // ── Dates ──
+                    // ── Date Selection ────────────────────────────
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = cardBg),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Select Dates", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Text("Select Dates", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textPrimary)
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 OutlinedButton(
-                                    onClick = { showCheckInPicker = true },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(8.dp)
+                                    onClick   = { showCheckInPicker = true },
+                                    modifier  = Modifier.weight(1f),
+                                    shape     = RoundedCornerShape(8.dp),
+                                    colors    = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = textPrimary
+                                    )
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Check-in", fontSize = 11.sp, color = Color(0xFF8899AA))
-                                        Text(checkInDate.ifEmpty { "Select" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0D1B3E))
+                                        Text("Check-in",  fontSize = 11.sp, color = hintColor)
+                                        Text(checkInDate.ifEmpty { "Select" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = textPrimary)
                                     }
                                 }
                                 OutlinedButton(
-                                    onClick = { showCheckOutPicker = true },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(8.dp)
+                                    onClick   = { showCheckOutPicker = true },
+                                    modifier  = Modifier.weight(1f),
+                                    shape     = RoundedCornerShape(8.dp),
+                                    colors    = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = textPrimary
+                                    )
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Check-out", fontSize = 11.sp, color = Color(0xFF8899AA))
-                                        Text(checkOutDate.ifEmpty { "Select" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0D1B3E))
+                                        Text("Check-out", fontSize = 11.sp, color = hintColor)
+                                        Text(checkOutDate.ifEmpty { "Select" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = textPrimary)
                                     }
                                 }
                             }
                         }
                     }
 
-                    // ── Stay Details (Updated with better visibility) ──
+                    // ── Stay Details ──────────────────────────────
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = cardBg),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Stay Details", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Text("Stay Details", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textPrimary)
                             Spacer(modifier = Modifier.height(16.dp))
-
-                            // Nights Selector
                             CounterRow(
-                                label = "Number of Nights",
-                                count = nights,
+                                label       = "Number of Nights",
+                                count       = nights,
                                 onDecrement = { if (nights > 1) nights-- },
-                                onIncrement = { nights++ }
+                                onIncrement = { nights++ },
+                                isDark      = isDark
                             )
-
                             Spacer(modifier = Modifier.height(16.dp))
-
-                            // Guests Selector
                             CounterRow(
-                                label = "Number of Guests",
-                                count = guests,
+                                label       = "Number of Guests",
+                                count       = guests,
                                 onDecrement = { if (guests > 1) guests-- },
-                                onIncrement = { if (guests < property.maxGuests) guests++ }
+                                onIncrement = { if (guests < property.maxGuests) guests++ },
+                                isDark      = isDark
                             )
-
-                            Text("Max ${property.maxGuests} guests allowed", fontSize = 12.sp, color = Color(0xFF8899AA), modifier = Modifier.padding(top = 8.dp))
+                            Text(
+                                "Max ${property.maxGuests} guests allowed",
+                                fontSize = 12.sp,
+                                color    = hintColor,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
                         }
                     }
 
-                    // ── Payment Method ──
+                    // ── Payment Method ────────────────────────────
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = cardBg),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Payment Method", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0D1B3E))
+                            Text("Payment Method", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textPrimary)
                             Spacer(modifier = Modifier.height(12.dp))
                             listOf("JazzCash" to "📱", "EasyPaisa" to "💚", "Cash on Arrival" to "💵", "Bank Transfer" to "🏦").forEach { (method, icon) ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(if (selectedPayment == method) Color(0xFF0D1B3E).copy(0.05f) else Color.Transparent)
+                                        .background(
+                                            if (selectedPayment == method)
+                                                if (isDark) DarkBgElevated else navyColor.copy(0.05f)
+                                            else Color.Transparent
+                                        )
                                         .clickable { selectedPayment = method }
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(icon, fontSize = 20.sp)
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text(method, fontSize = 14.sp, color = Color(0xFF0D1B3E), modifier = Modifier.weight(1f))
+                                    Text(method, fontSize = 14.sp, color = textPrimary, modifier = Modifier.weight(1f))
                                     RadioButton(
                                         selected = selectedPayment == method,
-                                        onClick = { selectedPayment = method },
-                                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF0D1B3E))
+                                        onClick  = { selectedPayment = method },
+                                        colors   = RadioButtonDefaults.colors(selectedColor = if (isDark) DarkGoldPrimary else navyColor)
                                     )
                                 }
                             }
                         }
                     }
 
-                    // ── Price Breakdown ──
+                    // ── Price Breakdown ───────────────────────────
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1B3E)),
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.cardColors(containerColor = navyColor),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
@@ -322,22 +367,30 @@ fun BookingScreen(
                             if (property.securityDeposit > 0) {
                                 PriceRow("Security Deposit", "PKR ${"%.0f".format(property.securityDeposit)}")
                             }
-                            HorizontalDivider(color = Color.White.copy(0.2f), modifier = Modifier.padding(vertical = 8.dp))
+                            HorizontalDivider(color = dividerCol, modifier = Modifier.padding(vertical = 8.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Total", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD4AF37))
-                                Text("PKR ${"%.0f".format(totalAmount + property.securityDeposit)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD4AF37))
+                                Text("Total", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = goldColor)
+                                Text(
+                                    "PKR ${"%.0f".format(totalAmount + property.securityDeposit)}",
+                                    fontSize   = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = goldColor
+                                )
                             }
                         }
                     }
 
-                    // ── Error ──
+                    // Error message
                     uiState.errorMessage?.let { error ->
-                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.fillMaxWidth()) {
+                        Card(
+                            colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text(error, color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(12.dp))
                         }
                     }
 
-                    // ── Confirm Button (Updated Colors) ──
+                    // ── Confirm Button ────────────────────────────
                     val isFormComplete = checkInDate.isNotEmpty() && checkOutDate.isNotEmpty()
 
                     Button(
@@ -370,13 +423,13 @@ fun BookingScreen(
                             viewModel.createBooking(booking)
                         },
                         modifier = Modifier.fillMaxWidth().height(54.dp),
-                        enabled = !uiState.isLoading && isFormComplete,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF0D1B3E),
-                            contentColor = Color.White,
-                            disabledContainerColor = Color(0xFFBDC3C7), // Proper grey when disabled
-                            disabledContentColor = Color.White.copy(alpha = 0.6f)
+                        enabled  = !uiState.isLoading && isFormComplete,
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor         = navyColor,
+                            contentColor           = if (isDark) DarkGoldPrimary else Color.White,
+                            disabledContainerColor = Color(0xFFBDC3C7),
+                            disabledContentColor   = Color.White.copy(alpha = 0.6f)
                         )
                     ) {
                         if (uiState.isLoading) {
@@ -389,7 +442,7 @@ fun BookingScreen(
                     Text(
                         "By confirming, you agree to the cancellation policy",
                         fontSize = 11.sp,
-                        color = Color(0xFF8899AA),
+                        color    = hintColor,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                 }
@@ -398,61 +451,47 @@ fun BookingScreen(
     }
 }
 
-/**
- * Custom Counter Row for better visibility of +/- buttons
- */
+// ── Counter Row for nights / guests ──────────────────────────────
 @Composable
 private fun CounterRow(
-    label: String,
-    count: Int,
+    label      : String,
+    count      : Int,
     onDecrement: () -> Unit,
-    onIncrement: () -> Unit
+    onIncrement: () -> Unit,
+    isDark     : Boolean
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, fontSize = 14.sp, color = Color(0xFF0D1B3E))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Minus Button - Grey Background, Dark Icon
-            IconButton(
-                onClick = onDecrement,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFE0E6ED))
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Remove,
-                    contentDescription = null,
-                    tint = Color(0xFF0D1B3E),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+    val textColor  = if (isDark) DarkTextPrimary  else Color(0xFF0D1B3E)
+    val minusBg    = if (isDark) DarkBgElevated   else Color(0xFFE0E6ED)
+    val plusBg     = if (isDark) DarkBgSecondary  else Color(0xFF0D1B3E)
+    val plusIconTint = if (isDark) DarkGoldPrimary else Color.White
 
+    Row(
+        modifier              = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment     = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 14.sp, color = textColor)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Decrement button
+            IconButton(
+                onClick  = onDecrement,
+                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(minusBg)
+            ) {
+                Icon(Icons.Default.Remove, contentDescription = null, tint = textColor, modifier = Modifier.size(18.dp))
+            }
             Text(
-                text = "$count",
+                text     = "$count",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 18.dp),
-                color = Color(0xFF0D1B3E)
+                color    = textColor
             )
-
-            // Plus Button - Dark Blue Background, White Icon
+            // Increment button
             IconButton(
-                onClick = onIncrement,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0D1B3E))
+                onClick  = onIncrement,
+                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(plusBg)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
+                Icon(Icons.Default.Add, contentDescription = null, tint = plusIconTint, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -460,7 +499,10 @@ private fun CounterRow(
 
 @Composable
 private fun PriceRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(
+        modifier              = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
         Text(label, fontSize = 13.sp, color = Color.White.copy(0.8f))
         Text(value, fontSize = 13.sp, color = Color.White)
     }

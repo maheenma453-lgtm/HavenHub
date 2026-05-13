@@ -19,45 +19,30 @@ import java.util.*
 import javax.inject.Inject
 
 data class VacationUiState(
-    val isLoading: Boolean = false,
-    val properties: List<Property> = emptyList(),
-    val unavailableDates: List<Date> = emptyList(),
-    val allPackages: List<RentalPackage> = emptyList(),
-    val propertyPackages: List<RentalPackage> = emptyList(),
-    val selectedPackage: RentalPackage? = null,
-    val selectedPropertyId: String = "",
-    val selectedPropertyTitle: String = "",
-    val checkInDay: Int = -1,
-    val checkOutDay: Int = -1,
-    val guestCount: Int = 2,
-    val errorMessage: String? = null,
-    val successMessage: String? = null
+    val isLoading            : Boolean          = false,
+    val properties           : List<Property>   = emptyList(),
+    val unavailableDates     : List<Date>        = emptyList(),
+    val allPackages          : List<RentalPackage> = emptyList(),
+    val propertyPackages     : List<RentalPackage> = emptyList(),
+    val selectedPackage      : RentalPackage?   = null,
+    val selectedPropertyId   : String           = "",
+    val selectedPropertyTitle: String           = "",
+    val checkInDay           : Int              = -1,
+    val checkOutDay          : Int              = -1,
+    val guestCount           : Int              = 2,
+    val errorMessage         : String?          = null,
+    val successMessage       : String?          = null
 )
 
 @HiltViewModel
 class VacationViewModel @Inject constructor(
-    private val propertyRepository: PropertyRepository,
-    private val bookingRepository: BookingRepository,
+    private val propertyRepository : PropertyRepository,
+    private val bookingRepository  : BookingRepository,
     private val firebaseDataManager: FirebaseDataManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VacationUiState())
     val uiState: StateFlow<VacationUiState> = _uiState.asStateFlow()
-
-    private val northernCities = listOf(
-        "Kaghan", "Naran", "Skardu", "Swat", "Hunza", "Murree",
-        "Islamabad", "Gilgit", "Chitral", "Neelum", "Azad Kashmir"
-    )
-
-    private val northernPropertyIds = listOf(
-        "prop_003",
-        "prop_007",
-        "prop_008",
-        "prop_009",
-        "prop_010",
-        "prop_011",
-        "prop_012"
-    )
 
     init {
         loadVacationProperties()
@@ -66,30 +51,74 @@ class VacationViewModel @Inject constructor(
 
     // ── Properties ───────────────────────────────────────────────────────────
 
+    // ════════════════════════════════════════════════════════════════
+    // BUG FIX: Pehle sirf northern city/id filter tha — iska matlab
+    // saari 12 properties aa sakti thi chahe unpe package ho ya na ho.
+    //
+    // Ab flow:
+    // 1. Firestore se saare ACTIVE rental packages fetch karo
+    // 2. Un packages mein se unique propertyIds nikalo
+    // 3. Sirf woh properties show karo jinka propertyId us list mein ho
+    //
+    // Result: Sirf woh 6 properties dikhti hain jinpe deal lagi hui hai.
+    // ════════════════════════════════════════════════════════════════
     fun loadVacationProperties() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            when (val result = propertyRepository.getAllProperties()) {
-                is Resource.Success -> {
-                    val filteredList = result.data
-                        ?.filter { prop ->
-                            val trimmedId = prop.propertyId.trim()
-                            val matchById = trimmedId in northernPropertyIds
-                            val matchByCity = northernCities.any { city ->
-                                prop.city.contains(city, ignoreCase = true) ||
-                                        prop.title.contains(city, ignoreCase = true)
-                            }
-                            matchById || matchByCity
-                        }
-                        ?: emptyList()
+            // Step 1: Saare active packages fetch karo
+            val packagesResult = firebaseDataManager.getActiveRentalPackages()
+            if (packagesResult is Resource.Error) {
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = packagesResult.message)
+                }
+                return@launch
+            }
 
-                    _uiState.update { it.copy(isLoading = false, properties = filteredList) }
+            val activePackages = (packagesResult as Resource.Success).data ?: emptyList()
+
+            // Step 2: Un packages se unique propertyIds nikalo
+            val packagedPropertyIds = activePackages
+                .map { it.propertyId.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+
+            // Agar koi package nahi to empty list dikhao
+            if (packagedPropertyIds.isEmpty()) {
+                _uiState.update {
+                    it.copy(
+                        isLoading  = false,
+                        properties = emptyList(),
+                        allPackages = activePackages
+                    )
+                }
+                return@launch
+            }
+
+            // Step 3: Saari properties fetch karo aur sirf package-wali filter karo
+            when (val propertiesResult = propertyRepository.getAllProperties()) {
+                is Resource.Success -> {
+                    val filteredList = (propertiesResult.data ?: emptyList())
+                        .filter { prop ->
+                            prop.propertyId.trim() in packagedPropertyIds
+                        }
+
+                    _uiState.update {
+                        it.copy(
+                            isLoading   = false,
+                            properties  = filteredList,
+                            allPackages = activePackages
+                        )
+                    }
                 }
                 is Resource.Error -> {
-                    _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                    _uiState.update {
+                        it.copy(isLoading = false, errorMessage = propertiesResult.message)
+                    }
                 }
-                else -> { _uiState.update { it.copy(isLoading = false) } }
+                else -> {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
             }
         }
     }
@@ -102,7 +131,7 @@ class VacationViewModel @Inject constructor(
                 bookings
                     .filter { it.propertyId == propertyId }
                     .forEach { booking ->
-                        val startDate = try { booking.checkInDate?.toDate() } catch (e: Exception) { null }
+                        val startDate = try { booking.checkInDate?.toDate()  } catch (e: Exception) { null }
                         val endDate   = try { booking.checkOutDate?.toDate() } catch (e: Exception) { null }
 
                         if (startDate != null && endDate != null) {
@@ -139,7 +168,6 @@ class VacationViewModel @Inject constructor(
 
     fun loadPackagesForProperty(propertyId: String) {
         viewModelScope.launch {
-            // ✦ FIX: pehle stale data clear karo
             _uiState.update {
                 it.copy(
                     isLoading        = true,
@@ -175,7 +203,6 @@ class VacationViewModel @Inject constructor(
     // ── Pre-Booking Form State ────────────────────────────────────────────────
 
     fun setSelectedProperty(propertyId: String, propertyTitle: String) {
-        // ✦ FIX: pehle state clear karo, phir load karo
         _uiState.update {
             it.copy(
                 selectedPropertyId    = propertyId,
@@ -202,7 +229,7 @@ class VacationViewModel @Inject constructor(
     fun calculateTotalAmount(): Double {
         val pkg = _uiState.value.selectedPackage ?: return 0.0
         val nights = when {
-            _uiState.value.checkInDay != -1 && _uiState.value.checkOutDay != -1 ->
+            _uiState.value.checkInDay  != -1 && _uiState.value.checkOutDay != -1 ->
                 (_uiState.value.checkOutDay - _uiState.value.checkInDay).coerceAtLeast(1)
             else -> pkg.minNights.coerceAtLeast(1)
         }

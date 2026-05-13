@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,15 +30,26 @@ fun AccountSettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // ── Dark / Light theme detection ──────────────────────────────
+    val isDark = isSystemInDarkTheme()
+
+    // Theme-aware color tokens
+    val screenBg    = if (isDark) DarkBg           else Color(0xFFF5F7FA)
+    val cardBg      = if (isDark) DarkSurface       else SurfaceVariantLight
+    val textPrimary = if (isDark) DarkTextPrimary   else TextPrimary
+    val textSecond  = if (isDark) DarkTextSecondary else TextSecondary
+    val accentColor = if (isDark) DarkGoldPrimary   else PrimaryBlue
+    val topBarBg    = if (isDark) DarkBgSecondary   else PrimaryBlue
+
     var currentPassword  by remember { mutableStateOf("") }
     var newPassword      by remember { mutableStateOf("") }
     var confirmPassword  by remember { mutableStateOf("") }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // ✅ FIX: Yeh track karega ke delete/logout hua ya nahi
+    // Track whether account was deleted to trigger navigation
     var accountDeleted by remember { mutableStateOf(false) }
 
-    // Success hone par fields clear karo
+    // Clear fields on success
     LaunchedEffect(uiState.successMessage) {
         if (uiState.successMessage != null) {
             currentPassword = ""
@@ -47,8 +59,7 @@ fun AccountSettingsScreen(
         }
     }
 
-    // ✅ FIX: Sirf tab navigate karo jab accountDeleted = true ho
-    // Pehle isLoggedIn check se screen start pe hi navigate ho jaati thi
+    // Navigate to sign-in only after account deletion
     LaunchedEffect(uiState.isLoggedIn) {
         if (!uiState.isLoggedIn && accountDeleted) {
             navController.navigate(Screen.SignIn.route) {
@@ -58,6 +69,7 @@ fun AccountSettingsScreen(
     }
 
     Scaffold(
+        containerColor = screenBg,
         topBar = {
             TopAppBar(
                 title = { Text("Account Settings", fontWeight = FontWeight.Bold) },
@@ -67,7 +79,7 @@ fun AccountSettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = PrimaryBlue,
+                    containerColor             = topBarBg,
                     titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White
                 )
@@ -83,12 +95,17 @@ fun AccountSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
 
-            // ── Change Password ───────────────────────────────────────────────
-            Text("Change Password", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = PrimaryBlue)
+            // ── Change Password Section ───────────────────────────
+            Text(
+                "Change Password",
+                fontWeight = FontWeight.SemiBold,
+                fontSize   = 15.sp,
+                color      = accentColor
+            )
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(12.dp),
-                colors   = CardDefaults.cardColors(containerColor = SurfaceVariantLight)
+                colors   = CardDefaults.cardColors(containerColor = cardBg)
             ) {
                 Column(
                     modifier            = Modifier.padding(16.dp),
@@ -101,7 +118,13 @@ fun AccountSettingsScreen(
                         modifier             = Modifier.fillMaxWidth(),
                         shape                = RoundedCornerShape(10.dp),
                         visualTransformation = PasswordVisualTransformation(),
-                        singleLine           = true
+                        singleLine           = true,
+                        colors               = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = accentColor,
+                            focusedLabelColor    = accentColor,
+                            focusedTextColor     = textPrimary,
+                            unfocusedTextColor   = textPrimary
+                        )
                     )
                     OutlinedTextField(
                         value                = newPassword,
@@ -110,7 +133,13 @@ fun AccountSettingsScreen(
                         modifier             = Modifier.fillMaxWidth(),
                         shape                = RoundedCornerShape(10.dp),
                         visualTransformation = PasswordVisualTransformation(),
-                        singleLine           = true
+                        singleLine           = true,
+                        colors               = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = accentColor,
+                            focusedLabelColor    = accentColor,
+                            focusedTextColor     = textPrimary,
+                            unfocusedTextColor   = textPrimary
+                        )
                     )
                     OutlinedTextField(
                         value                = confirmPassword,
@@ -119,7 +148,13 @@ fun AccountSettingsScreen(
                         modifier             = Modifier.fillMaxWidth(),
                         shape                = RoundedCornerShape(10.dp),
                         visualTransformation = PasswordVisualTransformation(),
-                        singleLine           = true
+                        singleLine           = true,
+                        colors               = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = accentColor,
+                            focusedLabelColor    = accentColor,
+                            focusedTextColor     = textPrimary,
+                            unfocusedTextColor   = textPrimary
+                        )
                     )
 
                     // Password mismatch warning
@@ -133,16 +168,16 @@ fun AccountSettingsScreen(
                     }
 
                     Button(
-                        onClick  = {
-                            viewModel.changePassword(currentPassword, newPassword)
-                        },
+                        onClick  = { viewModel.changePassword(currentPassword, newPassword) },
                         modifier = Modifier.fillMaxWidth(),
                         shape    = RoundedCornerShape(10.dp),
                         enabled  = currentPassword.isNotBlank()
                                 && newPassword.isNotBlank()
                                 && newPassword == confirmPassword
                                 && !uiState.isLoading,
-                        colors   = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = accentColor
+                        )
                     ) {
                         if (uiState.isLoading) {
                             CircularProgressIndicator(
@@ -157,8 +192,13 @@ fun AccountSettingsScreen(
                 }
             }
 
-            // ── Linked Accounts ───────────────────────────────────────────────
-            Text("Linked Accounts", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = PrimaryBlue)
+            // ── Linked Accounts Section ───────────────────────────
+            Text(
+                "Linked Accounts",
+                fontWeight = FontWeight.SemiBold,
+                fontSize   = 15.sp,
+                color      = accentColor
+            )
             SettingsGroup(title = "") {
                 SettingsItem(
                     icon     = Icons.Default.Email,
@@ -174,8 +214,13 @@ fun AccountSettingsScreen(
                 )
             }
 
-            // ── Danger Zone ───────────────────────────────────────────────────
-            Text("Danger Zone", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ErrorRed)
+            // ── Danger Zone ───────────────────────────────────────
+            Text(
+                "Danger Zone",
+                fontWeight = FontWeight.SemiBold,
+                fontSize   = 15.sp,
+                color      = ErrorRed
+            )
             OutlinedButton(
                 onClick  = { showDeleteDialog = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -187,23 +232,34 @@ fun AccountSettingsScreen(
                 Text("Delete Account")
             }
 
-            // Error Message
+            // Error message
             uiState.errorMessage?.let { error ->
                 Text(text = error, color = ErrorRed, fontSize = 14.sp)
             }
         }
 
-        // ── Delete Confirmation Dialog ─────────────────────────────────────
+        // ── Delete Confirmation Dialog ────────────────────────────
         if (showDeleteDialog) {
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
-                title   = { Text("Delete Account") },
-                text    = { Text("Are you sure you want to permanently delete your account? This action cannot be undone.") },
+                containerColor   = if (isDark) DarkSurface else Color.White,
+                title   = {
+                    Text(
+                        "Delete Account",
+                        color = if (isDark) DarkTextPrimary else TextPrimary
+                    )
+                },
+                text    = {
+                    Text(
+                        "Are you sure you want to permanently delete your account? This action cannot be undone.",
+                        color = if (isDark) DarkTextSecondary else TextSecondary
+                    )
+                },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             showDeleteDialog = false
-                            accountDeleted = true  // ✅ FIX: Pehle flag set karo
+                            accountDeleted   = true
                             viewModel.deleteAccount()
                         }
                     ) {
@@ -212,7 +268,7 @@ fun AccountSettingsScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showDeleteDialog = false }) {
-                        Text("Cancel")
+                        Text("Cancel", color = if (isDark) DarkTextSecondary else TextSecondary)
                     }
                 }
             )

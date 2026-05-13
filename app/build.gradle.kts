@@ -44,7 +44,8 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
 
     // ── Compose BOM (manages all compose versions) ───────────
-    implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+   // implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+    implementation(platform("androidx.compose:compose-bom:2025.05.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")

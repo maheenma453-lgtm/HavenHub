@@ -31,6 +31,7 @@ import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.PropertyViewModel
+import com.example.havenhub.viewmodel.VacationViewModel   // ✦ NEW
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
@@ -42,13 +43,15 @@ private val Red   = Color(0xFFEF4444)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PropertyDetailScreen(
-    navController : NavController,
-    propertyId    : String,
-    viewModel     : PropertyViewModel = hiltViewModel()
+    navController   : NavController,
+    propertyId      : String,
+    viewModel       : PropertyViewModel  = hiltViewModel(),
+    vacationViewModel: VacationViewModel = hiltViewModel()  // ✦ NEW
 ) {
-    val uiState   by viewModel.uiState.collectAsState()
-    val property  = uiState.propertyDetail
-    val isLoading = uiState.isLoading
+    val uiState    by viewModel.uiState.collectAsState()
+    val vacState   by vacationViewModel.uiState.collectAsState()   // ✦ NEW
+    val property   = uiState.propertyDetail
+    val isLoading  = uiState.isLoading
 
     val configuration = LocalConfiguration.current
     val screenWidth   = configuration.screenWidthDp.dp
@@ -66,11 +69,18 @@ fun PropertyDetailScreen(
         }
     }
 
-    LaunchedEffect(propertyId) { viewModel.loadPropertyDetail(propertyId) }
+    LaunchedEffect(propertyId) {
+        viewModel.loadPropertyDetail(propertyId)
+        // ✦ NEW: Is property ke active packages fetch karo
+        vacationViewModel.loadPackagesForProperty(propertyId)
+    }
 
     val isTenant   = currentUserRole.equals("tenant",   ignoreCase = true)
     val isLandlord = currentUserRole.equals("landlord", ignoreCase = true)
     val roleLoaded = currentUserRole.isNotEmpty()
+
+    // ✦ NEW: Sirf tab true hoga jab is property pe koi ACTIVE package ho
+    val hasActivePackage = vacState.propertyPackages.isNotEmpty()
 
     val primary      = MaterialTheme.colorScheme.primary
     val tertiary     = MaterialTheme.colorScheme.tertiary
@@ -92,9 +102,18 @@ fun PropertyDetailScreen(
                 val isAdmin = currentUserRole.equals("admin", ignoreCase = true)
                 val isOwner = property.ownerId == currentUserId
 
+                // ✦ Bottom padding: tenant ke liye hasActivePackage pe depend karta hai
+                // hasActivePackage = true  → 2 rows (Book Now + Book with Package) → 130.dp
+                // hasActivePackage = false → 1 row  (Book Now only)                → 80.dp
+                val bottomPad = when {
+                    roleLoaded && isTenant && !isOwner && hasActivePackage -> 130.dp
+                    roleLoaded && isTenant && !isOwner                     -> 80.dp
+                    else                                                   -> 62.dp
+                }
+
                 LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = if (roleLoaded && isTenant && !isOwner) 106.dp else 62.dp)
+                    contentPadding = PaddingValues(bottom = bottomPad)
                 ) {
 
                     // 1. HERO IMAGE
@@ -368,18 +387,50 @@ fun PropertyDetailScreen(
                     }
                 }
 
-                // ── STICKY BOTTOM BAR ─────────────────────────────────────
-                Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(), shadowElevation = 16.dp, color = surface) {
+                // ── STICKY BOTTOM BAR ──────────────────────────────────────────────────
+                Surface(
+                    modifier      = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    shadowElevation = 16.dp,
+                    color         = surface
+                ) {
                     if (roleLoaded && isTenant && !isOwner) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        // ════════════════════════════════════════════════════════════════
+                        // TENANT BOTTOM BAR
+                        // Row 1: Price | Message Owner | Book Now   (always shown)
+                        // Row 2: Book with Package button           (sirf tab jab package ho)
+                        // ════════════════════════════════════════════════════════════════
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Row 1 — Price + Message + Book Now (unchanged from before)
+                            Row(
+                                modifier              = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment     = Alignment.CenterVertically
+                            ) {
                                 Column(Modifier.weight(1f)) {
                                     Text("Per night", fontSize = 9.sp, color = onSurfaceVariant)
-                                    Text(property.formattedPrice, fontSize = 16.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
+                                    Text(
+                                        property.formattedPrice,
+                                        fontSize   = 16.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color      = onSurface,
+                                        maxLines   = 1
+                                    )
                                 }
                                 if (property.ownerId.isNotEmpty()) {
                                     OutlinedButton(
-                                        onClick        = { navController.navigate(Screen.Chat.createRoute(userId = property.ownerId, ownerName = property.ownerName.ifEmpty { "Owner" })) },
+                                        onClick        = {
+                                            navController.navigate(
+                                                Screen.Chat.createRoute(
+                                                    userId    = property.ownerId,
+                                                    ownerName = property.ownerName.ifEmpty { "Owner" }
+                                                )
+                                            )
+                                        },
                                         modifier       = Modifier.height(42.dp),
                                         shape          = RoundedCornerShape(10.dp),
                                         border         = BorderStroke(1.5.dp, primary),
@@ -388,48 +439,83 @@ fun PropertyDetailScreen(
                                     ) {
                                         Icon(Icons.Default.Message, null, modifier = Modifier.size(15.dp))
                                         Spacer(Modifier.width(5.dp))
-                                        Text(property.ownerName.ifEmpty { "Owner" }.split(" ").first(), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        Text(
+                                            property.ownerName.ifEmpty { "Owner" }.split(" ").first(),
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize   = 13.sp
+                                        )
                                     }
                                 }
                                 Button(
-                                    onClick        = { navController.navigate(Screen.Booking.createRoute(propertyId)) },
+                                    onClick        = {
+                                        navController.navigate(Screen.Booking.createRoute(propertyId))
+                                    },
                                     modifier       = Modifier.height(42.dp),
                                     shape          = RoundedCornerShape(10.dp),
-                                    colors         = ButtonDefaults.buttonColors(containerColor = primary, contentColor = onPrimary),
+                                    colors         = ButtonDefaults.buttonColors(
+                                        containerColor = primary,
+                                        contentColor   = onPrimary
+                                    ),
                                     contentPadding = PaddingValues(horizontal = 20.dp),
                                     elevation      = ButtonDefaults.buttonElevation(3.dp)
                                 ) {
                                     Text("Book Now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                             }
-                            Button(
-                                onClick   = { navController.navigate(Screen.PreBooking.createRoute(propertyId)) },
-                                modifier  = Modifier.fillMaxWidth().height(46.dp),
-                                shape     = RoundedCornerShape(12.dp),
-                                colors    = ButtonDefaults.buttonColors(containerColor = tertiary, contentColor = primary),
-                                elevation = ButtonDefaults.buttonElevation(3.dp)
-                            ) {
-                                Icon(Icons.Default.LocalOffer, null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(7.dp))
-                                Text("Book with Package", fontWeight = FontWeight.Black, fontSize = 14.sp)
+
+                            // ✦ Row 2 — "Book with Package" button
+                            // Sirf tab dikhao jab is property pe koi active package ho
+                            if (hasActivePackage) {
+                                Button(
+                                    onClick   = {
+                                        navController.navigate(Screen.PreBooking.createRoute(propertyId))
+                                    },
+                                    modifier  = Modifier.fillMaxWidth().height(46.dp),
+                                    shape     = RoundedCornerShape(12.dp),
+                                    colors    = ButtonDefaults.buttonColors(
+                                        containerColor = tertiary,
+                                        contentColor   = primary
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(3.dp)
+                                ) {
+                                    Icon(Icons.Default.LocalOffer, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(7.dp))
+                                    Text("Book with Package", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                }
                             }
                         }
                     } else {
+                        // ════════════════════════════════════════════════════════════════
+                        // LANDLORD / ADMIN / OWNER BOTTOM BAR — unchanged
+                        // ════════════════════════════════════════════════════════════════
                         Row(
-                            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                            modifier              = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment     = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Per night", fontSize = 9.sp, color = onSurfaceVariant)
-                                Text(property.formattedPrice, fontSize = 16.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
+                                Text(
+                                    property.formattedPrice,
+                                    fontSize   = 16.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color      = onSurface,
+                                    maxLines   = 1
+                                )
                             }
                             if (roleLoaded && isLandlord && isOwner) {
                                 Button(
-                                    onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
+                                    onClick        = {
+                                        navController.navigate(Screen.EditProperty.createRoute(propertyId))
+                                    },
                                     modifier       = Modifier.height(44.dp),
                                     shape          = RoundedCornerShape(10.dp),
-                                    colors         = ButtonDefaults.buttonColors(containerColor = primary, contentColor = tertiary),
+                                    colors         = ButtonDefaults.buttonColors(
+                                        containerColor = primary,
+                                        contentColor   = tertiary
+                                    ),
                                     contentPadding = PaddingValues(horizontal = 18.dp),
                                     elevation      = ButtonDefaults.buttonElevation(3.dp)
                                 ) {
@@ -448,7 +534,11 @@ fun PropertyDetailScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🏠", fontSize = 48.sp)
                         Spacer(Modifier.height(8.dp))
-                        Text("Property not found", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
+                        Text(
+                            "Property not found",
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 16.sp
+                        )
                     }
                 }
             }
@@ -456,7 +546,7 @@ fun PropertyDetailScreen(
     }
 }
 
-// ── Helper Composables ────────────────────────────────────────────────────────
+// ── Helper Composables — sab unchanged ───────────────────────────────────────
 
 @Composable
 private fun PDSectionTitle(text: String, tertiary: Color, onSurface: Color) {
@@ -524,7 +614,11 @@ fun getStatusLabel(status: String): String = when (status.uppercase()) {
 
 @Composable
 fun BadgeBox(label: String, color: Color) {
-    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(color.copy(alpha = 0.1f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+    Box(
+        Modifier.clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.1f))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
         Text(label, fontSize = 11.sp, color = color, fontWeight = FontWeight.Bold)
     }
 }

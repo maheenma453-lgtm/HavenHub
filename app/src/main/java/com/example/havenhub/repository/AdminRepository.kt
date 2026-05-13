@@ -36,66 +36,86 @@ class AdminRepository @Inject constructor(
         fallbackUserId : String = ""
     ): User {
 
+        // ✅ FIX: Firebase mein preferences map ke actual field names use karo
+        // (emailNotifications, language, notificationsEnabled, smsNotifications)
         @Suppress("UNCHECKED_CAST")
         val prefsMap = data["preferences"] as? Map<String, Any?> ?: emptyMap()
 
-        val prefsUpdatedAt = prefsMap["updatedAt"].toTimestampOrNull()
-
         val preferences = UserPreferences(
-            userId               = prefsMap["userId"] as? String ?: fallbackUserId,
-            notifyBookingUpdates = prefsMap["notifyBookingUpdates"] as? Boolean ?: true,
-            notifyMessages       = prefsMap["notifyMessages"] as? Boolean ?: true,
-            notifyPayments       = prefsMap["notifyPayments"] as? Boolean ?: true,
-            notifyPromotions     = prefsMap["notifyPromotions"] as? Boolean ?: false,
-            notifyAdminAlerts    = prefsMap["notifyAdminAlerts"] as? Boolean ?: true,
-            isProfilePublic      = prefsMap["isProfilePublic"] as? Boolean ?: true,
-            showPhoneNumber      = prefsMap["showPhoneNumber"] as? Boolean ?: false,
-            showEmail            = prefsMap["showEmail"] as? Boolean ?: false,
-            preferredLanguage    = prefsMap["preferredLanguage"] as? String ?: "en",
-            isDarkMode           = prefsMap["isDarkMode"] as? Boolean ?: false,
-            updatedAt            = prefsUpdatedAt
+            userId = prefsMap["userId"] as? String
+                ?: data["userId"] as? String
+                ?: fallbackUserId,
+
+            // ✅ Firebase field: "notificationsEnabled" — booking updates ke liye use karo
+            notifyBookingUpdates = prefsMap["notificationsEnabled"] as? Boolean
+                ?: prefsMap["notifyBookingUpdates"] as? Boolean
+                ?: true,
+
+            // ✅ Firebase field: "smsNotifications" ya fallback
+            notifyMessages = prefsMap["smsNotifications"] as? Boolean
+                ?: prefsMap["notifyMessages"] as? Boolean
+                ?: true,
+
+            // ✅ Firebase mein payment notification ka specific field nahi — default true
+            notifyPayments = prefsMap["notifyPayments"] as? Boolean ?: true,
+
+            notifyPromotions  = prefsMap["notifyPromotions"] as? Boolean ?: false,
+            notifyAdminAlerts = prefsMap["notifyAdminAlerts"] as? Boolean ?: true,
+            isProfilePublic   = prefsMap["isProfilePublic"] as? Boolean ?: true,
+            showPhoneNumber   = prefsMap["showPhoneNumber"] as? Boolean ?: false,
+            showEmail         = prefsMap["showEmail"] as? Boolean ?: false,
+
+            // ✅ Firebase field: "language"
+            preferredLanguage = prefsMap["language"] as? String
+                ?: prefsMap["preferredLanguage"] as? String
+                ?: "en",
+
+            isDarkMode = prefsMap["isDarkMode"] as? Boolean ?: false,
+            updatedAt  = prefsMap["updatedAt"].toTimestampOrNull()
         )
 
         return User(
-            userId              = data["userId"] as? String ?: fallbackUserId,
-            fullName            = data["fullName"] as? String ?: "",
-            email               = data["email"] as? String ?: "",
-            phoneNumber         = data["phoneNumber"] as? String ?: "",
-            profileImageUrl     = data["profileImageUrl"] as? String ?: "",
-            role                = data["role"] as? String ?: "tenant",
+            userId          = data["userId"] as? String ?: fallbackUserId,
+            fullName        = data["fullName"] as? String ?: "",
+            email           = data["email"] as? String ?: "",
+            phoneNumber     = (data["phoneNumber"] as? String)
+                ?: (data["phone"] as? String)       // ✅ Firebase mein "phone" field bhi ho sakta hai
+                ?: "",
+            profileImageUrl = data["profileImageUrl"] as? String ?: "",
 
-            verificationStatus  = data["verificationStatus"] as? String ?: "PENDING",
+            // ✅ Firebase mein role "TENANT"/"LANDLORD" all-caps — as-is store karo
+            role = data["role"] as? String ?: "tenant",
 
-            // ✅ FIX: isVerified — multiple possible field names handle karo
-            isVerified          = (data["isVerified"] as? Boolean)
+            verificationStatus = data["verificationStatus"] as? String ?: "PENDING",
+
+            // ✅ isVerified — verificationStatus se bhi derive karo
+            isVerified = (data["isVerified"] as? Boolean)
                 ?: (data["verificationStatus"] as? String)
                     ?.uppercase()
                     ?.let { it == "VERIFIED" || it == "APPROVED" }
                 ?: false,
 
-            // ✅ FIX: isActive — "isActive" aur "active" dono check karo
-            isActive            = (data["isActive"] as? Boolean)
+            isActive = (data["isActive"] as? Boolean)
                 ?: (data["active"] as? Boolean)
                 ?: true,
 
-            // ✅ FIX: isBanned — "isBanned" aur "banned" dono check karo
-            isBanned            = (data["isBanned"] as? Boolean)
+            isBanned = (data["isBanned"] as? Boolean)
                 ?: (data["banned"] as? Boolean)
                 ?: false,
 
-            // ✅ FIX: CNIC fields — crash nahi hoga agar fields missing hoon
-            cnicNumber          = data["cnicNumber"] as? String ?: "",
-            cnicImageUrl        = data["cnicImageUrl"] as? String ?: "",
+            cnicNumber   = data["cnicNumber"] as? String ?: "",
+            cnicImageUrl = data["cnicImageUrl"] as? String ?: "",
+            nationalId   = data["nationalId"] as? String ?: "",
+            idFrontUrl   = data["idFrontUrl"] as? String ?: "",
+            idBackUrl    = data["idBackUrl"] as? String ?: "",
+            fcmToken     = data["fcmToken"] as? String ?: "",
 
-            nationalId          = data["nationalId"] as? String ?: "",
-            idFrontUrl          = data["idFrontUrl"] as? String ?: "",
-            idBackUrl           = data["idBackUrl"] as? String ?: "",
-            fcmToken            = data["fcmToken"] as? String ?: "",
             landlordRating      = (data["landlordRating"] as? Number)?.toFloat() ?: 0f,
             landlordReviewCount = (data["landlordReviewCount"] as? Number)?.toInt() ?: 0,
-            preferences         = preferences,
-            createdAt           = data["createdAt"].toTimestampOrNull(),
-            updatedAt           = data["updatedAt"].toTimestampOrNull()
+
+            preferences = preferences,
+            createdAt   = data["createdAt"].toTimestampOrNull(),
+            updatedAt   = data["updatedAt"].toTimestampOrNull()
         )
     }
 
@@ -154,7 +174,8 @@ class AdminRepository @Inject constructor(
                 try {
                     parseUserSafely(data, fallbackUserId = doc.id)
                 } catch (e: Exception) {
-                    null   // ✅ ek user fail hone se poori list crash nahi hogi
+                    // ✅ Ek user fail ho toh poori list crash nahi hogi
+                    null
                 }
             }
             Resource.Success(users)
@@ -182,7 +203,6 @@ class AdminRepository @Inject constructor(
             usersCollection.document(userId)
                 .update(
                     mapOf(
-                        // ✅ FIX: dono field names update karo taake koi bhi query kaam kare
                         "banned"             to false,
                         "isBanned"           to false,
                         "isVerified"         to true,
@@ -204,7 +224,6 @@ class AdminRepository @Inject constructor(
             usersCollection.document(userId)
                 .update(
                     mapOf(
-                        // ✅ FIX: dono field names update karo
                         "banned"             to true,
                         "isBanned"           to true,
                         "isVerified"         to false,

@@ -1,11 +1,14 @@
 package com.example.havenhub.repository
 
 import android.util.Log
+import com.example.havenhub.data.Location
 import com.example.havenhub.data.User
+import com.example.havenhub.data.UserPreferences
 import com.example.havenhub.utils.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
@@ -24,39 +27,75 @@ class AuthRepository @Inject constructor(
 
     fun isUserSignedIn(): Boolean = auth.currentUser != null
 
-    // Helper: get FCM token and save to Firestore for a given userId
-    // Called after login/register so the token is always fresh in Firestore.
+    // FIX: Manual parser — toObject() silently fails on Double->Float
+    // for landlordRating field, returning 0f even when Firestore has 4.5.
+    private fun parseUser(doc: DocumentSnapshot): User? {
+        return try {
+            User(
+                userId              = doc.getString("userId")             ?: doc.id,
+                fullName            = doc.getString("fullName")           ?: "",
+                email               = doc.getString("email")              ?: "",
+                phoneNumber         = doc.getString("phoneNumber")        ?: "",
+                profileImageUrl     = doc.getString("profileImageUrl")    ?: "",
+                role                = doc.getString("role")               ?: "tenant",
+                verificationStatus  = doc.getString("verificationStatus") ?: "PENDING",
+                isVerified          = doc.getBoolean("isVerified")        ?: false,
+                isActive            = doc.getBoolean("isActive")          ?: true,
+                isBanned            = doc.getBoolean("isBanned")          ?: false,
+                cnicNumber          = doc.getString("cnicNumber")         ?: "",
+                cnicImageUrl        = doc.getString("cnicImageUrl")       ?: "",
+                nationalId          = doc.getString("nationalId")         ?: "",
+                idFrontUrl          = doc.getString("idFrontUrl")         ?: "",
+                idBackUrl           = doc.getString("idBackUrl")          ?: "",
+                fcmToken            = doc.getString("fcmToken")           ?: "",
+                // KEY FIX: getDouble().toFloat() — toObject() skips Double->Float conversion
+                landlordRating      = doc.getDouble("landlordRating")?.toFloat()  ?: 0f,
+                landlordReviewCount = doc.getLong("landlordReviewCount")?.toInt() ?: 0,
+                location = doc.get("location")?.let { raw ->
+                    try {
+                        val map = raw as? Map<*, *>
+                        if (map != null) Location(
+                            address   = map["address"]   as? String ?: "",
+                            city      = map["city"]      as? String ?: "",
+                            country   = map["country"]   as? String ?: "",
+                            latitude  = (map["latitude"]  as? Double) ?: 0.0,
+                            longitude = (map["longitude"] as? Double) ?: 0.0
+                        ) else null
+                    } catch (e: Exception) { null }
+                },
+                preferences = UserPreferences(),
+                createdAt   = doc.getTimestamp("createdAt"),
+                updatedAt   = doc.getTimestamp("updatedAt")
+            )
+        } catch (e: Exception) {
+            Log.e("HAVEN_AUTH", "parseUser FAIL for ${doc.id}: ${e.localizedMessage}")
+            null
+        }
+    }
+
     private suspend fun saveFcmTokenToFirestore(userId: String) {
         try {
             val token = FirebaseMessaging.getInstance().token.await()
             if (token.isNotEmpty()) {
-                usersCollection.document(userId)
-                    .update("fcmToken", token)
-                    .await()
+                usersCollection.document(userId).update("fcmToken", token).await()
                 Log.d("HAVEN_AUTH", "FCM token saved for user: $userId")
             }
         } catch (e: Exception) {
-            // Non-fatal — notifications may not work but app continues
             Log.e("HAVEN_AUTH", "saveFcmToken error: ${e.localizedMessage}")
         }
     }
 
-    // Sign In
     suspend fun signIn(email: String, password: String): Resource<FirebaseUser?> {
         return try {
             val result = auth.signInWithEmailAndPassword(email, password).await()
             val user   = result.user ?: return Resource.Error("Sign in failed")
-
-            // Save FCM token immediately after login so notifications reach this device
             saveFcmTokenToFirestore(user.uid)
-
             Resource.Success(user)
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Sign in failed")
         }
     }
 
-    // Register — CNIC + profile image saved too
     suspend fun registerUser(
         email          : String,
         password       : String,
@@ -70,7 +109,6 @@ class AuthRepository @Inject constructor(
             val result = auth.createUserWithEmailAndPassword(email, password).await()
             val user   = result.user ?: return Resource.Error("Registration failed")
 
-            // Fetch FCM token upfront so it is stored with the user document from day one
             val fcmToken = try {
                 FirebaseMessaging.getInstance().token.await()
             } catch (e: Exception) { "" }
@@ -88,7 +126,7 @@ class AuthRepository @Inject constructor(
                 "isActive"            to true,
                 "isBanned"            to false,
                 "phoneNumber"         to "",
-                "fcmToken"            to fcmToken,   // Saved at registration time
+                "fcmToken"            to fcmToken,
                 "landlordRating"      to 0.0,
                 "landlordReviewCount" to 0,
                 "createdAt"           to FieldValue.serverTimestamp(),
@@ -96,7 +134,7 @@ class AuthRepository @Inject constructor(
             )
 
             usersCollection.document(user.uid).set(userDoc).await()
-            Log.d("HAVEN_AUTH", "User registered: ${user.uid} role=$role token=$fcmToken")
+            Log.d("HAVEN_AUTH", "User registered: ${user.uid} role=$role")
             Resource.Success(user)
         } catch (e: Exception) {
             Log.e("HAVEN_AUTH", "registerUser error: ${e.localizedMessage}")
@@ -104,7 +142,6 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // Google Sign In
     suspend fun signInWithGoogle(idToken: String): Resource<FirebaseUser?> {
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -138,10 +175,7 @@ class AuthRepository @Inject constructor(
                 )
                 usersCollection.document(user.uid).set(userDoc).await()
             } else {
-                // Existing user — just refresh the token
-                usersCollection.document(user.uid)
-                    .update("fcmToken", fcmToken)
-                    .await()
+                usersCollection.document(user.uid).update("fcmToken", fcmToken).await()
             }
 
             Resource.Success(user)
@@ -150,13 +184,11 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // Sign Out
     suspend fun signOut() {
         try { auth.signOut() }
         catch (e: Exception) { Log.e("HAVEN_AUTH", "signOut error: ${e.localizedMessage}") }
     }
 
-    // Password Reset
     suspend fun sendPasswordResetEmail(email: String): Resource<Unit> {
         return try {
             auth.sendPasswordResetEmail(email).await()
@@ -166,7 +198,6 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // Delete Account
     suspend fun deleteAccount(): Resource<Unit> {
         return try {
             val user = auth.currentUser ?: return Resource.Error("No user logged in")
@@ -178,7 +209,6 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // Get User Role
     suspend fun getUserRole(uid: String): String {
         return try {
             val directDoc = usersCollection.document(uid).get().await()
@@ -188,16 +218,13 @@ class AuthRepository @Inject constructor(
             val query = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
             if (!query.isEmpty) {
                 query.documents.first().getString("role")?.lowercase()?.trim() ?: "tenant"
-            } else {
-                "tenant"
-            }
+            } else { "tenant" }
         } catch (e: Exception) {
             Log.e("HAVEN_AUTH", "getUserRole error: ${e.localizedMessage}")
             "tenant"
         }
     }
 
-    // Get User Verified Status
     suspend fun getUserVerified(uid: String): Boolean {
         return try {
             val directDoc = usersCollection.document(uid).get().await()
@@ -212,25 +239,20 @@ class AuthRepository @Inject constructor(
                 val status = doc.getString("verificationStatus")?.uppercase() ?: ""
                 status == "VERIFIED" || status == "APPROVED" ||
                         doc.getBoolean("isVerified") == true
-            } else {
-                false
-            }
+            } else { false }
         } catch (e: Exception) {
             Log.e("HAVEN_AUTH", "getUserVerified error: ${e.localizedMessage}")
             false
         }
     }
 
-    // Update User Fields
     suspend fun updateUserFields(uid: String, fields: Map<String, Any>): Resource<Unit> {
         return try {
             val directDoc = usersCollection.document(uid).get().await()
-            val docId = if (directDoc.exists()) {
-                uid
-            } else {
+            val docId = if (directDoc.exists()) uid
+            else {
                 val query = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
-                query.documents.firstOrNull()?.id
-                    ?: return Resource.Error("User not found")
+                query.documents.firstOrNull()?.id ?: return Resource.Error("User not found")
             }
             val updatedFields = fields.toMutableMap()
             updatedFields["updatedAt"] = FieldValue.serverTimestamp()
@@ -241,17 +263,18 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // Get Full User Object
+    // FIX: Replaced toObject(User::class.java) with parseUser() helper.
+    // toObject() silently returns 0f for landlordRating (Double->Float issue).
     suspend fun getUser(uid: String): Resource<User> {
         return try {
             val directDoc = usersCollection.document(uid).get().await()
             if (directDoc.exists()) {
-                val user = directDoc.toObject(User::class.java)
+                val user = parseUser(directDoc)
                 if (user != null) return Resource.Success(user)
             }
             val query = usersCollection.whereEqualTo("userId", uid).limit(1).get().await()
             if (!query.isEmpty) {
-                val user = query.documents.first().toObject(User::class.java)
+                val user = parseUser(query.documents.first())
                 if (user != null) return Resource.Success(user)
             }
             Resource.Error("User not found")

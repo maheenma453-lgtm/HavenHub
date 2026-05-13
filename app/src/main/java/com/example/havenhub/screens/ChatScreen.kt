@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,16 +34,6 @@ import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ✅ FIX 1: SurfaceGray — proper light gray (was almost transparent before)
-private val SurfaceGray      = Color(0xFFF0F0F0)   // solid light gray background
-
-// ✅ FIX 2: TextField background — slightly white so text is clearly visible
-private val TextFieldBg      = Color(0xFFFFFFFF)   // white input field
-
-// ✅ FIX 3: Text colors — dark on light background
-private val TextDark         = Color(0xFF1A1A1A)   // typed text color
-private val TextHint         = Color(0xFF9E9E9E)   // placeholder color
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -57,6 +48,21 @@ fun ChatScreen(
     val uiState     by viewModel.uiState.collectAsState()
     var messageText by remember { mutableStateOf("") }
     val listState   = rememberLazyListState()
+
+    // ── Dark / Light theme detection ──────────────────────────────
+    val isDark = isSystemInDarkTheme()
+
+    // Theme-aware color tokens
+    val screenBg     = if (isDark) DarkBg           else Color(0xFFF0F0F0)
+    val topBarBg     = if (isDark) DarkBgSecondary   else PrimaryBlue
+    val bottomBarBg  = if (isDark) DarkSurface       else Color.White
+    val fieldBg      = if (isDark) DarkBgElevated    else Color.White
+    val typedText    = if (isDark) DarkTextPrimary   else Color(0xFF1A1A1A)
+    val hintText     = if (isDark) DarkTextSecondary else Color(0xFF9E9E9E)
+    val sendIcon     = if (isDark) DarkGoldPrimary   else PrimaryBlue
+    val focusBorder  = if (isDark) DarkGoldPrimary   else PrimaryBlue
+    val unfocusBord  = if (isDark) DarkBorder        else Color(0xFFCCCCCC)
+    val emptyMsgCol  = if (isDark) DarkTextSecondary else Color(0xFF9E9E9E)
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -99,13 +105,16 @@ fun ChatScreen(
         viewModel.clearSelection()
     }
 
+    // ── Delete Confirmation Dialog ────────────────────────────────
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
+            containerColor   = if (isDark) DarkSurface else Color.White,
             title = {
                 Text(
                     text  = "Messages Delete Karen?",
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (isDark) DarkTextPrimary else Color.Unspecified
                 )
             },
             text = {
@@ -113,7 +122,7 @@ fun ChatScreen(
                 Text(
                     text  = "$count message${if (count > 1) "s" else ""} delete ho jaenge.\nSirf apne bheje huye messages delete honge.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isDark) DarkTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
@@ -122,17 +131,13 @@ fun ChatScreen(
                         showDeleteDialog = false
                         viewModel.deleteSelectedMessages()
                     },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Delete", fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -141,31 +146,19 @@ fun ChatScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (uiState.isSelectionMode) {
+                // Selection mode top bar
                 TopAppBar(
-                    title = {
-                        Text(
-                            text  = "${uiState.selectedMessageIds.size} selected",
-                            color = Color.White
-                        )
-                    },
+                    title = { Text("${uiState.selectedMessageIds.size} selected", color = Color.White) },
                     navigationIcon = {
                         IconButton(onClick = { viewModel.clearSelection() }) {
-                            Icon(
-                                imageVector        = Icons.Default.Close,
-                                contentDescription = "Cancel selection",
-                                tint               = Color.White
-                            )
+                            Icon(Icons.Default.Close, contentDescription = "Cancel selection", tint = Color.White)
                         }
                     },
                     actions = {
                         val allSelected = uiState.messages.isNotEmpty() &&
                                 uiState.selectedMessageIds.size == uiState.messages.size
-
                         TextButton(
-                            onClick = {
-                                if (allSelected) viewModel.clearSelection()
-                                else viewModel.selectAllMessages()
-                            }
+                            onClick = { if (allSelected) viewModel.clearSelection() else viewModel.selectAllMessages() }
                         ) {
                             Text(
                                 text       = if (allSelected) "Deselect All" else "Select All",
@@ -174,56 +167,38 @@ fun ChatScreen(
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
-
                         AnimatedVisibility(
                             visible = uiState.selectedMessageIds.isNotEmpty(),
                             enter   = fadeIn(),
                             exit    = fadeOut()
                         ) {
-                            IconButton(
-                                onClick = { showDeleteDialog = true },
-                                enabled = !uiState.isDeleting
-                            ) {
+                            IconButton(onClick = { showDeleteDialog = true }, enabled = !uiState.isDeleting) {
                                 if (uiState.isDeleting) {
-                                    CircularProgressIndicator(
-                                        modifier    = Modifier.size(20.dp),
-                                        color       = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                                 } else {
-                                    Icon(
-                                        imageVector        = Icons.Default.Delete,
-                                        contentDescription = "Delete selected messages",
-                                        tint               = Color.White
-                                    )
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete selected messages", tint = Color.White)
                                 }
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.error)
                 )
             } else {
+                // Normal top bar
                 TopAppBar(
-                    title = {
-                        Text(
-                            text  = ownerName.ifEmpty { "Chat" },
-                            color = Color.White
-                        )
-                    },
+                    title = { Text(ownerName.ifEmpty { "Chat" }, color = Color.White) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryBlue)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = topBarBg)
                 )
             }
         },
         bottomBar = {
             if (!uiState.isSelectionMode) {
-                Surface(shadowElevation = 8.dp, color = Color.White) {
+                Surface(shadowElevation = 8.dp, color = bottomBarBg) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -233,24 +208,23 @@ fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = { /* Attachment logic */ }) {
-                            Icon(Icons.Default.AttachFile, null, tint = Color.Gray)
+                            Icon(Icons.Default.AttachFile, null, tint = if (isDark) DarkTextSecondary else Color.Gray)
                         }
 
                         OutlinedTextField(
                             value         = messageText,
                             onValueChange = { messageText = it },
                             modifier      = Modifier.weight(1f),
-                            placeholder   = { Text("Type here...", color = TextHint) },
+                            placeholder   = { Text("Type here...", color = hintText) },
                             shape         = RoundedCornerShape(24.dp),
-                            // ✅ FIX: Text color explicitly set to dark so it's visible
                             colors        = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor     = TextFieldBg,
-                                unfocusedContainerColor   = TextFieldBg,
-                                focusedTextColor          = TextDark,       // ← typed text dark
-                                unfocusedTextColor        = TextDark,       // ← typed text dark
-                                focusedBorderColor        = PrimaryBlue,
-                                unfocusedBorderColor      = Color(0xFFCCCCCC),
-                                cursorColor               = PrimaryBlue
+                                focusedContainerColor     = fieldBg,
+                                unfocusedContainerColor   = fieldBg,
+                                focusedTextColor          = typedText,
+                                unfocusedTextColor        = typedText,
+                                focusedBorderColor        = focusBorder,
+                                unfocusedBorderColor      = unfocusBord,
+                                cursorColor               = focusBorder
                             )
                         )
 
@@ -264,7 +238,7 @@ fun ChatScreen(
                                 messageText = ""
                             }
                         }) {
-                            Icon(Icons.AutoMirrored.Filled.Send, null, tint = PrimaryBlue)
+                            Icon(Icons.AutoMirrored.Filled.Send, null, tint = sendIcon)
                         }
                     }
                 }
@@ -275,22 +249,18 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                // ✅ FIX: Proper gray background — was transparent before
-                .background(SurfaceGray)
+                .background(screenBg)
         ) {
             when {
                 uiState.isLoading -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
-                        color    = PrimaryBlue
+                        color    = if (isDark) DarkGoldPrimary else PrimaryBlue
                     )
                 }
                 uiState.messages.isEmpty() -> {
-                    Box(
-                        modifier         = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("No messages yet.\nSay hello! 👋", color = TextHint)
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No messages yet.\nSay hello! 👋", color = emptyMsgCol)
                     }
                 }
                 else -> {
@@ -300,12 +270,8 @@ fun ChatScreen(
                         contentPadding      = PaddingValues(vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        items(
-                            items = uiState.messages,
-                            key   = { it.id }
-                        ) { message ->
+                        items(items = uiState.messages, key = { it.id }) { message ->
                             val isMe = message.senderId == resolvedCurrentUserId
-
                             MessageBubble(
                                 message         = message.content,
                                 timestamp       = formatTimestamp(message.timestamp),
@@ -314,11 +280,7 @@ fun ChatScreen(
                                 isSelected      = message.isSelected,
                                 isSelectionMode = uiState.isSelectionMode,
                                 onLongPress     = { viewModel.onMessageLongPress(message.id) },
-                                onTap           = {
-                                    if (uiState.isSelectionMode) {
-                                        viewModel.onMessageTap(message.id)
-                                    }
-                                }
+                                onTap           = { if (uiState.isSelectionMode) viewModel.onMessageTap(message.id) }
                             )
                         }
                     }
