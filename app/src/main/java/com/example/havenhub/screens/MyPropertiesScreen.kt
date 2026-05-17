@@ -122,22 +122,31 @@ fun MyPropertiesScreen(
                         contentPadding      = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(items = uiState.myProperties, key = { it.propertyId }) { property ->
+                        items(
+                            items = uiState.myProperties,
+                            key   = { it.propertyId }
+                        ) { property ->
                             MyPropertyCard(
-                                property = property,
-                                onClick  = {
+                                property     = property,
+                                onClick      = {
                                     navController.navigate(
                                         Screen.PropertyDetail.createRoute(property.propertyId)
                                     )
                                 },
-                                onEdit   = {
+                                onEdit       = {
                                     navController.navigate(
                                         Screen.EditProperty.createRoute(property.propertyId)
                                     )
                                 },
-                                onDelete = {
+                                onDelete     = {
                                     selectedPropertyId = property.propertyId
                                     showDeleteDialog   = true
+                                },
+                                // Navigate to AddRentalPackageScreen with this property's id
+                                onAddPackage = {
+                                    navController.navigate(
+                                        Screen.AddRentalPackage.createRoute(property.propertyId)
+                                    )
                                 }
                             )
                         }
@@ -173,10 +182,11 @@ fun MyPropertiesScreen(
 // ── Property card composable ──────────────────────────────────────────────────
 @Composable
 fun MyPropertyCard(
-    property: Property,
-    onClick : () -> Unit,
-    onEdit  : () -> Unit,
-    onDelete: () -> Unit
+    property    : Property,
+    onClick     : () -> Unit,
+    onEdit      : () -> Unit,
+    onDelete    : () -> Unit,
+    onAddPackage: () -> Unit   // NEW: called when landlord taps "Add Package"
 ) {
     val onSurface        = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
@@ -197,12 +207,11 @@ fun MyPropertyCard(
                     .fillMaxWidth()
                     .height(180.dp)
             ) {
-                // ✦ FIX: Pehle remote URL check karo, agar nahi toh drawable fallback
-                // Exactly wahi logic jo HomeScreen aur PropertyDetailScreen mein use hota hai
+                // Check remote URL first, fallback to drawable if not available
                 val remoteUrl = property.imageUrls.firstOrNull { it.isNotBlank() }
 
                 when {
-                    // Case 1: ImgBB ya koi bhi remote URL available hai → Coil se load karo
+                    // Case 1: ImgBB or any remote URL available — load with Coil
                     !remoteUrl.isNullOrEmpty() -> {
                         AsyncImage(
                             model              = remoteUrl,
@@ -212,8 +221,7 @@ fun MyPropertyCard(
                         )
                     }
 
-                    // Case 2: Remote URL nahi, drawable name ya propertyId se local image load karo
-                    // drawableImageName → resolvedDrawableName → propertyId — isi order mein try karo
+                    // Case 2: No remote URL — try drawable by name or propertyId
                     else -> {
                         val drawableRes = getPropertyImage(
                             property.drawableImageName.ifEmpty {
@@ -250,7 +258,8 @@ fun MyPropertyCard(
             }
 
             Column(modifier = Modifier.padding(14.dp)) {
-                // Title
+
+                // Property title
                 Text(
                     text       = property.title,
                     fontWeight = FontWeight.Bold,
@@ -277,7 +286,7 @@ fun MyPropertyCard(
                     }
                 }
 
-                // Price
+                // Price per night
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text       = property.formattedPrice + "/night",
@@ -286,7 +295,7 @@ fun MyPropertyCard(
                     color      = primary
                 )
 
-                // PT-1 document status
+                // PT-1 document upload status
                 if (property.hasPt1Document) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -309,7 +318,7 @@ fun MyPropertyCard(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Edit / Delete buttons
+                // Edit / Delete buttons row
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -319,7 +328,11 @@ fun MyPropertyCard(
                         modifier = Modifier.weight(1f),
                         shape    = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = null,
+                            modifier           = Modifier.size(16.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Edit", fontSize = 13.sp)
                     }
@@ -329,9 +342,35 @@ fun MyPropertyCard(
                         shape    = RoundedCornerShape(8.dp),
                         colors   = ButtonDefaults.outlinedButtonColors(contentColor = error)
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = null,
+                            modifier           = Modifier.size(16.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Delete", fontSize = 13.sp)
+                    }
+                }
+
+                // Add Package button — only visible for APPROVED properties
+                // Pending or rejected properties cannot have packages yet
+                if (property.status.uppercase() == "APPROVED") {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick  = onAddPackage,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(8.dp),
+                        colors   = ButtonDefaults.outlinedButtonColors(
+                            contentColor = primary
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.LocalOffer,
+                            contentDescription = null,
+                            modifier           = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Package", fontSize = 13.sp)
                     }
                 }
             }

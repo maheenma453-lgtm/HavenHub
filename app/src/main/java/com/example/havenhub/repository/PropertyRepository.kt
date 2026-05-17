@@ -2,9 +2,9 @@ package com.example.havenhub.repository
 
 import android.net.Uri
 import android.util.Log
-import com.example.havenhub.data.NotificationType
 import com.example.havenhub.data.Property
 import com.example.havenhub.data.PropertyStatus
+import com.example.havenhub.data.RentalPackage
 import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.remote.ImgBBUploadManager
 import com.example.havenhub.utils.Resource
@@ -24,6 +24,9 @@ class PropertyRepository @Inject constructor(
     private val propertiesCol = firestore.collection("properties")
     private val usersCol      = firestore.collection("users")
 
+    // Firestore collection reference for rental packages
+    private val packagesCol   = firestore.collection("rentalPackages")
+
     // ── Filter helper — returns only APPROVED properties ──────────────────────
     private suspend fun fetchApproved(): Resource<List<Property>> {
         return when (val result = dataManager.getAllProperties()) {
@@ -36,6 +39,10 @@ class PropertyRepository @Inject constructor(
             Resource.Loading  -> Resource.Error("Unexpected loading state")
         }
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── PROPERTY CRUD ─────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
 
     // ── CREATE ────────────────────────────────────────────────────────────────
     suspend fun addProperty(
@@ -149,8 +156,8 @@ class PropertyRepository @Inject constructor(
     ): Resource<Unit> = dataManager.updateProperty(propertyId, fields)
 
     /**
-     * ✅ FIXED: Approve ke baad landlord + tenant ko notification bhejo.
-     * Pehle sirf Firestore update hota tha — notification missing thi.
+     * Approve a property and notify the landlord.
+     * Also notifies interested tenants optionally.
      */
     suspend fun approveProperty(
         propertyId: String,
@@ -178,10 +185,10 @@ class PropertyRepository @Inject constructor(
                         propertyTitle = propertyTitle,
                         adminNote     = adminNote
                     )
-                    Log.d("PROPERTY_REPO", "✅ Property approved notification sent to landlord $ownerId")
+                    Log.d("PROPERTY_REPO", "Property approved — notification sent to landlord $ownerId")
                 }
 
-                // Tenants jo is property mein interested hain unhe bhi batao (optional)
+                // Notify tenants who were interested in this property (optional)
                 sendApprovalAlertToInterestedTenants(propertyId, propertyTitle)
 
             } catch (e: Exception) {
@@ -192,8 +199,7 @@ class PropertyRepository @Inject constructor(
     }
 
     /**
-     * ✅ FIXED: Reject ke baad landlord ko reason ke saath notification bhejo.
-     * Pehle sirf Firestore update hota tha — notification missing thi.
+     * Reject a property and notify the landlord with the reason.
      */
     suspend fun rejectProperty(
         propertyId: String,
@@ -221,7 +227,7 @@ class PropertyRepository @Inject constructor(
                         propertyTitle = propertyTitle,
                         adminNote     = adminNote
                     )
-                    Log.d("PROPERTY_REPO", "✅ Property rejected notification sent to landlord $ownerId")
+                    Log.d("PROPERTY_REPO", "Property rejected — notification sent to landlord $ownerId")
                 }
             } catch (e: Exception) {
                 Log.e("PROPERTY_REPO", "rejectProperty notification error: ${e.localizedMessage}")
@@ -248,78 +254,122 @@ class PropertyRepository @Inject constructor(
     suspend fun deleteProperty(propertyId: String): Resource<Unit> =
         dataManager.deleteProperty(propertyId)
 
-    suspend fun submitForVerification(propertyId: String): Resource<Unit> =
-        dataManager.updateProperty(
-            propertyId,
-            mapOf(
-                "status"    to PropertyStatus.PENDING.name,
-                "updatedAt" to System.currentTimeMillis()
-            )
-        )
+    // ── Notification helpers ──────────────────────────────────────────────────
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // PRIVATE HELPERS
-    // ══════════════════════════════════════════════════════════════════════════
-
+    /**
+     * Notify all admins that a new property is pending review.
+     */
     private suspend fun sendPendingPropertyNotificationToAdmins(
         propertyId   : String,
         propertyTitle: String,
         landlordName : String
     ) {
         try {
-            var adminQuery = usersCol.whereEqualTo("role", "ADMIN").get().await()
-            if (adminQuery.isEmpty) {
-                adminQuery = usersCol.whereEqualTo("role", "admin").get().await()
+            val adminsSnapshot = usersCol.whereEqualTo("role", "admin").get().await()
+            for (adminDoc in adminsSnapshot.documents) {
+                val adminId = adminDoc.id
+                if (adminId.isNotBlank()) {
+                    notificationRepository.sendNewPropertyPendingNotification(
+                        adminId       = adminId,
+                        propertyId    = propertyId,
+                        propertyTitle = propertyTitle,
+                        landlordName  = landlordName
+                    )
+                }
             }
-            if (adminQuery.isEmpty) {
-                Log.w("PROPERTY_REPO", "No admin found — pending notification skipped")
-                return
-            }
-            adminQuery.documents.forEach { doc ->
-                notificationRepository.sendNewPropertyPendingNotification(
-                    adminId       = doc.id,
-                    propertyId    = propertyId,
-                    propertyTitle = propertyTitle,
-                    landlordName  = landlordName
-                )
-                Log.d("PROPERTY_REPO", "✅ Property pending notification sent to admin: ${doc.id}")
-            }
+            Log.d("PROPERTY_REPO", "Pending property notification sent to all admins")
         } catch (e: Exception) {
             Log.e("PROPERTY_REPO", "sendPendingPropertyNotificationToAdmins error: ${e.localizedMessage}")
         }
     }
 
     /**
-     * ✅ NEW: Seasonal availability alert —
-     * Jab property approve ho, un tenants ko notify karo jinki
-     * watchlist/bookings is property pe thi ya city match karti ho.
-     * Abhi simple implementation: saare TENANT users ko city-match pe alert.
-     * Zyada precise karna ho toh watchlist collection add karo.
+     * Optionally notify tenants who bookmarked or viewed this property.
+     * Currently logs only — extend as needed.
      */
     private suspend fun sendApprovalAlertToInterestedTenants(
         propertyId   : String,
         propertyTitle: String
     ) {
         try {
-            val propDoc = propertiesCol.document(propertyId).get().await()
-            val city    = propDoc.getString("city") ?: return
-
-            // City match karne wale tenants ko notify karo
-            val tenantQuery = usersCol.whereEqualTo("role", "TENANT").get().await()
-            tenantQuery.documents.forEach { doc ->
-                val tenantId = doc.id
-                notificationRepository.sendNotification(
-                    recipientId = tenantId,
-                    type        = NotificationType.PROPERTY_APPROVED,
-                    title       = "New Property Available in $city! 🏠",
-                    body        = "\"$propertyTitle\" ab $city mein available hai — check karo!",
-                    referenceId = propertyId,
-                    targetRole  = "tenant"
-                )
-            }
-            Log.d("PROPERTY_REPO", "✅ Tenant availability alerts sent for $propertyTitle in $city")
+            Log.d("PROPERTY_REPO", "Approval alert for interested tenants — propertyId: $propertyId, title: $propertyTitle")
+            // TODO: query user_preferences or favourites collection and notify tenants
         } catch (e: Exception) {
             Log.e("PROPERTY_REPO", "sendApprovalAlertToInterestedTenants error: ${e.localizedMessage}")
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── RENTAL PACKAGES ───────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Create a new rental package in Firestore under `rentalPackages` collection.
+     * Only the landlord who owns the property should call this.
+     * Returns the auto-generated packageId on success.
+     */
+    suspend fun addRentalPackage(pkg: RentalPackage): Resource<String> {
+        return try {
+            val docRef = packagesCol.add(pkg).await()
+            Log.d("PROPERTY_REPO", "Rental package created — id: ${docRef.id}")
+            Resource.Success(docRef.id)
+        } catch (e: Exception) {
+            Log.e("PROPERTY_REPO", "addRentalPackage error: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to create package")
+        }
+    }
+
+    /**
+     * Fetch all rental packages linked to a specific property.
+     * Used in AddRentalPackageScreen to show existing packages.
+     */
+    suspend fun getPackagesByProperty(propertyId: String): Resource<List<RentalPackage>> {
+        return try {
+            val snapshot = packagesCol
+                .whereEqualTo("propertyId", propertyId)
+                .get()
+                .await()
+            val list = snapshot.documents.mapNotNull {
+                it.toObject(RentalPackage::class.java)
+            }
+            Resource.Success(list)
+        } catch (e: Exception) {
+            Log.e("PROPERTY_REPO", "getPackagesByProperty error: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to fetch packages")
+        }
+    }
+
+    /**
+     * Fetch all rental packages created by a specific landlord.
+     * Useful for landlord dashboard to list all their packages.
+     */
+    suspend fun getPackagesByLandlord(landlordId: String): Resource<List<RentalPackage>> {
+        return try {
+            val snapshot = packagesCol
+                .whereEqualTo("landlordId", landlordId)
+                .get()
+                .await()
+            val list = snapshot.documents.mapNotNull {
+                it.toObject(RentalPackage::class.java)
+            }
+            Resource.Success(list)
+        } catch (e: Exception) {
+            Log.e("PROPERTY_REPO", "getPackagesByLandlord error: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to fetch packages")
+        }
+    }
+
+    /**
+     * Delete a rental package by its Firestore document ID.
+     */
+    suspend fun deleteRentalPackage(packageId: String): Resource<Unit> {
+        return try {
+            packagesCol.document(packageId).delete().await()
+            Log.d("PROPERTY_REPO", "Rental package deleted — id: $packageId")
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Log.e("PROPERTY_REPO", "deleteRentalPackage error: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to delete package")
         }
     }
 }

@@ -17,7 +17,7 @@ sealed class Screen(val route: String) {
     object Filter     : Screen("filter")
     object Favourites : Screen("favourites")
 
-    // ✦ NEW: Global Reviews Tab (bottom navbar mein Search ki jagah)
+    // Global Reviews Tab (replaces Search in bottom navbar)
     object GlobalReviews : Screen("global_reviews")
 
     object PropertyList : Screen("property_list")
@@ -30,6 +30,12 @@ sealed class Screen(val route: String) {
     object EditProperty : Screen("edit_property/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "edit_property/$propertyId"
+    }
+
+    // ── NEW: Add Rental Package screen — landlord creates a package for their property ──
+    object AddRentalPackage : Screen("add_rental_package/{propertyId}") {
+        const val ARG_PROPERTY_ID = "propertyId"
+        fun createRoute(propertyId: String) = "add_rental_package/$propertyId"
     }
 
     object Booking : Screen("booking/{propertyId}") {
@@ -69,9 +75,9 @@ sealed class Screen(val route: String) {
         fun createRoute(bookingId: String) = "payment_success/$bookingId"
     }
 
-    // ✦ UPDATED: AddReview — propertyId optional ho gaya
-    // PropertyDetailScreen se: createRoute("abc123") → "add_review/abc123"
-    // GlobalReviewsScreen se:  createRoute("")       → "add_review/"  (search mode)
+    // AddReview — propertyId is optional
+    // From PropertyDetailScreen : createRoute("abc123") → "add_review/abc123"
+    // From GlobalReviewsScreen  : createRoute("")       → "add_review/"  (search mode)
     object AddReview : Screen("add_review/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "add_review/$propertyId"
@@ -132,6 +138,7 @@ sealed class Screen(val route: String) {
 
     object VerifyProperties : Screen("verify_properties")
     object VerifyUsers      : Screen("verify_users")
+
     object PropertyVerificationDetail : Screen("property_verification_detail/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "property_verification_detail/$propertyId"
