@@ -12,6 +12,7 @@ import com.example.havenhub.utils.Resource
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,6 +28,23 @@ class FirebaseDataManager @Inject constructor(
     private val reviewsCollection        = firestore.collection("reviews")
     private val notificationsCollection  = firestore.collection("notifications")
     private val rentalPackagesCollection = firestore.collection("rental_packages")
+
+    // ── Helper: Booking parse karo safely ────────────────────────────────────
+    // ✅ FIX: toObject use karo per-document — crash avoid hoga
+    private fun parseBooking(doc: com.google.firebase.firestore.DocumentSnapshot): Booking? {
+        return try {
+            val booking = doc.toObject(Booking::class.java) ?: return null
+            // ✅ bookingId set karo agar blank hai (manual documents mein @DocumentId kaam nahi karta)
+            if (booking.bookingId.isBlank()) {
+                booking.copy(bookingId = doc.id)
+            } else {
+                booking
+            }
+        } catch (e: Exception) {
+            Log.e("HAVEN_BOOKING", "parseBooking FAIL ${doc.id}: ${e.localizedMessage}")
+            null
+        }
+    }
 
     private fun extractUpdatedAt(doc: com.google.firebase.firestore.DocumentSnapshot): Long? {
         return when (val raw = doc.get("updatedAt")) {
@@ -76,6 +94,39 @@ class FirebaseDataManager @Inject constructor(
                 updatedAt         = doc.getTimestamp("updatedAt")
             )
         } catch (e: Exception) { null }
+    }
+
+    private fun parseReview(doc: com.google.firebase.firestore.DocumentSnapshot): Review? {
+        return try {
+            Review(
+                reviewId            = doc.id,
+                bookingId           = doc.getString("bookingId")           ?: "",
+                propertyId          = doc.getString("propertyId")          ?: "",
+                reviewerId          = doc.getString("reviewerId")          ?: "",
+                reviewerName        = doc.getString("reviewerName")        ?: "",
+                reviewerAvatarUrl   = doc.getString("reviewerAvatarUrl")   ?: "",
+                landlordId          = doc.getString("landlordId")          ?: "",
+                overallRating       = doc.getDouble("overallRating")?.toFloat()       ?: 0f,
+                cleanlinessRating   = doc.getDouble("cleanlinessRating")?.toFloat()   ?: 0f,
+                accuracyRating      = doc.getDouble("accuracyRating")?.toFloat()      ?: 0f,
+                communicationRating = doc.getDouble("communicationRating")?.toFloat() ?: 0f,
+                checkInRating       = doc.getDouble("checkInRating")?.toFloat()       ?: 0f,
+                valueRating         = doc.getDouble("valueRating")?.toFloat()         ?: 0f,
+                locationRating      = doc.getDouble("locationRating")?.toFloat()      ?: 0f,
+                comment             = doc.getString("comment")             ?: "",
+                photoUrls           = (doc.get("photoUrls") as? List<*>)
+                    ?.filterIsInstance<String>()                           ?: emptyList(),
+                landlordReply       = doc.getString("landlordReply")       ?: "",
+                landlordRepliedAt   = doc.getTimestamp("landlordRepliedAt"),
+                isVisible           = doc.getBoolean("isVisible")          ?: true,
+                moderationNote      = doc.getString("moderationNote")      ?: "",
+                createdAt           = doc.getTimestamp("createdAt"),
+                updatedAt           = doc.getTimestamp("updatedAt")
+            )
+        } catch (e: Exception) {
+            Log.e("HAVEN_REVIEW", "parseReview FAIL ${doc.id}: ${e.localizedMessage}")
+            null
+        }
     }
 
     private fun parseRentalPackage(doc: com.google.firebase.firestore.DocumentSnapshot): RentalPackage? {
@@ -211,6 +262,27 @@ class FirebaseDataManager @Inject constructor(
         } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to delete property") }
     }
 
+    suspend fun searchProperties(query: String): Resource<List<Property>> {
+        return try {
+            val q = query.trim().lowercase()
+            val snapshot = propertiesCollection
+                .whereEqualTo("status", "APPROVED")
+                .get().await()
+            val results = snapshot.documents
+                .mapNotNull { parseProperty(it) }
+                .filter { property ->
+                    property.title.lowercase().contains(q) ||
+                            property.city.lowercase().contains(q)
+                }
+                .sortedBy { it.title }
+            Log.d("HAVEN_SEARCH", "searchProperties[$query]: ${results.size} results")
+            Resource.Success(results)
+        } catch (e: Exception) {
+            Log.e("HAVEN_SEARCH", "searchProperties FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Search failed")
+        }
+    }
+
     // ── Favourites ────────────────────────────────────────────────────────────
 
     suspend fun addFavourite(userId: String, propertyId: String): Resource<Unit> {
@@ -285,49 +357,97 @@ class FirebaseDataManager @Inject constructor(
         } catch (e: Exception) { false }
     }
 
-    // ── Booking ──────────────────────────────────────────────────────────────
+    // ── Booking ───────────────────────────────────────────────────────────────
+    // ✅ KEY FIX: Saari booking functions ab parseBooking() use karti hain
+    // parseBooking() manually set karta hai bookingId = doc.id agar blank ho
+    // Isse manual documents (booking_001) aur auto documents dono fetch honge
 
     suspend fun createBooking(booking: Booking): Resource<String> {
         return try {
             val docRef = bookingsCollection.document()
             docRef.set(booking.copy(bookingId = docRef.id)).await()
+            Log.d("HAVEN_BOOKING", "createBooking SUCCESS: ${docRef.id}")
             Resource.Success(docRef.id)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to create booking") }
+        } catch (e: Exception) {
+            Log.e("HAVEN_BOOKING", "createBooking FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to create booking")
+        }
     }
 
     suspend fun getBookingById(bookingId: String): Resource<Booking> {
         return try {
             val snapshot = bookingsCollection.document(bookingId).get().await()
-            Resource.Success(snapshot.toObject(Booking::class.java) ?: return Resource.Error("Booking not found"))
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch booking") }
+            val booking  = parseBooking(snapshot)
+                ?: return Resource.Error("Booking not found")
+            Log.d("HAVEN_BOOKING", "getBookingById: $bookingId found")
+            Resource.Success(booking)
+        } catch (e: Exception) {
+            Log.e("HAVEN_BOOKING", "getBookingById FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to fetch booking")
+        }
     }
 
+    // ✅ FIX: toObjects() ki bajaye parseBooking() use karo
+    // toObjects() @DocumentId set nahi karta manual documents mein
     suspend fun getAllBookings(): Resource<List<Booking>> {
         return try {
             val snapshot = bookingsCollection.get().await()
-            Resource.Success(snapshot.toObjects(Booking::class.java).sortedByDescending { it.createdAt })
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch all bookings") }
+            val bookings = snapshot.documents
+                .mapNotNull { parseBooking(it) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
+            Log.d("HAVEN_BOOKING", "getAllBookings: ${bookings.size} total")
+            Resource.Success(bookings)
+        } catch (e: Exception) {
+            Log.e("HAVEN_BOOKING", "getAllBookings FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to fetch all bookings")
+        }
     }
 
+    // ✅ FIX: tenantId se query — parseBooking() se bookingId bhi sahi milega
     suspend fun getBookingsByTenantId(tenantId: String): List<Booking> {
         return try {
-            bookingsCollection.whereEqualTo("tenantId", tenantId).get().await()
-                .toObjects(Booking::class.java).sortedByDescending { it.createdAt }
-        } catch (e: Exception) { emptyList() }
+            val snapshot = bookingsCollection
+                .whereEqualTo("tenantId", tenantId)
+                .get()
+                .await()
+            val bookings = snapshot.documents
+                .mapNotNull { parseBooking(it) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
+            Log.d("HAVEN_BOOKING", "getBookingsByTenantId[$tenantId]: ${bookings.size} bookings")
+            bookings
+        } catch (e: Exception) {
+            Log.e("HAVEN_BOOKING", "getBookingsByTenantId FAIL: ${e.localizedMessage}")
+            emptyList()
+        }
     }
 
+    // ✅ FIX: landlordId se query — parseBooking() se bookingId bhi sahi milega
     suspend fun getBookingsByLandlordId(landlordId: String): List<Booking> {
         return try {
-            bookingsCollection.whereEqualTo("landlordId", landlordId).get().await()
-                .toObjects(Booking::class.java).sortedByDescending { it.createdAt }
-        } catch (e: Exception) { emptyList() }
+            val snapshot = bookingsCollection
+                .whereEqualTo("landlordId", landlordId)
+                .get()
+                .await()
+            val bookings = snapshot.documents
+                .mapNotNull { parseBooking(it) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
+            Log.d("HAVEN_BOOKING", "getBookingsByLandlordId[$landlordId]: ${bookings.size} bookings")
+            bookings
+        } catch (e: Exception) {
+            Log.e("HAVEN_BOOKING", "getBookingsByLandlordId FAIL: ${e.localizedMessage}")
+            emptyList()
+        }
     }
 
     suspend fun updateBookingStatus(bookingId: String, status: String): Resource<Unit> {
         return try {
             bookingsCollection.document(bookingId).update("status", status).await()
+            Log.d("HAVEN_BOOKING", "updateBookingStatus: $bookingId -> $status")
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to update booking status") }
+        } catch (e: Exception) {
+            Log.e("HAVEN_BOOKING", "updateBookingStatus FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to update booking status")
+        }
     }
 
     // ── Notifications ─────────────────────────────────────────────────────────
@@ -342,16 +462,6 @@ class FirebaseDataManager @Inject constructor(
     }
 
     // ── Review ────────────────────────────────────────────────────────────────
-
-    // ✅ FIX: review.copy(reviewId = docRef.id) REMOVED
-    // Reason: @DocumentId annotation wala field Firestore document mein
-    // SAVE nahi hona chahiye. Jab hum reviewId ko data mein include karte
-    // the, toh Firestore deserialize karte waqt conflict deta tha kyunki
-    // woh usi field ko @DocumentId se bhi fill karna chahta tha.
-    // Solution: Manual mapOf() use karo aur reviewId ko bilkul mat dalo.
-
-
-    // ── Review ✦ FIXED ────────────────────────────────────────────────────────
 
     suspend fun addReview(review: Review): Resource<String> {
         return try {
@@ -377,8 +487,6 @@ class FirebaseDataManager @Inject constructor(
                 "isVisible"           to review.isVisible,
                 "moderationNote"      to review.moderationNote,
                 "updatedAt"           to review.updatedAt
-                // reviewId: @DocumentId — BILKUL MAT DENA
-                // createdAt: @ServerTimestamp — Firestore khud set karega
             )
             docRef.set(reviewData).await()
             Log.d("HAVEN_REVIEW", "addReview SUCCESS: ${docRef.id}")
@@ -395,46 +503,44 @@ class FirebaseDataManager @Inject constructor(
                 .whereEqualTo("propertyId", propertyId)
                 .get().await()
 
-            // ✦ Manual parse — toObjects() ki jagah
-            // Purane documents mein reviewId field as data tha — conflict hota tha
-            val reviews = snapshot.documents.mapNotNull { doc ->
-                try {
-                    Review(
-                        reviewId            = doc.id,
-                        bookingId           = doc.getString("bookingId")           ?: "",
-                        propertyId          = doc.getString("propertyId")          ?: "",
-                        reviewerId          = doc.getString("reviewerId")          ?: "",
-                        reviewerName        = doc.getString("reviewerName")        ?: "",
-                        reviewerAvatarUrl   = doc.getString("reviewerAvatarUrl")   ?: "",
-                        landlordId          = doc.getString("landlordId")          ?: "",
-                        overallRating       = doc.getDouble("overallRating")?.toFloat()       ?: 0f,
-                        cleanlinessRating   = doc.getDouble("cleanlinessRating")?.toFloat()   ?: 0f,
-                        accuracyRating      = doc.getDouble("accuracyRating")?.toFloat()      ?: 0f,
-                        communicationRating = doc.getDouble("communicationRating")?.toFloat() ?: 0f,
-                        checkInRating       = doc.getDouble("checkInRating")?.toFloat()       ?: 0f,
-                        valueRating         = doc.getDouble("valueRating")?.toFloat()         ?: 0f,
-                        locationRating      = doc.getDouble("locationRating")?.toFloat()      ?: 0f,
-                        comment             = doc.getString("comment")             ?: "",
-                        photoUrls           = (doc.get("photoUrls") as? List<*>)
-                            ?.filterIsInstance<String>()      ?: emptyList(),
-                        landlordReply       = doc.getString("landlordReply")       ?: "",
-                        landlordRepliedAt   = doc.getTimestamp("landlordRepliedAt"),
-                        isVisible           = doc.getBoolean("isVisible")          ?: true,
-                        moderationNote      = doc.getString("moderationNote")      ?: "",
-                        createdAt           = doc.getTimestamp("createdAt"),
-                        updatedAt           = doc.getTimestamp("updatedAt")
-                    )
-                } catch (e: Exception) {
-                    Log.e("HAVEN_REVIEW", "Parse fail ${doc.id}: ${e.localizedMessage}")
-                    null
-                }
-            }.sortedByDescending { it.createdAt }
+            val reviews = snapshot.documents
+                .mapNotNull { parseReview(it) }
+                .sortedByDescending { it.createdAt }
 
             Log.d("HAVEN_REVIEW", "getReviewsByProperty[$propertyId]: ${reviews.size} reviews")
             Resource.Success(reviews)
         } catch (e: Exception) {
             Log.e("HAVEN_REVIEW", "getReviewsByProperty FAIL: ${e.localizedMessage}")
             Resource.Error(e.localizedMessage ?: "Failed to fetch reviews")
+        }
+    }
+
+    suspend fun getAllReviews(): Resource<List<Review>> {
+        return try {
+            val snapshot = reviewsCollection
+                .whereEqualTo("isVisible", true)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .limit(100)
+                .get().await()
+
+            val reviews = snapshot.documents.mapNotNull { parseReview(it) }
+            Log.d("HAVEN_REVIEW", "getAllReviews: ${reviews.size} reviews fetched")
+            Resource.Success(reviews)
+        } catch (e: Exception) {
+            Log.e("HAVEN_REVIEW", "getAllReviews FAIL: ${e.localizedMessage}")
+            try {
+                val fallbackSnapshot = reviewsCollection
+                    .whereEqualTo("isVisible", true)
+                    .get().await()
+                val reviews = fallbackSnapshot.documents
+                    .mapNotNull { parseReview(it) }
+                    .sortedByDescending { it.createdAt?.seconds ?: 0L }
+                Log.d("HAVEN_REVIEW", "getAllReviews fallback: ${reviews.size} reviews")
+                Resource.Success(reviews)
+            } catch (fallbackEx: Exception) {
+                Log.e("HAVEN_REVIEW", "getAllReviews fallback FAIL: ${fallbackEx.localizedMessage}")
+                Resource.Error(fallbackEx.localizedMessage ?: "Failed to fetch all reviews")
+            }
         }
     }
 
@@ -562,3 +668,36 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

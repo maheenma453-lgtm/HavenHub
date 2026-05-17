@@ -43,7 +43,6 @@ fun NotificationsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val userId  = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    // Read user role to navigate correctly for admin vs tenant/landlord
     val authViewModel: AuthViewModel = hiltViewModel()
     val authState by authViewModel.uiState.collectAsState()
     val isAdmin = authState.userRole == "admin"
@@ -54,7 +53,7 @@ fun NotificationsScreen(
     var dialogIsApproved by remember { mutableStateOf(true) }
 
     LaunchedEffect(userId) {
-        if (userId.isNotEmpty()) viewModel.observeNotifications(userId)
+        if (userId.isNotEmpty()) viewModel.startListening(userId)
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -137,7 +136,6 @@ fun NotificationsScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Notifications", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onPrimary)
-                        // Unread count badge
                         if (uiState.unreadCount > 0) {
                             Box(
                                 modifier = Modifier.clip(RoundedCornerShape(20.dp))
@@ -175,7 +173,6 @@ fun NotificationsScreen(
         }
 
         if (uiState.notifications.isEmpty()) {
-            // ── Empty state ───────────────────────────────────────────────────
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
@@ -231,7 +228,6 @@ fun NotificationsScreen(
                                 NotificationType.BOOKING_COMPLETED,
                                 NotificationType.BOOKING_REQUESTED -> {
                                     if (notification.referenceId.isNotEmpty()) {
-                                        // Admin -> ManageBookings, tenant/landlord -> BookingDetails
                                         if (isAdmin) navController.navigate(Screen.ManageBookings.route)
                                         else navController.navigate(Screen.BookingDetails.createRoute(notification.referenceId))
                                     }
@@ -239,6 +235,30 @@ fun NotificationsScreen(
                                 NotificationType.NEW_MESSAGE -> {
                                     if (notification.referenceId.isNotEmpty())
                                         navController.navigate(Screen.Chat.createRoute(notification.referenceId))
+                                }
+                                // ── FIX: Admin ko GlobalReviews pe bhejo, tenant/landlord ko ViewReviews pe ──
+                                NotificationType.NEW_REVIEW -> {
+                                    if (isAdmin) {
+                                        // Admin ke liye: GlobalReviews screen pe navigate karo
+                                        // (Admin ka apna reviews tab ya manage screen)
+                                        navController.navigate(Screen.GlobalReviews.route)
+                                    } else {
+                                        // Landlord/Tenant ke liye: specific property ki reviews
+                                        if (notification.referenceId.isNotEmpty()) {
+                                            navController.navigate(
+                                                Screen.ViewReviews.createRoute(notification.referenceId)
+                                            )
+                                        }
+                                    }
+                                }
+                                NotificationType.REVIEW_REPLY -> {
+                                    // Sirf tenant/landlord ko milti hai yeh notification
+                                    // referenceId = propertyId
+                                    if (notification.referenceId.isNotEmpty()) {
+                                        navController.navigate(
+                                            Screen.ViewReviews.createRoute(notification.referenceId)
+                                        )
+                                    }
                                 }
                                 else -> { }
                             }
@@ -258,14 +278,13 @@ fun NotificationCard(
     onClick : () -> Unit,
     onDelete: () -> Unit
 ) {
-    val notifColor = screenNotificationColor(enumType)
-    val notifIcon  = screenNotificationIcon(enumType)
-    val isUnread   = !item.isRead
-
-    val primary  = MaterialTheme.colorScheme.primary
-    val tertiary = MaterialTheme.colorScheme.tertiary
-    val surface  = MaterialTheme.colorScheme.surface
-    val onSurface = MaterialTheme.colorScheme.onSurface
+    val notifColor       = screenNotificationColor(enumType)
+    val notifIcon        = screenNotificationIcon(enumType)
+    val isUnread         = !item.isRead
+    val primary          = MaterialTheme.colorScheme.primary
+    val tertiary         = MaterialTheme.colorScheme.tertiary
+    val surface          = MaterialTheme.colorScheme.surface
+    val onSurface        = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
 
     Card(
@@ -285,14 +304,12 @@ fun NotificationCard(
             verticalAlignment     = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Unread indicator bar
             if (isUnread) {
                 Box(modifier = Modifier.width(3.dp).height(44.dp).clip(RoundedCornerShape(2.dp)).background(primary))
             } else {
                 Spacer(Modifier.width(3.dp))
             }
 
-            // Notification type icon
             Box(
                 modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
                     .background(notifColor.copy(0.12f)).border(1.dp, notifColor.copy(0.25f), RoundedCornerShape(12.dp)),
@@ -301,7 +318,6 @@ fun NotificationCard(
                 Icon(imageVector = notifIcon, contentDescription = null, tint = notifColor, modifier = Modifier.size(22.dp))
             }
 
-            // Content
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
@@ -332,7 +348,6 @@ fun NotificationCard(
                     maxLines   = 2,
                     lineHeight = 17.sp
                 )
-                // Admin note chip
                 if (item.adminNote.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     val noteColor = when (enumType) {
@@ -352,7 +367,6 @@ fun NotificationCard(
                 }
             }
 
-            // Right: unread dot + delete
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (isUnread) {
                     Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(tertiary))
@@ -365,24 +379,26 @@ fun NotificationCard(
     }
 }
 
-// ── Icon + Color helper functions ─────────────────────────────────────────────
+// ── Icon + Color helpers ──────────────────────────────────────────────────────
 fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED,
     NotificationType.BOOKING_CONFIRMED,
     NotificationType.BOOKING_CANCELLED,
     NotificationType.BOOKING_COMPLETED,
-    NotificationType.BOOKING_REMINDER  -> Icons.Default.CalendarToday
+    NotificationType.BOOKING_REMINDER          -> Icons.Default.CalendarToday
     NotificationType.PAYMENT_RECEIVED,
     NotificationType.PAYMENT_FAILED,
-    NotificationType.REFUND_ISSUED     -> Icons.Default.Payment
-    NotificationType.NEW_MESSAGE       -> Icons.AutoMirrored.Filled.Message
-    NotificationType.PROPERTY_APPROVED -> Icons.Default.CheckCircle
-    NotificationType.PROPERTY_REJECTED -> Icons.Default.Cancel
-    NotificationType.PROPERTY_PENDING  -> Icons.Default.HourglassEmpty
-    NotificationType.USER_VERIFIED     -> Icons.Default.VerifiedUser
-    NotificationType.USER_REJECTED     -> Icons.Default.PersonOff
+    NotificationType.REFUND_ISSUED             -> Icons.Default.Payment
+    NotificationType.NEW_MESSAGE               -> Icons.AutoMirrored.Filled.Message
+    NotificationType.PROPERTY_APPROVED         -> Icons.Default.CheckCircle
+    NotificationType.PROPERTY_REJECTED         -> Icons.Default.Cancel
+    NotificationType.PROPERTY_PENDING          -> Icons.Default.HourglassEmpty
+    NotificationType.USER_VERIFIED             -> Icons.Default.VerifiedUser
+    NotificationType.USER_REJECTED             -> Icons.Default.PersonOff
     NotificationType.USER_VERIFICATION_PENDING -> Icons.Default.PersonSearch
-    else                               -> Icons.Default.Notifications
+    NotificationType.NEW_REVIEW                -> Icons.Default.Star
+    NotificationType.REVIEW_REPLY              -> Icons.Default.Reply
+    else                                       -> Icons.Default.Notifications
 }
 
 fun screenNotificationColor(type: NotificationType): Color = when (type) {
@@ -400,5 +416,7 @@ fun screenNotificationColor(type: NotificationType): Color = when (type) {
     NotificationType.PROPERTY_PENDING   -> Color(0xFFFF6F00)
     NotificationType.USER_VERIFIED      -> Color(0xFF2ECC71)
     NotificationType.USER_REJECTED      -> Color(0xFFBA1A1A)
+    NotificationType.NEW_REVIEW         -> Color(0xFF9B7D2E)
+    NotificationType.REVIEW_REPLY       -> Color(0xFF2E4A9E)
     else                                -> Color(0xFF9B7D2E)
 }

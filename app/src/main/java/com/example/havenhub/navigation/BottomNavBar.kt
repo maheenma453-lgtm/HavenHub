@@ -17,11 +17,11 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -51,7 +51,7 @@ fun AdminBottomNavBar(navController: NavController) {
     val currentRoute = navBackStackEntry?.destination?.route
 
     NavigationBar(
-        containerColor = PrimaryNavy,          // ✅ Navy background
+        containerColor = PrimaryNavy,
         tonalElevation = 0.dp,
         modifier = Modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
@@ -97,9 +97,9 @@ fun AdminBottomNavBar(navController: NavController) {
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor   = GoldAccent,
                     selectedTextColor   = GoldAccent,
-                    unselectedIconColor = Color.White.copy(alpha = 0.45f),  // ✅ White muted
+                    unselectedIconColor = Color.White.copy(alpha = 0.45f),
                     unselectedTextColor = Color.White.copy(alpha = 0.45f),
-                    indicatorColor      = Color.White.copy(alpha = 0.10f)   // ✅ Subtle indicator
+                    indicatorColor      = Color.White.copy(alpha = 0.10f)
                 ),
                 alwaysShowLabel = true
             )
@@ -116,21 +116,22 @@ data class BottomNavItem(
 )
 
 // ── Tenant Nav Items ──────────────────────────────────────────────────────────
+// ✦ CHANGED: "Search" tab hata diya, "Reviews" tab add kiya
 val tenantNavItems = listOf(
-    BottomNavItem(Screen.Home.route,        "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
-    BottomNavItem(Screen.Search.route,      "Search",     Icons.Filled.Search,               Icons.Outlined.Search),
-    BottomNavItem(Screen.MyBookings.route,  "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
-    BottomNavItem(Screen.MessageList.route, "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
-    BottomNavItem(Screen.Favourites.route,  "Favourites", Icons.Filled.Favorite,             Icons.Filled.FavoriteBorder)
+    BottomNavItem(Screen.Home.route,          "Home",      Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.MyBookings.route,    "Bookings",  Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
+    BottomNavItem(Screen.GlobalReviews.route, "Reviews",   Icons.Filled.RateReview,           Icons.Outlined.RateReview),
+    BottomNavItem(Screen.MessageList.route,   "Messages",  Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
+    BottomNavItem(Screen.Favourites.route,    "Favourites",Icons.Filled.Favorite,             Icons.Filled.FavoriteBorder)
 )
 
 // ── Landlord Nav Items ────────────────────────────────────────────────────────
 val landlordNavItems = listOf(
-    BottomNavItem(Screen.Home.route,         "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
-    BottomNavItem(Screen.MyProperties.route, "Properties", Icons.Filled.Home,                 Icons.Outlined.Home),
-    BottomNavItem(Screen.MyBookings.route,   "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
-    BottomNavItem(Screen.MessageList.route,  "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
-    BottomNavItem(Screen.Profile.route,      "Profile",    Icons.Filled.Person,               Icons.Outlined.Person)
+    BottomNavItem(Screen.Home.route,          "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.MyProperties.route,  "Properties", Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.MyBookings.route,    "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
+    BottomNavItem(Screen.MessageList.route,   "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
+    BottomNavItem(Screen.Profile.route,       "Profile",    Icons.Filled.Person,               Icons.Outlined.Person)
 )
 
 val bottomNavItems = tenantNavItems
@@ -148,7 +149,7 @@ fun BottomNavBar(
     val items = if (userRole == "landlord") landlordNavItems else tenantNavItems
 
     NavigationBar(
-        containerColor = PrimaryNavy,          // ✅ Navy background
+        containerColor = PrimaryNavy,
         tonalElevation = 0.dp,
         modifier = Modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
@@ -209,7 +210,7 @@ fun BottomNavBar(
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor   = GoldAccent,
                     selectedTextColor   = GoldAccent,
-                    unselectedIconColor = Color.White.copy(alpha = 0.45f),  // ✅ White muted
+                    unselectedIconColor = Color.White.copy(alpha = 0.45f),
                     unselectedTextColor = Color.White.copy(alpha = 0.45f),
                     indicatorColor      = Color.White.copy(alpha = 0.10f)
                 ),
@@ -218,30 +219,3 @@ fun BottomNavBar(
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

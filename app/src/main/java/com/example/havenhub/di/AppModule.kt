@@ -1,7 +1,6 @@
 package com.example.havenhub.di
 
 import android.content.Context
-import com.example.havenhub.utils.PreferenceManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,10 +17,4 @@ object AppModule {
     fun provideApplicationContext(
         @ApplicationContext context: Context
     ): Context = context
-
-    @Provides
-    @Singleton
-    fun providePreferenceManager(
-        @ApplicationContext context: Context
-    ): PreferenceManager = PreferenceManager(context)
 }

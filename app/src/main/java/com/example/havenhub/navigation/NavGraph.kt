@@ -15,7 +15,6 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.havenhub.screens.*
 import com.example.havenhub.viewmodel.AuthViewModel
-// PATCH: Import the two new ViewModels needed for live badge counts
 import com.example.havenhub.viewmodel.NotificationViewModel
 import com.example.havenhub.viewmodel.MessagingViewModel
 import com.google.firebase.auth.FirebaseAuth
@@ -57,34 +56,40 @@ private val sharedRoutes = listOf(
     Screen.Profile.route,
     Screen.EditProfile.route,
     Screen.Favourites.route,
+    Screen.GlobalReviews.route,
 )
 
 @Composable
 fun HavenHubNavGraph(
-    navController     : NavHostController,
-    // NOTE: unreadMessageCount is now driven internally via MessagingViewModel;
-    // keep this param for backward-compat but it is no longer the source of truth.
-    unreadMessageCount: Int = 0
+    navController: NavHostController
 ) {
     val authViewModel: AuthViewModel = hiltViewModel()
     val uiState by authViewModel.uiState.collectAsState()
 
-    // ── PATCH: Instantiate badge-count ViewModels ─────────────────
     val notificationViewModel: NotificationViewModel = hiltViewModel()
     val messagingViewModel   : MessagingViewModel    = hiltViewModel()
 
-    val notifUiState     by notificationViewModel.uiState.collectAsState()
     val messagingUiState by messagingViewModel.uiState.collectAsState()
 
-    // Resolve the current Firebase user ID
-    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    // ✅ FIX: uiState se uid lo — Auth ready hone ke baad sahi UID milega
+    // FirebaseAuth.getInstance().currentUser?.uid blank aa sakta tha
+    val currentUserId = uiState.currentUser?.uid ?: ""
 
-    // ── PATCH: Start live observation as soon as we have a userId ─
-    // This ensures the notification bell badge and message badge are
-    // populated even before the user navigates to those screens.
+    // ✅ isAuthReady check — splash ke dauraan galat redirect nahi hoga
+    LaunchedEffect(uiState.isLoggedIn, uiState.isAuthReady) {
+        if (uiState.isAuthReady && !uiState.isLoggedIn) {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            if (currentRoute != Screen.Splash.route) {
+                navController.navigate(Screen.SignIn.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        }
+    }
+
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
-            notificationViewModel.observeNotifications(currentUserId)
+            notificationViewModel.startListening(currentUserId)
             messagingViewModel.loadConversations(currentUserId)
         }
     }
@@ -93,18 +98,17 @@ fun HavenHubNavGraph(
     val currentRoute = navBackStackEntry?.destination?.route
 
     val isCurrentUserLandlord: Boolean = uiState.userRole == "landlord"
-    val isCurrentUserAdmin: Boolean = uiState.userRole == "admin"
+    val isCurrentUserAdmin   : Boolean = uiState.userRole == "admin"
 
     val isAuthRoute = currentRoute in authRoutes
 
-    // Determine whether the current destination belongs to the admin zone
     val isAdminRoute = when {
-        strictAdminRoutes.any { currentRoute == it }                               -> true
-        currentRoute?.startsWith("property_verification_detail") == true           -> true
-        currentRoute?.startsWith("user_verification_detail") == true               -> true
-        sharedRoutes.any { currentRoute == it }                                    -> isCurrentUserAdmin
-        currentRoute?.startsWith("notification_detail") == true                    -> isCurrentUserAdmin
-        else                                                                       -> false
+        strictAdminRoutes.any { currentRoute == it }                     -> true
+        currentRoute?.startsWith("property_verification_detail") == true -> true
+        currentRoute?.startsWith("user_verification_detail") == true     -> true
+        sharedRoutes.any { currentRoute == it }                          -> isCurrentUserAdmin
+        currentRoute?.startsWith("notification_detail") == true          -> isCurrentUserAdmin
+        else                                                             -> false
     }
 
     Scaffold(
@@ -114,7 +118,6 @@ fun HavenHubNavGraph(
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
                 else         -> BottomNavBar(
                     navController      = navController,
-                    // PATCH: Use live unread count from MessagingViewModel instead of hardcoded 0
                     unreadMessageCount = messagingUiState.unreadCount,
                     userRole           = uiState.userRole,
                 )
@@ -151,6 +154,11 @@ fun HavenHubNavGraph(
             composable(Screen.Home.route)   { HomeScreen(navController) }
             composable(Screen.Search.route) { SearchScreen(navController) }
             composable(Screen.Filter.route) { FilterScreen(navController) }
+
+// ── Global Reviews Tab ────────────────────────────────────────────
+            composable(Screen.GlobalReviews.route) {
+                GlobalReviewsScreen(navController = navController)
+            }
 
 // ── Property ──────────────────────────────────────────────────────
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
@@ -200,9 +208,12 @@ fun HavenHubNavGraph(
                     }
                 )
             ) { back ->
+                // ✅ FIX: uiState.currentUser?.uid use karo
+                // Auth ready hone ke baad sahi UID milega
+                // Pehle FirebaseAuth.getInstance() se blank aa sakta tha
                 MyBookingsScreen(
                     navController = navController,
-                    userId        = FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                    userId        = currentUserId,
                     initialTab    = back.arguments?.getInt("tab") ?: 0,
                 )
             }
@@ -265,8 +276,7 @@ fun HavenHubNavGraph(
                     payeeId       = back.arguments?.getString("payeeId")   ?: "",
                     payerName     = back.arguments?.getString("payerName") ?: "",
                     payeeName     = back.arguments?.getString("payeeName") ?: "",
-                    amount = back.arguments?.getString("amount") ?: ""
-                   // amount        = back.arguments?.getString("amount")?.toDoubleOrNull() ?: 0.0
+                    amount        = back.arguments?.getString("amount")    ?: ""
                 )
             }
 
@@ -285,11 +295,17 @@ fun HavenHubNavGraph(
 // ── Reviews ───────────────────────────────────────────────────────
             composable(
                 route     = Screen.AddReview.route,
-                arguments = listOf(navArgument(Screen.AddReview.ARG_PROPERTY_ID) { type = NavType.StringType })
+                arguments = listOf(
+                    navArgument(Screen.AddReview.ARG_PROPERTY_ID) {
+                        type         = NavType.StringType
+                        defaultValue = ""
+                    }
+                )
             ) { back ->
+                val pid = back.arguments?.getString(Screen.AddReview.ARG_PROPERTY_ID) ?: ""
                 AddReviewScreen(
                     navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.AddReview.ARG_PROPERTY_ID) ?: "",
+                    propertyId    = pid,
                     bookingId     = "",
                     propertyTitle = ""
                 )
@@ -350,7 +366,8 @@ fun HavenHubNavGraph(
                     userId        = back.arguments?.getString(Screen.Chat.ARG_USER_ID) ?: "",
                     ownerName     = back.arguments?.getString(Screen.Chat.ARG_OWNER_NAME) ?: "Owner",
                     propertyId    = if (rawPropertyId == "none") "" else rawPropertyId,
-                    currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                    // ✅ FIX: uiState se lo — blank nahi aayega
+                    currentUserId = currentUserId
                 )
             }
 
@@ -361,7 +378,7 @@ fun HavenHubNavGraph(
                 route     = Screen.PreBooking.route,
                 arguments = listOf(
                     navArgument(Screen.PreBooking.ARG_PROPERTY_ID) {
-                        type = NavType.StringType
+                        type         = NavType.StringType
                         defaultValue = ""
                     }
                 )
@@ -415,3 +432,36 @@ fun HavenHubNavGraph(
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -17,6 +17,9 @@ sealed class Screen(val route: String) {
     object Filter     : Screen("filter")
     object Favourites : Screen("favourites")
 
+    // ✦ NEW: Global Reviews Tab (bottom navbar mein Search ki jagah)
+    object GlobalReviews : Screen("global_reviews")
+
     object PropertyList : Screen("property_list")
     object PropertyDetail : Screen("property_detail/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
@@ -66,6 +69,9 @@ sealed class Screen(val route: String) {
         fun createRoute(bookingId: String) = "payment_success/$bookingId"
     }
 
+    // ✦ UPDATED: AddReview — propertyId optional ho gaya
+    // PropertyDetailScreen se: createRoute("abc123") → "add_review/abc123"
+    // GlobalReviewsScreen se:  createRoute("")       → "add_review/"  (search mode)
     object AddReview : Screen("add_review/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "add_review/$propertyId"
@@ -109,7 +115,6 @@ sealed class Screen(val route: String) {
 
     object VacationRentals : Screen("vacation_rentals")
 
-    // ✦ UPDATED: propertyId argument add kiya
     object PreBooking : Screen("pre_booking/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "pre_booking/$propertyId"

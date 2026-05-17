@@ -99,4 +99,9 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // Google Sign In
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+//
+//    // Facebook Sign In
+  //implementation("com.facebook.android:facebook-android-sdk:16.3.0")
 }

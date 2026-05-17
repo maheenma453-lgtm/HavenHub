@@ -15,11 +15,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class NotificationUiState(
-    val isLoading    : Boolean           = false,
+    val isLoading    : Boolean            = false,
     val notifications: List<Notification> = emptyList(),
-    val unreadCount  : Int               = 0,
-    val errorMessage : String?           = null,
-    val actionSuccess: Boolean           = false
+    val unreadCount  : Int                = 0,
+    val errorMessage : String?            = null,
+    val actionSuccess: Boolean            = false
 )
 
 @HiltViewModel
@@ -30,16 +30,36 @@ class NotificationViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(NotificationUiState())
     val uiState: StateFlow<NotificationUiState> = _uiState.asStateFlow()
 
+    // ── FIX: Tracks if we are already listening — prevents duplicate flows ──
+    // Without this guard, every time a dashboard recomposed it started a NEW
+    // listener, so unreadCount jumped erratically and badge showed wrong count.
+    private var listeningUserId: String? = null
+
     /**
-     * ✅ FIX: Real-time Flow se notifications observe karo.
-     * Pehle sirf ek baar fetch hota tha — ab Firestore change hote hi screen update hogi.
+     * Call this from ANY dashboard (Admin, Landlord, Tenant) after login.
+     * Safe to call multiple times — starts real-time listener only once per userId.
+     *
+     * Usage in every dashboard TopAppBar / init block:
+     *   notificationViewModel.startListening(currentUserId)
      */
-    fun observeNotifications(userId: String) {
+    fun startListening(userId: String) {
+        if (listeningUserId == userId) return   // already listening, skip
+        listeningUserId = userId
+        observeNotifications(userId)
+    }
+
+    /**
+     * Real-time Firestore Flow observer.
+     * Firestore change hote hi unreadCount + badge instantly update hoga.
+     */
+    private fun observeNotifications(userId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             notificationRepository.observeNotifications(userId)
                 .catch { e ->
-                    _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
+                    _uiState.update {
+                        it.copy(isLoading = false, errorMessage = e.message)
+                    }
                 }
                 .collect { list ->
                     _uiState.update {
@@ -54,8 +74,8 @@ class NotificationViewModel @Inject constructor(
     }
 
     /**
-     * One-time fetch (agar real-time chahiye nahi).
-     * NotificationsScreen mein observeNotifications prefer karo.
+     * One-time fetch — use only when real-time is not needed
+     * (e.g. a static report screen).
      */
     fun loadNotifications(userId: String) {
         viewModelScope.launch {
@@ -119,7 +139,9 @@ class NotificationViewModel @Inject constructor(
             try {
                 notificationRepository.deleteNotification(notificationId)
                 _uiState.update { state ->
-                    val updated = state.notifications.filter { it.notificationId != notificationId }
+                    val updated = state.notifications.filter {
+                        it.notificationId != notificationId
+                    }
                     state.copy(
                         notifications = updated,
                         unreadCount   = updated.count { !it.isRead }

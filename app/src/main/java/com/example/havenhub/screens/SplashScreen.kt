@@ -10,7 +10,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -28,6 +27,7 @@ import androidx.navigation.NavController
 import com.example.havenhub.R
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.AuthViewModel
+import kotlinx.coroutines.delay
 
 private val NavyDark    = Color(0xFF1A2B5E)
 private val GoldPrimary = Color(0xFFC9A84C)
@@ -38,32 +38,57 @@ fun SplashScreen(
     navController: NavController,
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    val uiState        by authViewModel.uiState.collectAsState()
-    var phase          by remember { mutableStateOf(false) }
-    var navigationDone by rememberSaveable() { mutableStateOf(false) }
+    val uiState by authViewModel.uiState.collectAsState()
+    var phase   by remember { mutableStateOf(false) }
+
+    // ✅ Yeh track karega: 2 sec ho gaye ya nahi
+    var splashDone by remember { mutableStateOf(false) }
+    // ✅ Yeh track karega: auth check hua ya nahi
+    // ✅ Yeh track karega: navigate hua ya nahi (double navigate rokne ke liye)
+    var navigationDone by remember { mutableStateOf(false) }
 
     val logoScale    by animateFloatAsState(if (phase) 1f else 0.80f,
         spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow), label = "sc")
-    val logoAlpha    by animateFloatAsState(if (phase) 1f else 0f, tween(600), label = "la")
-    val textAlpha    by animateFloatAsState(if (phase) 1f else 0f, tween(600, delayMillis = 200), label = "ta")
-    val buttonsAlpha by animateFloatAsState(if (phase) 1f else 0f, tween(600, delayMillis = 400), label = "ba")
-    val buttonsSlide by animateFloatAsState(if (phase) 0f else 30f, tween(600, delayMillis = 400), label = "bs")
+    val logoAlpha    by animateFloatAsState(if (phase) 1f else 0f,
+        tween(600), label = "la")
+    val textAlpha    by animateFloatAsState(if (phase) 1f else 0f,
+        tween(600, delayMillis = 200), label = "ta")
+    val buttonsAlpha by animateFloatAsState(if (phase) 1f else 0f,
+        tween(600, delayMillis = 400), label = "ba")
+    val buttonsSlide by animateFloatAsState(if (phase) 0f else 30f,
+        tween(600, delayMillis = 400), label = "bs")
     val shimmer by rememberInfiniteTransition(label = "sh").animateFloat(
         0f, 1f, infiniteRepeatable(tween(2200, easing = LinearEasing)), label = "sh2"
     )
 
-    LaunchedEffect(Unit) { phase = true }
-    LaunchedEffect(uiState.isLoading, uiState.isLoggedIn, uiState.userRole) {
-        if (uiState.isLoading || navigationDone || !uiState.isLoggedIn) return@LaunchedEffect
-        if (uiState.userRole.isEmpty()) return@LaunchedEffect
-        navigationDone = true
-        val dest = when (uiState.userRole.lowercase()) {
-            "admin" -> Screen.AdminDashboard.route
-            else    -> Screen.Home.route
-        }
-        navController.navigate(dest) { popUpTo(Screen.Splash.route) { inclusive = true } }
+    // ✅ Animation start karo
+    LaunchedEffect(Unit) {
+        phase = true
+        delay(2500L) // 2.5 sec splash dikhao
+        splashDone = true
     }
 
+    // ✅ Jab dono ready hon: splashDone=true AND isAuthReady=true
+    LaunchedEffect(splashDone, uiState.isAuthReady) {
+        if (!splashDone) return@LaunchedEffect
+        if (!uiState.isAuthReady) return@LaunchedEffect
+        if (navigationDone) return@LaunchedEffect
+
+        if (uiState.isLoggedIn && uiState.userRole.isNotEmpty()) {
+            // ✅ Logged in → directly dashboard
+            navigationDone = true
+            val dest = when (uiState.userRole.lowercase()) {
+                "admin" -> Screen.AdminDashboard.route
+                else    -> Screen.Home.route
+            }
+            navController.navigate(dest) {
+                popUpTo(Screen.Splash.route) { inclusive = true }
+            }
+        }
+        // ✅ Logged out → kuch nahi karo, buttons show honge neeche
+    }
+
+    // ══ UI ═══════════════════════════════════════════════════════════════════
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,8 +98,7 @@ fun SplashScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-
-        // ══ TOP BLOCK ═══════════════════════════════════════════════════════
+        // ── TOP BLOCK ────────────────────────────────────────────────────────
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.weight(1f),
@@ -82,29 +106,21 @@ fun SplashScreen(
         ) {
             Spacer(Modifier.height(8.dp))
 
-            // ── LOGO ──────────────────────────────────────────────────────
-            // The PNG has transparent padding inside it — that's why logo looks small.
-            // Solution: give it big height AND use negative offset to pull text up
-            // so the gap between logo artwork and text is visually tight.
             Image(
                 painter            = painterResource(id = R.drawable.havenhub),
                 contentDescription = "HavenHub Logo",
                 contentScale       = ContentScale.Fit,
                 modifier           = Modifier
-                    .fillMaxWidth()       // full width
-                    .height(280.dp)       // tall box — artwork fills it
+                    .fillMaxWidth()
+                    .height(280.dp)
                     .scale(logoScale)
                     .alpha(logoAlpha)
             )
 
-            // ✅ negative offset pulls HAVENHUB text UP into the transparent
-            // bottom padding of the PNG — visually they appear glued together
-            Spacer(Modifier.height(0.dp))
-
             Row(
                 modifier = Modifier
                     .alpha(textAlpha)
-                    .offset(y = (-28).dp)   // ✅ pull text up by 28dp
+                    .offset(y = (-28).dp)
             ) {
                 Text("HAVEN", fontSize = 38.sp, fontWeight = FontWeight.Black,
                     color = NavyDark, letterSpacing = 2.sp)
@@ -118,23 +134,23 @@ fun SplashScreen(
                 color = NavyDark.copy(alpha = 0.45f), letterSpacing = 2.6.sp,
                 modifier = Modifier
                     .alpha(textAlpha)
-                    .offset(y = (-24).dp)   // ✅ also pull up
+                    .offset(y = (-24).dp)
             )
-
-            Spacer(Modifier.height(0.dp))
 
             Box(
                 modifier = Modifier
                     .width(100.dp).height(1.dp)
                     .offset(y = (-18).dp)
                     .alpha(textAlpha)
-                    .background(Brush.horizontalGradient(listOf(
-                        Color.Transparent,
-                        GoldPrimary.copy(alpha = 0.2f + 0.8f * shimmer),
-                        GoldLight,
-                        GoldPrimary.copy(alpha = 0.2f + 0.8f * (1f - shimmer)),
-                        Color.Transparent
-                    )))
+                    .background(
+                        Brush.horizontalGradient(listOf(
+                            Color.Transparent,
+                            GoldPrimary.copy(alpha = 0.2f + 0.8f * shimmer),
+                            GoldLight,
+                            GoldPrimary.copy(alpha = 0.2f + 0.8f * (1f - shimmer)),
+                            Color.Transparent
+                        ))
+                    )
             )
 
             Text(
@@ -147,16 +163,23 @@ fun SplashScreen(
             )
         }
 
-        // ══ BOTTOM BLOCK ═════════════════════════════════════════════════════
+        // ── BOTTOM BLOCK — Buttons (sirf tab dikhao jab logged out ho) ───────
+        // ✅ Logged in hai toh buttons hide rahein splash ke dauraan
+        val showButtons = splashDone && uiState.isAuthReady && !uiState.isLoggedIn
+
         Column(
             modifier = Modifier
-                .alpha(buttonsAlpha)
+                .alpha(if (showButtons) buttonsAlpha else 0f)
                 .offset(y = buttonsSlide.dp)
                 .padding(bottom = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = { navController.navigate(Screen.Onboarding.route) { popUpTo(Screen.Splash.route) { inclusive = true } } },
+                onClick = {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                },
                 modifier  = Modifier.fillMaxWidth().height(56.dp),
                 shape     = RoundedCornerShape(16.dp),
                 colors    = ButtonDefaults.buttonColors(containerColor = NavyDark),
@@ -169,21 +192,32 @@ fun SplashScreen(
             Spacer(Modifier.height(12.dp))
 
             OutlinedButton(
-                onClick = { navController.navigate(Screen.SignIn.route) { popUpTo(Screen.Splash.route) { inclusive = true } } },
+                onClick = {
+                    navController.navigate(Screen.SignIn.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape    = RoundedCornerShape(16.dp),
-                border   = androidx.compose.foundation.BorderStroke(1.5.dp, NavyDark.copy(alpha = 0.35f)),
-                colors   = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent)
+                border   = androidx.compose.foundation.BorderStroke(
+                    1.5.dp, NavyDark.copy(alpha = 0.35f)
+                ),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.Transparent
+                )
             ) {
                 Text("I Already Have an Account", fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold, color = NavyDark, letterSpacing = 0.3.sp)
+                    fontWeight = FontWeight.SemiBold, color = NavyDark,
+                    letterSpacing = 0.3.sp)
             }
 
             Spacer(Modifier.height(24.dp))
 
-            Box(Modifier.width(24.dp).height(1.dp).background(GoldPrimary.copy(alpha = 0.45f)))
+            Box(Modifier.width(24.dp).height(1.dp)
+                .background(GoldPrimary.copy(alpha = 0.45f)))
             Spacer(Modifier.height(8.dp))
-            Text("A Project by", fontSize = 10.sp, color = NavyDark.copy(alpha = 0.40f))
+            Text("A Project by", fontSize = 10.sp,
+                color = NavyDark.copy(alpha = 0.40f))
             Spacer(Modifier.height(2.dp))
             Text("Superior Group of Colleges", fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold, color = GoldPrimary)

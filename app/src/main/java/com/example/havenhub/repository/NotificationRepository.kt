@@ -69,10 +69,10 @@ class NotificationRepository @Inject constructor(
         }
     }
 
-    // CORE SENDER
-    // createdAt = Timestamp.now() — hamesha manually set karo.
-    // @ServerTimestamp Notification.kt se hata diya — dono ek saath conflict karte the
-    // aur Firestore kabhi null store kar leta tha jis se orderBy("createdAt") fail hoti thi.
+    // ── CORE SENDER ───────────────────────────────────────────────────────────
+    // createdAt = Timestamp.now() — always set manually.
+    // @ServerTimestamp removed from Notification.kt — it conflicted and caused
+    // null values in Firestore, breaking orderBy("createdAt").
     suspend fun sendNotification(
         recipientId : String,
         type        : NotificationType,
@@ -104,6 +104,8 @@ class NotificationRepository @Inject constructor(
         }
     }
 
+    // ── PROPERTY ──────────────────────────────────────────────────────────────
+
     suspend fun sendPropertyApprovedNotification(
         ownerId      : String,
         propertyId   : String,
@@ -112,11 +114,11 @@ class NotificationRepository @Inject constructor(
     ): Resource<Unit> = sendNotification(
         recipientId = ownerId,
         type        = NotificationType.PROPERTY_APPROVED,
-        title       = "Property Approved",
+        title       = "Property Approved ✓",
         body        = if (adminNote.isNotEmpty())
-            "Mubarak! \"$propertyTitle\" approve ho gayi. Admin note: $adminNote"
+            "Your property \"$propertyTitle\" has been approved! Admin note: $adminNote"
         else
-            "Mubarak! Aapki property \"$propertyTitle\" approve ho gayi hai.",
+            "Congratulations! Your property \"$propertyTitle\" has been approved.",
         referenceId = propertyId,
         adminNote   = adminNote,
         targetRole  = "landlord"
@@ -130,11 +132,11 @@ class NotificationRepository @Inject constructor(
     ): Resource<Unit> = sendNotification(
         recipientId = ownerId,
         type        = NotificationType.PROPERTY_REJECTED,
-        title       = "Property Rejected",
+        title       = "Property Rejected ✗",
         body        = if (adminNote.isNotEmpty())
-            "Aapki property \"$propertyTitle\" approve nahi hui. Reason: $adminNote"
+            "Your property \"$propertyTitle\" was not approved. Reason: $adminNote"
         else
-            "Aapki property \"$propertyTitle\" approve nahi hui.",
+            "Your property \"$propertyTitle\" was not approved. Please contact support.",
         referenceId = propertyId,
         adminNote   = adminNote,
         targetRole  = "landlord"
@@ -149,10 +151,12 @@ class NotificationRepository @Inject constructor(
         recipientId = adminId,
         type        = NotificationType.PROPERTY_PENDING,
         title       = "New Property Pending Review",
-        body        = "$landlordName ne \"$propertyTitle\" submit ki hai — please review karen.",
+        body        = "$landlordName has submitted \"$propertyTitle\" — please review it.",
         referenceId = propertyId,
         targetRole  = "admin"
     )
+
+    // ── BOOKING ───────────────────────────────────────────────────────────────
 
     suspend fun sendBookingRequestToLandlord(
         landlordId   : String,
@@ -162,8 +166,8 @@ class NotificationRepository @Inject constructor(
     ): Resource<Unit> = sendNotification(
         recipientId = landlordId,
         type        = NotificationType.BOOKING_REQUESTED,
-        title       = "New Booking Request",
-        body        = "$tenantName ne \"$propertyTitle\" ke liye booking request ki hai.",
+        title       = "New Booking Request 📋",
+        body        = "$tenantName has requested to book \"$propertyTitle\".",
         referenceId = bookingId,
         targetRole  = "landlord"
     )
@@ -176,8 +180,8 @@ class NotificationRepository @Inject constructor(
     ): Resource<Unit> = sendNotification(
         recipientId = adminId,
         type        = NotificationType.BOOKING_REQUESTED,
-        title       = "New Booking Request (Admin)",
-        body        = "$tenantName ne \"$propertyTitle\" book kiya.",
+        title       = "New Booking (Admin)",
+        body        = "$tenantName has booked \"$propertyTitle\".",
         referenceId = bookingId,
         targetRole  = "admin"
     )
@@ -189,8 +193,8 @@ class NotificationRepository @Inject constructor(
     ): Resource<Unit> = sendNotification(
         recipientId = tenantId,
         type        = NotificationType.BOOKING_CONFIRMED,
-        title       = "Booking Confirmed!",
-        body        = "Aapki booking \"$propertyTitle\" ke liye confirm ho gayi hai.",
+        title       = "Booking Confirmed ✓",
+        body        = "Your booking for \"$propertyTitle\" has been confirmed.",
         referenceId = bookingId,
         targetRole  = "tenant"
     )
@@ -203,10 +207,12 @@ class NotificationRepository @Inject constructor(
         recipientId = tenantId,
         type        = NotificationType.BOOKING_CANCELLED,
         title       = "Booking Cancelled",
-        body        = "Aapki booking \"$propertyTitle\" ke liye cancel ho gayi hai.",
+        body        = "Your booking for \"$propertyTitle\" has been cancelled.",
         referenceId = bookingId,
         targetRole  = "tenant"
     )
+
+    // ── USER VERIFICATION ─────────────────────────────────────────────────────
 
     suspend fun sendNewUserPendingToAdmin(
         adminId : String,
@@ -215,8 +221,8 @@ class NotificationRepository @Inject constructor(
     ): Resource<Unit> = sendNotification(
         recipientId = adminId,
         type        = NotificationType.USER_VERIFICATION_PENDING,
-        title       = "New User Verification Pending",
-        body        = "$userName ne verification ke liye apply kiya hai.",
+        title       = "New User Verification Request",
+        body        = "$userName has applied for account verification.",
         referenceId = userId,
         targetRole  = "admin"
     )
@@ -227,8 +233,8 @@ class NotificationRepository @Inject constructor(
     ): Resource<Unit> = sendNotification(
         recipientId = userId,
         type        = NotificationType.USER_VERIFIED,
-        title       = "Account Verified!",
-        body        = "Mubarak $userName! Aapka account verify ho gaya hai. Ab aap sab features use kar sakte hain.",
+        title       = "Account Verified ✓",
+        body        = "Congratulations $userName! Your account has been verified. You can now access all features.",
         targetRole  = "all"
     )
 
@@ -240,11 +246,13 @@ class NotificationRepository @Inject constructor(
         type        = NotificationType.USER_REJECTED,
         title       = "Verification Rejected",
         body        = if (reason.isNotEmpty())
-            "Aapka account verify nahi hua. Reason: $reason"
+            "Your account verification was rejected. Reason: $reason"
         else
-            "Aapka account verification reject ho gaya. Support se contact karen.",
+            "Your account verification was rejected. Please contact support.",
         targetRole  = "all"
     )
+
+    // ── MESSAGES ──────────────────────────────────────────────────────────────
 
     suspend fun sendNewMessageNotification(
         recipientId    : String,
@@ -255,7 +263,7 @@ class NotificationRepository @Inject constructor(
     ): Resource<Unit> = sendNotification(
         recipientId = recipientId,
         type        = NotificationType.NEW_MESSAGE,
-        title       = "New Message from $senderName",
+        title       = "New Message from $senderName 💬",
         body        = messagePreview,
         referenceId = conversationId,
         targetRole  = recipientRole

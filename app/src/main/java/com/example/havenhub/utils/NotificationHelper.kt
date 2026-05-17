@@ -32,42 +32,62 @@ class NotificationHelper @Inject constructor(
     }
 
     // ── Create all channels ───────────────────────────────────────────────────
+    // FIX: lockscreenVisibility = VISIBILITY_PUBLIC added so notifications show
+    //      on lock screen (like Snapchat). Without this they were hidden on lock screen.
     fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
             manager.createNotificationChannels(
                 listOf(
                     NotificationChannel(
-                        CHANNEL_BOOKINGS, "Bookings",
+                        CHANNEL_BOOKINGS,
+                        "Bookings",
                         NotificationManager.IMPORTANCE_HIGH
                     ).apply {
-                        description = "Booking confirmations, reminders and cancellations"
+                        description         = "Booking confirmations, reminders and cancellations"
                         enableVibration(true)
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅ lock screen fix
                     },
-                    NotificationChannel(
-                        CHANNEL_PAYMENTS, "Payments",
-                        NotificationManager.IMPORTANCE_HIGH
-                    ).apply {
-                        description = "Payment receipts and confirmations"
-                        enableVibration(true)
-                    },
-                    NotificationChannel(
-                        CHANNEL_MESSAGES, "Messages",
-                        NotificationManager.IMPORTANCE_DEFAULT
-                    ).apply { description = "New messages from hosts and tenants" },
 
                     NotificationChannel(
-                        CHANNEL_SYSTEM, "System",
-                        NotificationManager.IMPORTANCE_LOW
-                    ).apply { description = "App updates and announcements" },
-
-                    NotificationChannel(
-                        CHANNEL_PROPERTY, "Property Updates",
+                        CHANNEL_PAYMENTS,
+                        "Payments",
                         NotificationManager.IMPORTANCE_HIGH
                     ).apply {
-                        description = "Property approval and rejection alerts"
+                        description          = "Payment receipts and confirmations"
                         enableVibration(true)
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅
+                    },
+
+                    NotificationChannel(
+                        CHANNEL_MESSAGES,
+                        "Messages",
+                        NotificationManager.IMPORTANCE_HIGH                           // ✅ DEFAULT → HIGH (popup fix)
+                    ).apply {
+                        description          = "New messages from hosts and tenants"
+                        enableVibration(true)
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅
+                    },
+
+                    NotificationChannel(
+                        CHANNEL_SYSTEM,
+                        "System",
+                        NotificationManager.IMPORTANCE_HIGH                           // ✅ LOW → HIGH
+                    ).apply {
+                        description          = "App updates and announcements"
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅
+                    },
+
+                    NotificationChannel(
+                        CHANNEL_PROPERTY,
+                        "Property Updates",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description          = "Property approval and rejection alerts"
+                        enableVibration(true)
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅
                     }
                 )
             )
@@ -81,14 +101,14 @@ class NotificationHelper @Inject constructor(
         type       : String = Constants.NOTIF_SYSTEM,
         referenceId: String = ""
     ) {
-        // ✅ FIX: Android 13+ POST_NOTIFICATIONS permission check
+        // Android 13+ POST_NOTIFICATIONS permission check
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
                 context,
                 android.Manifest.permission.POST_NOTIFICATIONS
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             if (!granted) {
-                android.util.Log.w("NotificationHelper", "POST_NOTIFICATIONS permission not granted — skipping")
+                android.util.Log.w("NotificationHelper", "POST_NOTIFICATIONS not granted — skipping")
                 return
             }
         }
@@ -114,16 +134,13 @@ class NotificationHelper @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // ✅ FIX: ic_notifications exist nahi karta silently fail hoti thi.
-        // ic_launcher_foreground hamesha exist karta hai — safe fallback.
-        val smallIcon = R.drawable.ic_notification
-
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(smallIcon)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)          // ✅ ensures heads-up popup
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)    // ✅ lock screen visibility
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
@@ -131,14 +148,15 @@ class NotificationHelper @Inject constructor(
         try {
             NotificationManagerCompat.from(context).notify(nextId(), notification)
         } catch (e: SecurityException) {
-            android.util.Log.e("NotificationHelper", "SecurityException — permission missing: ${e.message}")
+            android.util.Log.e("NotificationHelper", "SecurityException: ${e.message}")
         }
     }
 
-    // ── Booking notifications ─────────────────────────────────────────────────
+    // ── Booking notifications — ALL ENGLISH ──────────────────────────────────
+
     fun showBookingConfirmed(propertyName: String, bookingId: String) =
         showNotification(
-            title       = "Booking Confirmed! ✓",
+            title       = "Booking Confirmed ✓",
             message     = "Your booking for \"$propertyName\" has been confirmed.",
             type        = Constants.NOTIF_BOOKING,
             referenceId = bookingId
@@ -155,7 +173,7 @@ class NotificationHelper @Inject constructor(
     fun showNewBookingRequest(propertyName: String, tenantName: String, bookingId: String) =
         showNotification(
             title       = "New Booking Request 📋",
-            message     = "$tenantName ne \"$propertyName\" ke liye booking request ki hai.",
+            message     = "$tenantName has requested to book \"$propertyName\".",
             type        = Constants.NOTIF_BOOKING,
             referenceId = bookingId
         )
@@ -163,21 +181,23 @@ class NotificationHelper @Inject constructor(
     fun showCheckInReminder(propertyName: String, bookingId: String) =
         showNotification(
             title       = "Check-In Tomorrow! 🏠",
-            message     = "Your check-in at \"$propertyName\" is tomorrow.",
+            message     = "Your check-in at \"$propertyName\" is scheduled for tomorrow.",
             type        = Constants.NOTIF_BOOKING,
             referenceId = bookingId
         )
 
     // ── Payment notifications ─────────────────────────────────────────────────
+
     fun showPaymentSuccess(amount: Double, transactionId: String) =
         showNotification(
-            title       = "Payment Successful! 💚",
-            message     = "Payment of Rs. ${amount.toInt()} confirmed. Txn: $transactionId",
+            title       = "Payment Successful 💚",
+            message     = "Payment of Rs. ${amount.toInt()} has been confirmed. Transaction ID: $transactionId",
             type        = Constants.NOTIF_PAYMENT,
             referenceId = transactionId
         )
 
     // ── Message notifications ─────────────────────────────────────────────────
+
     fun showNewMessage(senderName: String, preview: String, conversationId: String) =
         showNotification(
             title       = "New Message from $senderName 💬",
@@ -187,15 +207,16 @@ class NotificationHelper @Inject constructor(
         )
 
     // ── Property notifications ────────────────────────────────────────────────
+
     fun showPropertyApproved(
         propertyTitle: String,
         propertyId   : String,
         adminNote    : String = ""
     ) {
         val body = if (adminNote.isNotEmpty())
-            "\"$propertyTitle\" approve ho gayi! Admin note: $adminNote"
+            "Your property \"$propertyTitle\" has been approved! Admin note: $adminNote"
         else
-            "Mubarak! Aapki property \"$propertyTitle\" approve ho gayi hai. ✅"
+            "Congratulations! Your property \"$propertyTitle\" has been approved. ✅"
         showNotification(
             title       = "Property Approved ✓",
             message     = body,
@@ -210,9 +231,9 @@ class NotificationHelper @Inject constructor(
         adminNote    : String = ""
     ) {
         val body = if (adminNote.isNotEmpty())
-            "\"$propertyTitle\" reject hui. Reason: $adminNote"
+            "Your property \"$propertyTitle\" was not approved. Reason: $adminNote"
         else
-            "Aapki property \"$propertyTitle\" approve nahi hui."
+            "Your property \"$propertyTitle\" was not approved. Please contact support."
         showNotification(
             title       = "Property Rejected ✗",
             message     = body,
@@ -222,18 +243,19 @@ class NotificationHelper @Inject constructor(
     }
 
     // ── User verification notifications ──────────────────────────────────────
+
     fun showUserVerified(userName: String) =
         showNotification(
-            title   = "Account Verified! ✓",
-            message = "Mubarak $userName! Aapka account verify ho gaya hai.",
+            title   = "Account Verified ✓",
+            message = "Congratulations $userName! Your account has been successfully verified.",
             type    = Constants.NOTIF_SYSTEM
         )
 
     fun showUserRejected(userName: String, reason: String = "") {
         val body = if (reason.isNotEmpty())
-            "Aapka account verify nahi hua. Reason: $reason"
+            "Your account verification was rejected. Reason: $reason"
         else
-            "Aapka account verification reject ho gaya."
+            "Your account verification was rejected. Please contact support."
         showNotification(
             title   = "Verification Rejected",
             message = body,
@@ -242,21 +264,22 @@ class NotificationHelper @Inject constructor(
     }
 
     // ── Admin notifications ───────────────────────────────────────────────────
+
     fun showNewPropertyPending(
         propertyTitle: String,
         landlordName : String,
         propertyId   : String
     ) = showNotification(
-        title       = "New Property Pending ⏳",
-        message     = "$landlordName ne \"$propertyTitle\" submit ki hai — review karen.",
+        title       = "New Property Pending Review ⏳",
+        message     = "$landlordName has submitted \"$propertyTitle\" for review.",
         type        = Constants.NOTIF_PROPERTY,
         referenceId = propertyId
     )
 
     fun showNewUserPending(userName: String, userId: String) =
         showNotification(
-            title       = "New User Verification Pending 👤",
-            message     = "$userName ne verification ke liye apply kiya hai.",
+            title       = "New User Verification Request 👤",
+            message     = "$userName has applied for account verification.",
             type        = Constants.NOTIF_SYSTEM,
             referenceId = userId
         )
@@ -265,6 +288,12 @@ class NotificationHelper @Inject constructor(
     fun cancelNotification(id: Int) = NotificationManagerCompat.from(context).cancel(id)
     fun cancelAll() = NotificationManagerCompat.from(context).cancelAll()
 }
+
+
+
+
+
+
 
 
 

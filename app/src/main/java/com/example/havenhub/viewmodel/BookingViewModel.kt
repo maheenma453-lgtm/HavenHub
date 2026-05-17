@@ -1,5 +1,6 @@
 package com.example.havenhub.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Booking
@@ -39,129 +40,130 @@ class BookingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BookingUiState())
     val uiState: StateFlow<BookingUiState> = _uiState.asStateFlow()
 
-    // ✅ Cache karo taake cancel ke baad auto-refresh ho sake
-    private var cachedUserId : String = ""
-    private var cachedRole   : String = "tenant"
+    private var cachedUserId      : String  = ""
+    private var cachedRole        : String  = "tenant"
+    private var isCreatingBooking : Boolean = false
 
-    // ─────────────────────────────────────────────────────────
-    // Load all bookings (by role)
-    // ─────────────────────────────────────────────────────────
+    // ✅ FIX: lastLoadKey guard hataya — yeh guard loading block kar raha tha
+    // Har baar LaunchedEffect fire ho toh fresh load ho
     fun loadBookings(userId: String, role: String) {
+        Log.d("BOOKING_VM", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Log.d("BOOKING_VM", "loadBookings CALLED — userId='$userId' role='$role'")
+
+        if (userId.isBlank()) {
+            Log.e("BOOKING_VM", "❌ userId BLANK — aborted")
+            return
+        }
+
+        // ✅ FIX: role blank ho toh abort mat karo — "tenant" use karo
+        val effectiveRole = role.ifBlank { "tenant" }
+
         cachedUserId = userId
-        cachedRole   = role
+        cachedRole   = effectiveRole
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val result = when (role.lowercase()) {
+                Log.d("BOOKING_VM", "Fetching for role='$effectiveRole' userId='$userId'")
+                val result = when (effectiveRole.lowercase()) {
                     "admin"    -> repository.getAllBookingsForAdmin()
                     "landlord" -> repository.getLandlordBookings(userId)
                     else       -> repository.getTenantBookings(userId)
                 }
+                Log.d("BOOKING_VM", "✅ Got ${result.size} bookings")
                 _uiState.update { it.copy(isLoading = false, bookings = result) }
             } catch (e: Exception) {
+                Log.e("BOOKING_VM", "❌ EXCEPTION: ${e.localizedMessage}")
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Load single booking by ID
-    // ─────────────────────────────────────────────────────────
+    fun forceRefreshBookings() {
+        if (cachedUserId.isNotEmpty()) {
+            Log.d("BOOKING_VM", "forceRefreshBookings — userId='$cachedUserId' role='$cachedRole'")
+            loadBookings(cachedUserId, cachedRole)
+        }
+    }
+
     fun loadBookingById(bookingId: String) {
+        if (bookingId.isBlank()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             when (val result = repository.getBookingById(bookingId)) {
-                is Resource.Success -> _uiState.update {
-                    it.copy(isLoading = false, currentBooking = result.data)
-                }
-                is Resource.Error   -> _uiState.update {
-                    it.copy(isLoading = false, errorMessage = result.message)
-                }
+                is Resource.Success -> _uiState.update { it.copy(isLoading = false, currentBooking = result.data) }
+                is Resource.Error   -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
                 else -> {}
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Create booking
-    // ─────────────────────────────────────────────────────────
     fun createBooking(booking: Booking) {
+        if (isCreatingBooking) {
+            Log.w("BOOKING_VM", "⚠️ Already creating — ignored")
+            return
+        }
+        isCreatingBooking = true
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, actionSuccess = false, errorMessage = null) }
-            when (val result = repository.createBooking(booking)) {
-                is Resource.Success -> _uiState.update {
-                    it.copy(
-                        isLoading        = false,
-                        actionSuccess    = true,
-                        createdBookingId = result.data
-                    )
+            try {
+                when (val result = repository.createBooking(booking)) {
+                    is Resource.Success -> _uiState.update {
+                        it.copy(isLoading = false, actionSuccess = true, createdBookingId = result.data)
+                    }
+                    is Resource.Error -> _uiState.update {
+                        it.copy(isLoading = false, errorMessage = result.message)
+                    }
+                    else -> {}
                 }
-                is Resource.Error   -> _uiState.update {
-                    it.copy(isLoading = false, errorMessage = result.message)
-                }
-                else -> {}
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Unknown error") }
+            } finally {
+                isCreatingBooking = false
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Update booking status (admin / landlord)
-    // ─────────────────────────────────────────────────────────
     fun updateStatusByAdmin(bookingId: String, newStatus: BookingStatus) {
+        if (bookingId.isBlank()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             when (val result = repository.updateBookingStatus(bookingId, newStatus)) {
-                is Resource.Success -> _uiState.update {
-                    it.copy(isLoading = false, actionSuccess = true)
-                }
-                is Resource.Error   -> _uiState.update {
-                    it.copy(isLoading = false, errorMessage = result.message)
-                }
+                is Resource.Success -> _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
+                is Resource.Error   -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
                 else -> {}
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Cancel booking — tenant sirf PENDING cancel kar sakta hai
-    // ✅ FIX: blank bookingId guard added
-    // ─────────────────────────────────────────────────────────
     fun cancelBooking(bookingId: String) {
-        // ✅ Guard: blank bookingId pe crash nahi hoga
         if (bookingId.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Invalid booking ID") }
             return
         }
-
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                // ── Step 1: Firestore update ──────────────────
-                firestore.collection("bookings")
-                    .document(bookingId)
+                firestore.collection("bookings").document(bookingId)
                     .update(
                         mapOf(
                             "status"      to BookingStatus.CANCELLED.name,
                             "cancelledAt" to FieldValue.serverTimestamp()
                         )
-                    )
-                    .await()
+                    ).await()
 
-                // ── Step 2: Local list turant update (optimistic) ──
+                // ✅ Optimistically update local list — UI turant reflect kare
                 _uiState.update { state ->
                     state.copy(
                         isLoading     = false,
                         actionSuccess = true,
-                        bookings      = state.bookings.map { booking ->
-                            if (booking.bookingId == bookingId)
-                                booking.copy(status = BookingStatus.CANCELLED.name)
-                            else booking
+                        bookings      = state.bookings.map { b ->
+                            if (b.bookingId == bookingId) b.copy(status = BookingStatus.CANCELLED.name) else b
                         }
                     )
                 }
 
-                // ── Step 3: Fresh list Firestore se dobara load ──
+                // ✅ Fresh data bhi load karo background mein
                 if (cachedUserId.isNotEmpty()) {
                     val fresh = when (cachedRole.lowercase()) {
                         "admin"    -> repository.getAllBookingsForAdmin()
@@ -172,60 +174,38 @@ class BookingViewModel @Inject constructor(
                 }
 
             } catch (e: Exception) {
+                Log.e("BOOKING_VM", "❌ cancelBooking error: ${e.localizedMessage}")
                 _uiState.update {
-                    it.copy(
-                        isLoading    = false,
-                        errorMessage = "Cancel failed: ${e.localizedMessage}"
-                    )
+                    it.copy(isLoading = false, errorMessage = "Cancel failed: ${e.localizedMessage}")
                 }
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Send message (landlord ↔ tenant)
-    // ─────────────────────────────────────────────────────────
-    fun sendMessage(
-        toUserId     : String,
-        message      : String,
-        bookingId    : String,
-        propertyTitle: String
-    ) {
+    fun sendMessage(toUserId: String, message: String, bookingId: String, propertyTitle: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSendingMessage = true, errorMessage = null) }
             try {
-                val currentUserId = auth.currentUser?.uid
-                    ?: throw Exception("User not logged in")
-
+                val currentUserId = auth.currentUser?.uid ?: throw Exception("User not logged in")
                 val msgData = hashMapOf(
-                    "fromUserId"    to currentUserId,
-                    "toUserId"      to toUserId,
-                    "bookingId"     to bookingId,
+                    "fromUserId"   to currentUserId,
+                    "toUserId"     to toUserId,
+                    "bookingId"    to bookingId,
                     "propertyTitle" to propertyTitle,
-                    "message"       to message,
-                    "isRead"        to false,
-                    "timestamp"     to FieldValue.serverTimestamp()
+                    "message"      to message,
+                    "isRead"       to false,
+                    "timestamp"    to FieldValue.serverTimestamp()
                 )
-
                 firestore.collection("messages").add(msgData).await()
-
-                _uiState.update {
-                    it.copy(isSendingMessage = false, successMessage = "Message sent successfully")
-                }
+                _uiState.update { it.copy(isSendingMessage = false, successMessage = "Message sent successfully") }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(
-                        isSendingMessage = false,
-                        errorMessage     = "Message send failed: ${e.localizedMessage}"
-                    )
+                    it.copy(isSendingMessage = false, errorMessage = "Message send failed: ${e.localizedMessage}")
                 }
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Clear messages / reset flags
-    // ─────────────────────────────────────────────────────────
     fun clearMessages() {
         _uiState.update {
             it.copy(

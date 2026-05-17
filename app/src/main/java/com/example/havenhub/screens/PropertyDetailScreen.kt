@@ -31,7 +31,7 @@ import androidx.navigation.NavController
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.PropertyViewModel
-import com.example.havenhub.viewmodel.VacationViewModel   // ✦ NEW
+import com.example.havenhub.viewmodel.VacationViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
@@ -43,15 +43,15 @@ private val Red   = Color(0xFFEF4444)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PropertyDetailScreen(
-    navController   : NavController,
-    propertyId      : String,
-    viewModel       : PropertyViewModel  = hiltViewModel(),
-    vacationViewModel: VacationViewModel = hiltViewModel()  // ✦ NEW
+    navController    : NavController,
+    propertyId       : String,
+    viewModel        : PropertyViewModel  = hiltViewModel(),
+    vacationViewModel: VacationViewModel  = hiltViewModel()
 ) {
-    val uiState    by viewModel.uiState.collectAsState()
-    val vacState   by vacationViewModel.uiState.collectAsState()   // ✦ NEW
-    val property   = uiState.propertyDetail
-    val isLoading  = uiState.isLoading
+    val uiState   by viewModel.uiState.collectAsState()
+    val vacState  by vacationViewModel.uiState.collectAsState()
+    val property  = uiState.propertyDetail
+    val isLoading = uiState.isLoading
 
     val configuration = LocalConfiguration.current
     val screenWidth   = configuration.screenWidthDp.dp
@@ -71,7 +71,6 @@ fun PropertyDetailScreen(
 
     LaunchedEffect(propertyId) {
         viewModel.loadPropertyDetail(propertyId)
-        // ✦ NEW: Is property ke active packages fetch karo
         vacationViewModel.loadPackagesForProperty(propertyId)
     }
 
@@ -79,15 +78,14 @@ fun PropertyDetailScreen(
     val isLandlord = currentUserRole.equals("landlord", ignoreCase = true)
     val roleLoaded = currentUserRole.isNotEmpty()
 
-    // ✦ NEW: Sirf tab true hoga jab is property pe koi ACTIVE package ho
     val hasActivePackage = vacState.propertyPackages.isNotEmpty()
 
-    val primary      = MaterialTheme.colorScheme.primary
-    val tertiary     = MaterialTheme.colorScheme.tertiary
-    val onPrimary    = MaterialTheme.colorScheme.onPrimary
-    val surface      = MaterialTheme.colorScheme.surface
-    val onSurface    = MaterialTheme.colorScheme.onSurface
-    val background   = MaterialTheme.colorScheme.background
+    val primary          = MaterialTheme.colorScheme.primary
+    val tertiary         = MaterialTheme.colorScheme.tertiary
+    val onPrimary        = MaterialTheme.colorScheme.onPrimary
+    val surface          = MaterialTheme.colorScheme.surface
+    val onSurface        = MaterialTheme.colorScheme.onSurface
+    val background       = MaterialTheme.colorScheme.background
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
 
     Box(modifier = Modifier.fillMaxSize().background(background)) {
@@ -99,12 +97,8 @@ fun PropertyDetailScreen(
             }
 
             property != null -> {
-                val isAdmin = currentUserRole.equals("admin", ignoreCase = true)
                 val isOwner = property.ownerId == currentUserId
 
-                // ✦ Bottom padding: tenant ke liye hasActivePackage pe depend karta hai
-                // hasActivePackage = true  → 2 rows (Book Now + Book with Package) → 130.dp
-                // hasActivePackage = false → 1 row  (Book Now only)                → 80.dp
                 val bottomPad = when {
                     roleLoaded && isTenant && !isOwner && hasActivePackage -> 130.dp
                     roleLoaded && isTenant && !isOwner                     -> 80.dp
@@ -161,12 +155,21 @@ fun PropertyDetailScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(Modifier.size(5.dp).clip(CircleShape).background(onPrimary))
                                     Spacer(Modifier.width(5.dp))
-                                    Text(if (property.isAvailable) "Available" else "Unavailable", color = onPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        if (property.isAvailable) "Available" else "Unavailable",
+                                        color = onPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                             // Title overlay
-                            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
-                                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(tertiary).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            Column(
+                                Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                                    .padding(horizontal = 18.dp, vertical = 16.dp)
+                            ) {
+                                Box(
+                                    Modifier.clip(RoundedCornerShape(6.dp)).background(tertiary)
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
                                     Text(property.propertyTypeEnum.displayName(), color = primary, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
                                 }
                                 Spacer(Modifier.height(6.dp))
@@ -212,13 +215,13 @@ fun PropertyDetailScreen(
                             modifier              = Modifier.fillMaxWidth().background(surface).padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            PDDetailStatItem("🛏️", "${property.bedrooms}", "Beds", onSurface, onSurfaceVariant)
+                            PDDetailStatItem("🛏️", "${property.bedrooms}",                        "Beds",   onSurface, onSurfaceVariant)
                             Box(Modifier.width(1.dp).height(40.dp).background(background))
-                            PDDetailStatItem("🚿", "${property.bathrooms}", "Baths", onSurface, onSurfaceVariant)
+                            PDDetailStatItem("🚿", "${property.bathrooms}",                       "Baths",  onSurface, onSurfaceVariant)
                             Box(Modifier.width(1.dp).height(40.dp).background(background))
-                            PDDetailStatItem("👥", "${property.maxGuests}", "Guests", onSurface, onSurfaceVariant)
+                            PDDetailStatItem("👥", "${property.maxGuests}",                       "Guests", onSurface, onSurfaceVariant)
                             Box(Modifier.width(1.dp).height(40.dp).background(background))
-                            PDDetailStatItem("📐", "${property.areaSqFt?.toInt() ?: "—"}", "Sqft", onSurface, onSurfaceVariant)
+                            PDDetailStatItem("📐", "${property.areaSqFt?.toInt() ?: "—"}", "Sqft",  onSurface, onSurfaceVariant)
                         }
                         HorizontalDivider(color = background, thickness = 6.dp)
                     }
@@ -248,7 +251,10 @@ fun PropertyDetailScreen(
                                     Text("Verified Owner", fontSize = 11.sp, color = Green)
                                 }
                             }
-                            Box(Modifier.clip(RoundedCornerShape(8.dp)).background(tertiary.copy(0.12f)).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Box(
+                                Modifier.clip(RoundedCornerShape(8.dp)).background(tertiary.copy(0.12f))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
                                 Text("⭐ Host", fontSize = 11.sp, color = tertiary, fontWeight = FontWeight.Bold)
                             }
                         }
@@ -260,7 +266,10 @@ fun PropertyDetailScreen(
                         Column(Modifier.fillMaxWidth().background(surface).padding(horizontal = 20.dp, vertical = 16.dp)) {
                             PDSectionTitle("About this place", tertiary, onSurface)
                             Spacer(Modifier.height(10.dp))
-                            Text(property.description.ifEmpty { "A beautiful property waiting for you." }, fontSize = 14.sp, color = onSurface.copy(0.75f), lineHeight = 23.sp)
+                            Text(
+                                property.description.ifEmpty { "A beautiful property waiting for you." },
+                                fontSize = 14.sp, color = onSurface.copy(0.75f), lineHeight = 23.sp
+                            )
                         }
                         HorizontalDivider(color = background, thickness = 6.dp)
                     }
@@ -298,7 +307,7 @@ fun PropertyDetailScreen(
                             Spacer(Modifier.height(14.dp))
 
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                PDTimeCard(Modifier.weight(1f), "🕐", "Check-in",  property.checkInTime,  primary.copy(0.06f), onSurface, onSurfaceVariant)
+                                PDTimeCard(Modifier.weight(1f), "🕐", "Check-in",  property.checkInTime,  primary.copy(0.06f),   onSurface,            onSurfaceVariant)
                                 PDTimeCard(Modifier.weight(1f), "🕑", "Check-out", property.checkOutTime, tertiary.copy(0.08f), Color(0xFFB8860B), onSurfaceVariant)
                             }
 
@@ -310,7 +319,10 @@ fun PropertyDetailScreen(
                                 Text("🌙", fontSize = 22.sp)
                                 Spacer(Modifier.width(12.dp))
                                 Text("Minimum stay", fontSize = 13.sp, color = onSurfaceVariant, modifier = Modifier.weight(1f))
-                                Text("${property.minNights} night${if (property.minNights > 1) "s" else ""}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = onSurface)
+                                Text(
+                                    "${property.minNights} night${if (property.minNights > 1) "s" else ""}",
+                                    fontSize = 14.sp, fontWeight = FontWeight.Bold, color = onSurface
+                                )
                             }
 
                             Spacer(Modifier.height(10.dp))
@@ -332,80 +344,36 @@ fun PropertyDetailScreen(
                                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(background).padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(tertiary.copy(0.15f)), Alignment.Center) {
+                                Box(
+                                    Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(tertiary.copy(0.15f)),
+                                    Alignment.Center
+                                ) {
                                     Icon(Icons.Default.LocationOn, null, tint = tertiary, modifier = Modifier.size(22.dp))
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column {
-                                    Text(property.city, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = onSurface)
+                                    Text(property.city,    fontSize = 14.sp, fontWeight = FontWeight.Bold, color = onSurface)
                                     Text(property.address, fontSize = 12.sp, color = onSurfaceVariant)
                                 }
                             }
                         }
-                        HorizontalDivider(color = background, thickness = 6.dp)
-                    }
-
-                    // 9. REVIEWS
-                    item {
-                        Column(Modifier.fillMaxWidth().background(surface).padding(horizontal = 20.dp, vertical = 16.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                PDSectionTitle("Reviews", tertiary, onSurface)
-                                TextButton(onClick = { navController.navigate(Screen.ViewReviews.createRoute(propertyId)) }) {
-                                    Text("See all", color = tertiary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                                    .background(Brush.linearGradient(listOf(primary, MaterialTheme.colorScheme.primaryContainer)))
-                                    .padding(horizontal = 18.dp, vertical = 18.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(80.dp)) {
-                                    Text("${property.averageRating}", fontSize = 38.sp, fontWeight = FontWeight.Black, color = tertiary)
-                                    Row {
-                                        repeat(5) { i ->
-                                            Icon(Icons.Default.Star, null, tint = if (i < property.averageRating.toInt()) tertiary else onPrimary.copy(0.25f), modifier = Modifier.size(13.dp))
-                                        }
-                                    }
-                                    Spacer(Modifier.height(4.dp))
-                                    Text("${property.reviewCount} reviews", fontSize = 10.sp, color = onPrimary.copy(0.55f))
-                                }
-                                Spacer(Modifier.width(16.dp))
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                                    listOf("Cleanliness" to 0.92f, "Location" to 0.88f, "Value" to (property.averageRating / 5f), "Comfort" to 0.85f).forEach { (label, frac) ->
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                            Text(label, fontSize = 10.sp, color = onPrimary.copy(0.65f), modifier = Modifier.width(70.dp))
-                                            Box(Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(3.dp)).background(onPrimary.copy(0.15f))) {
-                                                Box(Modifier.fillMaxHeight().fillMaxWidth(frac.coerceIn(0f, 1f)).clip(RoundedCornerShape(3.dp)).background(tertiary))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        // ── Reviews section yahan se HATA di gayi hai ──────────────
+                        // Reviews bottom navbar ke "Reviews" tab mein available hain
                     }
                 }
 
-                // ── STICKY BOTTOM BAR ──────────────────────────────────────────────────
+                // ── STICKY BOTTOM BAR ──────────────────────────────────────────────
                 Surface(
-                    modifier      = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    modifier        = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                     shadowElevation = 16.dp,
-                    color         = surface
+                    color           = surface
                 ) {
                     if (roleLoaded && isTenant && !isOwner) {
-                        // ════════════════════════════════════════════════════════════════
-                        // TENANT BOTTOM BAR
-                        // Row 1: Price | Message Owner | Book Now   (always shown)
-                        // Row 2: Book with Package button           (sirf tab jab package ho)
-                        // ════════════════════════════════════════════════════════════════
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            modifier            = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Row 1 — Price + Message + Book Now (unchanged from before)
+                            // Row 1 — Price + Message + Book Now
                             Row(
                                 modifier              = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -413,13 +381,7 @@ fun PropertyDetailScreen(
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     Text("Per night", fontSize = 9.sp, color = onSurfaceVariant)
-                                    Text(
-                                        property.formattedPrice,
-                                        fontSize   = 16.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color      = onSurface,
-                                        maxLines   = 1
-                                    )
+                                    Text(property.formattedPrice, fontSize = 16.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
                                 }
                                 if (property.ownerId.isNotEmpty()) {
                                     OutlinedButton(
@@ -441,21 +403,15 @@ fun PropertyDetailScreen(
                                         Spacer(Modifier.width(5.dp))
                                         Text(
                                             property.ownerName.ifEmpty { "Owner" }.split(" ").first(),
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize   = 13.sp
+                                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp
                                         )
                                     }
                                 }
                                 Button(
-                                    onClick        = {
-                                        navController.navigate(Screen.Booking.createRoute(propertyId))
-                                    },
+                                    onClick        = { navController.navigate(Screen.Booking.createRoute(propertyId)) },
                                     modifier       = Modifier.height(42.dp),
                                     shape          = RoundedCornerShape(10.dp),
-                                    colors         = ButtonDefaults.buttonColors(
-                                        containerColor = primary,
-                                        contentColor   = onPrimary
-                                    ),
+                                    colors         = ButtonDefaults.buttonColors(containerColor = primary, contentColor = onPrimary),
                                     contentPadding = PaddingValues(horizontal = 20.dp),
                                     elevation      = ButtonDefaults.buttonElevation(3.dp)
                                 ) {
@@ -463,19 +419,13 @@ fun PropertyDetailScreen(
                                 }
                             }
 
-                            // ✦ Row 2 — "Book with Package" button
-                            // Sirf tab dikhao jab is property pe koi active package ho
+                            // Row 2 — Book with Package (sirf tab jab active package ho)
                             if (hasActivePackage) {
                                 Button(
-                                    onClick   = {
-                                        navController.navigate(Screen.PreBooking.createRoute(propertyId))
-                                    },
+                                    onClick   = { navController.navigate(Screen.PreBooking.createRoute(propertyId)) },
                                     modifier  = Modifier.fillMaxWidth().height(46.dp),
                                     shape     = RoundedCornerShape(12.dp),
-                                    colors    = ButtonDefaults.buttonColors(
-                                        containerColor = tertiary,
-                                        contentColor   = primary
-                                    ),
+                                    colors    = ButtonDefaults.buttonColors(containerColor = tertiary, contentColor = primary),
                                     elevation = ButtonDefaults.buttonElevation(3.dp)
                                 ) {
                                     Icon(Icons.Default.LocalOffer, null, modifier = Modifier.size(16.dp))
@@ -485,37 +435,22 @@ fun PropertyDetailScreen(
                             }
                         }
                     } else {
-                        // ════════════════════════════════════════════════════════════════
-                        // LANDLORD / ADMIN / OWNER BOTTOM BAR — unchanged
-                        // ════════════════════════════════════════════════════════════════
+                        // Landlord / Admin / Owner bottom bar
                         Row(
-                            modifier              = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment     = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Per night", fontSize = 9.sp, color = onSurfaceVariant)
-                                Text(
-                                    property.formattedPrice,
-                                    fontSize   = 16.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color      = onSurface,
-                                    maxLines   = 1
-                                )
+                                Text(property.formattedPrice, fontSize = 16.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
                             }
                             if (roleLoaded && isLandlord && isOwner) {
                                 Button(
-                                    onClick        = {
-                                        navController.navigate(Screen.EditProperty.createRoute(propertyId))
-                                    },
+                                    onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
                                     modifier       = Modifier.height(44.dp),
                                     shape          = RoundedCornerShape(10.dp),
-                                    colors         = ButtonDefaults.buttonColors(
-                                        containerColor = primary,
-                                        contentColor   = tertiary
-                                    ),
+                                    colors         = ButtonDefaults.buttonColors(containerColor = primary, contentColor = tertiary),
                                     contentPadding = PaddingValues(horizontal = 18.dp),
                                     elevation      = ButtonDefaults.buttonElevation(3.dp)
                                 ) {
@@ -534,11 +469,7 @@ fun PropertyDetailScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🏠", fontSize = 48.sp)
                         Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Property not found",
-                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 16.sp
-                        )
+                        Text("Property not found", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
                     }
                 }
             }
@@ -546,7 +477,7 @@ fun PropertyDetailScreen(
     }
 }
 
-// ── Helper Composables — sab unchanged ───────────────────────────────────────
+// ── Helper Composables ────────────────────────────────────────────────────────
 
 @Composable
 private fun PDSectionTitle(text: String, tertiary: Color, onSurface: Color) {

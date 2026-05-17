@@ -22,29 +22,42 @@ class BookingRepository @Inject constructor(
     private val firestore             : FirebaseFirestore,
     private val notificationRepository: NotificationRepository
 ) {
-    private val bookingsCol      = firestore.collection("bookings")
-    private val usersCol         = firestore.collection("users")
+    // ✅ FIXED: Sirf ek "bookings" collection — space wali hatdi
+    private val bookingsCol = firestore.collection("bookings")
+    private val usersCol = firestore.collection("users")
     private val notificationsCol = firestore.collection("notifications")
-    private val propertiesCol    = firestore.collection("properties")
+    private val propertiesCol = firestore.collection("properties")
+
+    // ── Helper: safe parse ────────────────────────────────────────────────────
+    private fun parseBookingSafe(doc: com.google.firebase.firestore.DocumentSnapshot): Booking? {
+        return try {
+            var b = doc.toObject(Booking::class.java) ?: return null
+            if (b.bookingId.isBlank()) b = b.copy(bookingId = doc.id)
+            b
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "Parse fail ${doc.id}: ${e.localizedMessage}")
+            null
+        }
+    }
 
     // ── CREATE ────────────────────────────────────────────────────────────────
     suspend fun createBooking(booking: Booking): Resource<String> {
+        Log.d("BOOKING_REPO", "createBooking START tenantId='${booking.tenantId}'")
 
-        // ✅ FIX: tenantName blank hai toh Firestore se fetch karo BEFORE saving
         val resolvedTenantName = resolveTenantName(booking)
-
         val pendingBooking = booking.copy(
-            status     = BookingStatus.PENDING.name,
-            tenantName = resolvedTenantName   // ✅ guaranteed non-blank naam
+            status = BookingStatus.PENDING.name,
+            tenantName = resolvedTenantName
         )
 
         val result = dataManager.createBooking(pendingBooking)
+        Log.d("BOOKING_REPO", "createBooking result = $result")
 
         if (result is Resource.Success) {
-            val bookingId          = result.data ?: ""
+            val bookingId = result.data ?: ""
             val resolvedLandlordId = resolveLandlordId(booking)
-            val finalBooking       = pendingBooking.copy(
-                bookingId  = bookingId,
+            val finalBooking = pendingBooking.copy(
+                bookingId = bookingId,
                 landlordId = resolvedLandlordId
             )
             sendBookingNotificationToLandlord(finalBooking)
@@ -54,166 +67,208 @@ class BookingRepository @Inject constructor(
     }
 
     // ── READ ──────────────────────────────────────────────────────────────────
-    suspend fun getBookingById(bookingId: String): Resource<Booking> =
-        dataManager.getBookingById(bookingId)
+    suspend fun getBookingById(bookingId: String): Resource<Booking> {
+        Log.d("BOOKING_REPO", "getBookingById: '$bookingId'")
+        return dataManager.getBookingById(bookingId)
+    }
 
     suspend fun getAllBookingsForAdmin(): List<Booking> {
+        Log.d("BOOKING_REPO", "getAllBookingsForAdmin START")
         return try {
-            val resource = dataManager.getAllBookings()
-            if (resource is Resource.Success) resource.data ?: emptyList()
-            else emptyList()
-        } catch (e: Exception) { emptyList() }
+            val snap = bookingsCol.get().await()
+            val all = snap.documents
+                .mapNotNull { parseBookingSafe(it) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
+            Log.d("BOOKING_REPO", "getAllBookingsForAdmin: ${all.size} total")
+            all
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "getAllBookingsForAdmin EXCEPTION: ${e.localizedMessage}")
+            emptyList()
+        }
     }
 
     suspend fun getTenantBookings(tenantId: String): List<Booking> {
-        return try { dataManager.getBookingsByTenantId(tenantId) }
-        catch (e: Exception) { emptyList() }
+        Log.d("BOOKING_REPO", "getTenantBookings START — tenantId='$tenantId'")
+
+        if (tenantId.isBlank()) {
+            Log.e("BOOKING_REPO", "tenantId BLANK — aborting")
+            return emptyList()
+        }
+
+        return try {
+            val snap = bookingsCol
+                .whereEqualTo("tenantId", tenantId)
+                .get().await()
+
+            Log.d("BOOKING_REPO", "snap size = ${snap.documents.size}")
+
+            val all = snap.documents
+                .mapNotNull { parseBookingSafe(it) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
+
+            Log.d("BOOKING_REPO", "getTenantBookings result: ${all.size} bookings")
+            all
+
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "getTenantBookings EXCEPTION: ${e.localizedMessage}")
+            emptyList()
+        }
     }
 
     suspend fun getLandlordBookings(landlordId: String): List<Booking> {
-        return try { dataManager.getBookingsByLandlordId(landlordId) }
-        catch (e: Exception) { emptyList() }
+        Log.d("BOOKING_REPO", "getLandlordBookings START — landlordId='$landlordId'")
+
+        if (landlordId.isBlank()) {
+            Log.e("BOOKING_REPO", "landlordId BLANK — aborting")
+            return emptyList()
+        }
+
+        return try {
+            val snap = bookingsCol
+                .whereEqualTo("landlordId", landlordId)
+                .get().await()
+
+            Log.d("BOOKING_REPO", "snap size = ${snap.documents.size}")
+
+            val all = snap.documents
+                .mapNotNull { parseBookingSafe(it) }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
+
+            Log.d("BOOKING_REPO", "getLandlordBookings result: ${all.size} bookings")
+            all
+
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "getLandlordBookings EXCEPTION: ${e.localizedMessage}")
+            emptyList()
+        }
     }
 
     // ── UPDATE STATUS ─────────────────────────────────────────────────────────
     suspend fun updateBookingStatus(
-        bookingId : String,
-        newStatus : BookingStatus
+        bookingId: String,
+        newStatus: BookingStatus
     ): Resource<Unit> {
-        val result = dataManager.updateBookingStatus(bookingId, newStatus.name)
+        Log.d("BOOKING_REPO", "updateBookingStatus: '$bookingId' → '${newStatus.name}'")
 
-        if (result is Resource.Success) {
+        return try {
+            bookingsCol.document(bookingId).update("status", newStatus.name).await()
+
+            // Notification bhejo
             try {
-                val bookingResource = dataManager.getBookingById(bookingId)
+                val bookingResource = getBookingById(bookingId)
                 if (bookingResource is Resource.Success) {
                     val booking = bookingResource.data
                     when (newStatus) {
                         BookingStatus.CONFIRMED ->
                             notificationRepository.sendBookingConfirmedToTenant(
-                                tenantId      = booking.tenantId,
-                                bookingId     = bookingId,
+                                tenantId = booking.tenantId,
+                                bookingId = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
+
                         BookingStatus.CANCELLED ->
                             notificationRepository.sendBookingCancelledToTenant(
-                                tenantId      = booking.tenantId,
-                                bookingId     = bookingId,
+                                tenantId = booking.tenantId,
+                                bookingId = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
+
                         else -> {}
                     }
                 }
             } catch (e: Exception) {
                 Log.e("BOOKING_REPO", "Status notification error: ${e.localizedMessage}")
             }
+
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "updateBookingStatus FAIL: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to update status")
         }
-        return result
     }
 
     // ── PAYMENT UPDATE ────────────────────────────────────────────────────────
     suspend fun updatePaymentStatusOnBooking(
-        bookingId    : String,
+        bookingId: String,
         paymentStatus: String,
-        paymentId    : String
+        paymentId: String
     ) {
+        Log.d("BOOKING_REPO", "updatePaymentStatusOnBooking: '$bookingId'")
+        val updateMap = mapOf(
+            "paymentStatus" to paymentStatus,
+            "paymentId" to paymentId,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
         try {
-            bookingsCol.document(bookingId)
-                .update(
-                    mapOf(
-                        "paymentStatus" to paymentStatus,
-                        "paymentId"     to paymentId,
-                        "updatedAt"     to FieldValue.serverTimestamp()
-                    )
-                )
-                .await()
+            bookingsCol.document(bookingId).update(updateMap).await()
+            Log.d("BOOKING_REPO", "✅ Payment status updated on booking")
         } catch (e: Exception) {
             Log.e("BOOKING_REPO", "updatePaymentStatus error: ${e.localizedMessage}")
         }
     }
 
     // ── FLOW ──────────────────────────────────────────────────────────────────
-    fun getBookingsFlow(userId: String): Flow<List<Booking>> =
-        realtimeListener.getBookingsFlow(userId)
+    fun getBookingsFlow(userId: String): Flow<List<Booking>> {
+        return realtimeListener.getBookingsFlow(userId)
+    }
+
+    // ── CANCEL ────────────────────────────────────────────────────────────────
+    suspend fun cancelBooking(bookingId: String): Resource<Unit> {
+        val updateMap = mapOf(
+            "status" to BookingStatus.CANCELLED.name,
+            "cancelledAt" to FieldValue.serverTimestamp()
+        )
+        return try {
+            bookingsCol.document(bookingId).update(updateMap).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Cancel failed")
+        }
+    }
 
     // ══════════════════════════════════════════════════════════════════════════
     // PRIVATE HELPERS
     // ══════════════════════════════════════════════════════════════════════════
 
-    // ✅ NEW: tenantName Firestore se resolve karo
     private suspend fun resolveTenantName(booking: Booking): String {
-        // Pehle check: booking object mein naam already hai
-        if (booking.tenantName.isNotBlank()) {
-            Log.d("BOOKING_REPO", "tenantName already present: ${booking.tenantName}")
-            return booking.tenantName
-        }
-
-        // Nahi hai toh tenantId se Firestore users collection se fetch karo
-        if (booking.tenantId.isBlank()) {
-            Log.e("BOOKING_REPO", "tenantId bhi blank — cannot resolve tenantName")
-            return ""
-        }
-
+        if (booking.tenantName.isNotBlank()) return booking.tenantName
+        if (booking.tenantId.isBlank()) return ""
         return try {
             val userDoc = usersCol.document(booking.tenantId).get().await()
-            val name = userDoc.getString("fullName")      // ✅ Firestore mein "fullName" field hai
+            userDoc.getString("fullName")
                 ?: userDoc.getString("name")
                 ?: userDoc.getString("displayName")
                 ?: ""
-            if (name.isNotBlank()) {
-                Log.d("BOOKING_REPO", "✅ tenantName resolved: $name")
-            } else {
-                Log.w("BOOKING_REPO", "tenantName empty even after Firestore fetch for ${booking.tenantId}")
-            }
-            name
         } catch (e: Exception) {
-            Log.e("BOOKING_REPO", "resolveTenantName error: ${e.localizedMessage}")
             ""
         }
     }
 
     private suspend fun resolveLandlordId(booking: Booking): String {
-        if (booking.landlordId.isNotBlank()) {
-            Log.d("BOOKING_REPO", "landlordId from booking object: ${booking.landlordId}")
-            return booking.landlordId
-        }
+        if (booking.landlordId.isNotBlank()) return booking.landlordId
+        if (booking.propertyId.isBlank()) return ""
         return try {
-            if (booking.propertyId.isBlank()) {
-                Log.e("BOOKING_REPO", "propertyId bhi empty — cannot resolve landlordId")
-                return ""
-            }
-            val propDoc    = propertiesCol.document(booking.propertyId).get().await()
-            val landlordId = propDoc.getString("landlordId")
+            val propDoc = propertiesCol.document(booking.propertyId).get().await()
+            propDoc.getString("landlordId")
                 ?: propDoc.getString("ownerId")
                 ?: propDoc.getString("userId")
                 ?: ""
-            if (landlordId.isBlank()) {
-                Log.e("BOOKING_REPO", "landlordId not found in property ${booking.propertyId}")
-            } else {
-                Log.d("BOOKING_REPO", "landlordId fetched from property: $landlordId")
-            }
-            landlordId
         } catch (e: Exception) {
-            Log.e("BOOKING_REPO", "resolveLandlordId error: ${e.localizedMessage}")
             ""
         }
     }
 
     private suspend fun sendBookingNotificationToLandlord(booking: Booking) {
         try {
-            val landlordId = booking.landlordId
-            if (landlordId.isBlank()) {
-                Log.e("BOOKING_REPO", "landlordId empty — skipping landlord notification")
-                return
-            }
+            if (booking.landlordId.isBlank()) return
             notificationRepository.sendBookingRequestToLandlord(
-                landlordId    = landlordId,
-                bookingId     = booking.bookingId,
+                landlordId = booking.landlordId,
+                bookingId = booking.bookingId,
                 propertyTitle = booking.propertyTitle.ifBlank { "Property" },
-                tenantName    = booking.tenantName.ifBlank    { "Tenant"   }
+                tenantName = booking.tenantName.ifBlank { "Tenant" }
             )
-            Log.d("BOOKING_REPO", "✅ Landlord notification sent to $landlordId")
         } catch (e: Exception) {
-            Log.e("BOOKING_REPO", "sendBookingNotificationToLandlord error: ${e.localizedMessage}")
+            Log.e("BOOKING_REPO", "landlord notification error: ${e.localizedMessage}")
         }
     }
 
@@ -225,34 +280,31 @@ class BookingRepository @Inject constructor(
             }
 
             if (adminQuery.isEmpty) {
-                Log.w("BOOKING_REPO", "No admin found — sending to generic admin recipientId")
                 val notifData = mapOf(
                     "recipientId" to "admin",
-                    "targetRole"  to "admin",
-                    "title"       to "New Booking Request",
-                    "body"        to "${booking.tenantName.ifBlank { "A tenant" }} ne \"${booking.propertyTitle.ifBlank { "a property" }}\" book kiya.",
-                    "type"        to NotificationType.BOOKING_REQUESTED.name,
+                    "targetRole" to "admin",
+                    "title" to "New Booking Request",
+                    "body" to "${booking.tenantName.ifBlank { "A tenant" }} ne \"${booking.propertyTitle.ifBlank { "a property" }}\" book kiya.",
+                    "type" to NotificationType.BOOKING_REQUESTED.name,
                     "referenceId" to booking.bookingId,
-                    "isRead"      to false,
-                    "isActive"    to true,
-                    "createdAt"   to Timestamp.now()
+                    "isRead" to false,
+                    "isActive" to true,
+                    "createdAt" to Timestamp.now()
                 )
                 notificationsCol.add(notifData).await()
                 return
             }
 
             adminQuery.documents.forEach { adminDoc ->
-                val adminId = adminDoc.id
                 notificationRepository.sendBookingNotificationToAdmin(
-                    adminId       = adminId,
-                    bookingId     = booking.bookingId,
+                    adminId = adminDoc.id,
+                    bookingId = booking.bookingId,
                     propertyTitle = booking.propertyTitle.ifBlank { "Property" },
-                    tenantName    = booking.tenantName.ifBlank    { "Tenant"   }
+                    tenantName = booking.tenantName.ifBlank { "Tenant" }
                 )
-                Log.d("BOOKING_REPO", "✅ Admin notification sent to $adminId")
             }
         } catch (e: Exception) {
-            Log.e("BOOKING_REPO", "sendBookingNotificationToAdmin error: ${e.localizedMessage}")
+            Log.e("BOOKING_REPO", "admin notification error: ${e.localizedMessage}")
         }
     }
 }

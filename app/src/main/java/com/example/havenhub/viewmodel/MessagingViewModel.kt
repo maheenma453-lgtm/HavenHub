@@ -3,8 +3,11 @@ package com.example.havenhub.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Message
+import com.example.havenhub.data.User
+import com.example.havenhub.remote.FirebaseRealtimeListener
 import com.example.havenhub.repository.MessagingRepository
 import com.example.havenhub.utils.Resource
+import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class MessagingUiState(
@@ -30,24 +34,72 @@ data class MessagingUiState(
 
     // Full chat delete state
     val isChatDeleting    : Boolean      = false,
-    val chatDeleteSuccess : Boolean      = false
+    val chatDeleteSuccess : Boolean      = false,
+
+    // ✦ NEW — Other user profile (header mein profile pic + role ke liye)
+    val otherUserProfile  : User?        = null,
+
+    // ✦ NEW — Online / Last seen presence
+    val isOtherUserOnline : Boolean      = false,
+    val otherUserLastSeen : Long         = 0L
 )
 
 @HiltViewModel
 class MessagingViewModel @Inject constructor(
-    private val messagingRepository: MessagingRepository
+    private val messagingRepository   : MessagingRepository,
+    private val firebaseRealtimeListener: FirebaseRealtimeListener,
+    private val firestore             : FirebaseFirestore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MessagingUiState())
     val uiState: StateFlow<MessagingUiState> = _uiState.asStateFlow()
 
-    private var currentUserId: String = ""
+    private var currentUserId : String = ""
     private var currentChatId : String = ""
-    private var messageJob   : Job?   = null
-    private var convoJob     : Job?   = null
+    private var messageJob    : Job?   = null
+    private var convoJob      : Job?   = null
+    private var presenceJob   : Job?   = null  // ✦ NEW
 
     fun initUserId(userId: String) {
         currentUserId = userId
+        // ✦ NEW — Apni presence online set karo
+        firebaseRealtimeListener.updateMyPresence(userId, isOnline = true)
+    }
+
+    // ✦ NEW — App background/close hone pe call karo (MainActivity ya ChatScreen onStop mein)
+    fun setOffline() {
+        if (currentUserId.isNotEmpty()) {
+            firebaseRealtimeListener.updateMyPresence(currentUserId, isOnline = false)
+        }
+    }
+
+    // ✦ NEW — Other user ka profile Firestore se fetch karo
+    fun loadOtherUserProfile(otherUserId: String) {
+        if (otherUserId.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("users").document(otherUserId).get().await()
+                val user = doc.toObject(User::class.java)
+                _uiState.update { it.copy(otherUserProfile = user) }
+            } catch (e: Exception) {
+                // Profile load fail hone pe silently ignore karo — naam already ChatScreen mein hai
+            }
+        }
+    }
+
+    // ✦ NEW — Other user ki real-time presence listen karo
+    private fun listenToOtherUserPresence(otherUserId: String) {
+        presenceJob?.cancel()
+        presenceJob = viewModelScope.launch {
+            firebaseRealtimeListener.listenToUserPresence(otherUserId).collect { presence ->
+                _uiState.update {
+                    it.copy(
+                        isOtherUserOnline = presence.isOnline,
+                        otherUserLastSeen = presence.lastSeen
+                    )
+                }
+            }
+        }
     }
 
     fun loadConversations(userId: String) {
@@ -60,7 +112,6 @@ class MessagingViewModel @Inject constructor(
                 when (result) {
                     is Resource.Success -> {
                         val convos = result.data ?: emptyList()
-                        // Count conversations with unread messages for badge total
                         val unreadConversationCount = convos.count { convo ->
                             val perUserUnread = (convo["unreadCount_$userId"] as? Long)?.toInt() ?: 0
                             perUserUnread > 0
@@ -87,6 +138,9 @@ class MessagingViewModel @Inject constructor(
         val chatId = messagingRepository.generateChatId(currentUserId, otherUserId)
         currentChatId = chatId
         listenToMessages(chatId)
+        // ✦ NEW — Other user ka profile + presence load karo
+        loadOtherUserProfile(otherUserId)
+        listenToOtherUserPresence(otherUserId)
     }
 
     private fun listenToMessages(chatId: String) {
@@ -202,7 +256,7 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    // ── Full Chat Delete (used from ChatScreen) ────────────────────────────────
+    // ── Full Chat Delete ───────────────────────────────────────────────────────
 
     fun deleteEntireChat(otherUserId: String) {
         val chatId = if (currentChatId.isNotEmpty()) currentChatId
@@ -222,12 +276,10 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    // Used from MessageListScreen to delete a conversation
     fun deleteConversation(conversationId: String, currentUid: String) {
         viewModelScope.launch {
             try {
                 messagingRepository.deleteConversation(conversationId)
-                // Remove from local list immediately
                 _uiState.update { state ->
                     state.copy(
                         conversations = state.conversations.filter { convo ->
@@ -251,7 +303,6 @@ class MessagingViewModel @Inject constructor(
         viewModelScope.launch {
             messagingRepository.markMessagesAsRead(chatId, userId)
 
-            // Update local conversation list — reset unread count instantly
             val updatedConvos = _uiState.value.conversations.map { convo ->
                 val cid = (convo["conversationId"] as? String)
                     ?: (convo["id"] as? String) ?: ""
@@ -261,7 +312,6 @@ class MessagingViewModel @Inject constructor(
                     convo
             }
 
-            // Recount unread conversations after marking read
             val newUnread = updatedConvos.count { convo ->
                 ((convo["unreadCount_$userId"] as? Long)?.toInt() ?: 0) > 0
             }
@@ -314,5 +364,6 @@ class MessagingViewModel @Inject constructor(
         super.onCleared()
         messageJob?.cancel()
         convoJob?.cancel()
+        presenceJob?.cancel()  // ✦ NEW
     }
 }

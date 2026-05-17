@@ -40,6 +40,62 @@ class FirebaseRealtimeListener @Inject constructor(
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    // ✦ NEW — USER PRESENCE (Online / Last Seen)
+    //
+    // Firebase Realtime Database mein user presence track karta hai.
+    // Structure:
+    //   /status/{userId}/
+    //     - isOnline: Boolean
+    //     - lastSeen: Long (epoch ms)
+    //
+    // ChatScreen header mein "Online" ya "Last seen 10:30 AM" dikhane ke liye.
+    // ══════════════════════════════════════════════════════════════════════════
+
+    data class UserPresence(
+        val isOnline: Boolean = false,
+        val lastSeen: Long    = 0L
+    )
+
+    fun listenToUserPresence(userId: String): Flow<UserPresence> = callbackFlow {
+        if (userId.isEmpty()) {
+            trySend(UserPresence())
+            awaitClose()
+            return@callbackFlow
+        }
+
+        val reg: ListenerRegistration = firestore
+            .collection("status")
+            .document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("REALTIME", "listenToUserPresence: ${error.localizedMessage}")
+                    trySend(UserPresence())
+                    return@addSnapshotListener
+                }
+                val isOnline = snapshot?.getBoolean("isOnline") ?: false
+                val lastSeen = snapshot?.getLong("lastSeen") ?: 0L
+                trySend(UserPresence(isOnline = isOnline, lastSeen = lastSeen))
+            }
+        awaitClose { reg.remove() }
+    }
+
+    /**
+     * Apni presence Firestore mein update karo.
+     * Call karo: app foreground mein aaye toh isOnline=true,
+     * background/close hone pe isOnline=false + lastSeen=now.
+     */
+    fun updateMyPresence(userId: String, isOnline: Boolean) {
+        if (userId.isEmpty()) return
+        val data = if (isOnline) {
+            mapOf("isOnline" to true, "lastSeen" to System.currentTimeMillis())
+        } else {
+            mapOf("isOnline" to false, "lastSeen" to System.currentTimeMillis())
+        }
+        firestore.collection("status").document(userId).set(data)
+            .addOnFailureListener { Log.e("REALTIME", "updateMyPresence failed: ${it.localizedMessage}") }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     // NOTIFICATIONS — ✅ BUG FIX
     //
     // PROBLEM WAS:
@@ -199,15 +255,6 @@ class FirebaseRealtimeListener @Inject constructor(
         awaitClose { reg.remove() }
     }
 }
-
-
-
-
-
-
-
-
-
 
 
 

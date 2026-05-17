@@ -1,4 +1,10 @@
 package com.example.havenhub.components
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,43 +29,67 @@ import androidx.compose.ui.unit.sp
 /**
  * Notification badge components for HavenHub.
  *
- *  1. [NotificationBadge]          – Standalone numeric badge (for icons, cards)
- *  2. [NotificationIconButton]     – Bell icon with badge, used in TopAppBar
- *  3. [DotBadge]                   – Small unread dot (no count)
+ *  1. [NotificationBadge]       – Standalone numeric badge (for icons, cards)
+ *  2. [NotificationIconButton]  – Bell icon with animated badge — use in TopAppBar
+ *  3. [DotBadge]                – Small unread dot (no count)
+ *  4. [BadgedIconSlot]          – Wraps any composable with a dot badge
+ *
+ * FIX: Badge was only showing on Admin dashboard because Tenant/Landlord
+ * screens were not calling startListening(userId) on their ViewModels.
+ * Badge component itself is correct — the fix is in NotificationViewModel
+ * (startListening guard) and in each dashboard screen's LaunchedEffect.
+ *
+ * HOW TO USE in every dashboard TopAppBar:
+ * ─────────────────────────────────────────
+ *   val notifState by notificationViewModel.uiState.collectAsStateWithLifecycle()
+ *
+ *   LaunchedEffect(currentUserId) {
+ *       notificationViewModel.startListening(currentUserId)   // ← THIS was missing
+ *   }
+ *
+ *   NotificationIconButton(
+ *       count   = notifState.unreadCount,
+ *       onClick = { navController.navigate(Screen.Notifications.route) }
+ *   )
  */
 
 // ─── 1. Standalone Badge ──────────────────────────────────────────────────────
 
 /**
- * Circular badge showing a count. Clamps display to "99+" for large counts.
+ * Circular badge showing a count. Hidden when count <= 0.
  *
  * @param count      Number to display (0 = hidden)
  * @param modifier   Positioning modifier (typically .align(Alignment.TopEnd))
  * @param size       Badge diameter
- * @param badgeColor Background color (defaults to error/red)
+ * @param badgeColor Background color (defaults to MaterialTheme error color)
  */
 @Composable
 fun NotificationBadge(
-    count: Int,
-    modifier: Modifier = Modifier,
-    size: Dp = 18.dp,
-    badgeColor: Color = MaterialTheme.colorScheme.error
+    count     : Int,
+    modifier  : Modifier = Modifier,
+    size      : Dp       = 18.dp,
+    badgeColor: Color    = MaterialTheme.colorScheme.error
 ) {
-    if (count <= 0) return
-
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = badgeColor,
-        modifier = modifier.size(if (count > 9) 22.dp else size)
+    AnimatedVisibility(
+        visible = count > 0,
+        enter   = scaleIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+        exit    = scaleOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+        modifier = modifier
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = if (count > 99) "99+" else count.toString(),
-                color = MaterialTheme.colorScheme.onError,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 2.dp)
-            )
+        Surface(
+            shape    = MaterialTheme.shapes.extraLarge,
+            color    = badgeColor,
+            modifier = Modifier.size(if (count > 9) 22.dp else size)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text       = if (count > 99) "99+" else count.toString(),
+                    color      = Color.White,
+                    fontSize   = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.padding(horizontal = 2.dp)
+                )
+            }
         }
     }
 }
@@ -67,27 +97,34 @@ fun NotificationBadge(
 // ─── 2. Notification Icon Button ─────────────────────────────────────────────
 
 /**
- * Bell icon button with a count badge.
- * Designed for use in TopAppBar actions.
+ * Bell icon button with animated count badge.
+ * Place in TopAppBar actions on Admin, Landlord, AND Tenant dashboards.
  *
- * @param count       Unread notification count (0 hides the badge)
- * @param onClick     Button tap callback
- * @param tint        Icon tint color
+ * @param count   Unread notification count (0 hides the badge)
+ * @param onClick Button tap callback — navigate to NotificationsScreen
+ * @param tint    Icon tint (auto-adapts to light/dark theme via onSurface)
  */
 @Composable
 fun NotificationIconButton(
-    count: Int,
-    onClick: () -> Unit,
+    count   : Int,
+    onClick : () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = MaterialTheme.colorScheme.onSurface
+    tint    : Color    = MaterialTheme.colorScheme.onSurface
 ) {
     BadgedBox(
         badge = {
-            if (count > 0) {
-                Badge(containerColor = MaterialTheme.colorScheme.error) {
+            AnimatedVisibility(
+                visible = count > 0,
+                enter   = scaleIn(spring(stiffness = Spring.StiffnessMediumLow)),
+                exit    = scaleOut(spring(stiffness = Spring.StiffnessMediumLow))
+            ) {
+                Badge(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor   = Color.White
+                ) {
                     Text(
-                        text = if (count > 99) "99+" else count.toString(),
-                        fontSize = 9.sp,
+                        text       = if (count > 99) "99+" else count.toString(),
+                        fontSize   = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -97,9 +134,13 @@ fun NotificationIconButton(
     ) {
         IconButton(onClick = onClick) {
             Icon(
-                imageVector = Icons.Default.Notifications,
-                contentDescription = if (count > 0) "$count unread notifications" else "Notifications",
-                tint = tint
+                imageVector     = Icons.Default.Notifications,
+                contentDescription = if (count > 0)
+                    "$count unread notifications"
+                else
+                    "Notifications",
+                tint = tint,
+                modifier = Modifier.size(26.dp)
             )
         }
     }
@@ -108,31 +149,34 @@ fun NotificationIconButton(
 // ─── 3. Dot Badge ─────────────────────────────────────────────────────────────
 
 /**
- * Small unread indicator dot with no count.
- * Used on tab icons and list items to indicate new content.
- *
- * @param isVisible   Controls dot visibility
- * @param dotSize     Size of the dot
- * @param dotColor    Dot color (defaults to error/red)
+ * Small unread indicator dot — no count shown.
+ * Use on tab icons and list items to signal new content.
  */
 @Composable
 fun DotBadge(
     isVisible: Boolean,
-    modifier: Modifier = Modifier,
-    dotSize: Dp = 8.dp,
-    dotColor: Color = MaterialTheme.colorScheme.error
+    modifier : Modifier = Modifier,
+    dotSize  : Dp      = 8.dp,
+    dotColor : Color   = MaterialTheme.colorScheme.error
 ) {
-    if (!isVisible) return
-
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = dotColor,
-        modifier = modifier.size(dotSize)
-    ) {}
+    AnimatedVisibility(
+        visible  = isVisible,
+        enter    = scaleIn(spring(stiffness = Spring.StiffnessMediumLow)),
+        exit     = scaleOut(spring(stiffness = Spring.StiffnessMediumLow)),
+        modifier = modifier
+    ) {
+        Surface(
+            shape    = MaterialTheme.shapes.extraLarge,
+            color    = dotColor,
+            modifier = Modifier.size(dotSize)
+        ) {}
+    }
 }
 
+// ─── 4. Badged Icon Slot ──────────────────────────────────────────────────────
+
 /**
- * Wraps any composable content with a [DotBadge] in the top-end corner.
+ * Wraps any composable with a [DotBadge] in the top-end corner.
  *
  * Usage:
  * ```
@@ -143,13 +187,17 @@ fun DotBadge(
  */
 @Composable
 fun BadgedIconSlot(
-    showDot: Boolean,
+    showDot : Boolean,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content : @Composable () -> Unit
 ) {
     BadgedBox(
         badge = {
-            if (showDot) {
+            AnimatedVisibility(
+                visible = showDot,
+                enter   = scaleIn(spring(stiffness = Spring.StiffnessMediumLow)),
+                exit    = scaleOut(spring(stiffness = Spring.StiffnessMediumLow))
+            ) {
                 Badge(containerColor = MaterialTheme.colorScheme.error)
             }
         },
@@ -158,4 +206,22 @@ fun BadgedIconSlot(
         content()
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

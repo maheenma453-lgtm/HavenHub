@@ -1,5 +1,6 @@
 package com.example.havenhub.screens
 
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,6 +32,7 @@ import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.BookingViewModel
 import com.example.havenhub.viewmodel.PaymentViewModel
+import com.google.firebase.auth.FirebaseAuth
 
 private val BookingGreen = Color(0xFF22C55E)
 private val BookingRed   = Color(0xFFEF4444)
@@ -50,22 +52,48 @@ fun MyBookingsScreen(
     val authUiState    by authViewModel.uiState.collectAsState()
     val userRole        = authUiState.userRole
     val paymentUiState by paymentViewModel.uiState.collectAsState()
+    val uiState        by viewModel.uiState.collectAsState()
+    val isLandlord      = userRole.lowercase() == "landlord"
 
-    LaunchedEffect(userId, userRole) {
-        if (userRole.isNotEmpty()) viewModel.loadBookings(userId = userId, role = userRole)
-    }
-    LaunchedEffect(Unit) {
-        if (userRole.isNotEmpty()) viewModel.loadBookings(userId = userId, role = userRole)
+    val resolvedUserId = authUiState.currentUser?.uid
+        ?: FirebaseAuth.getInstance().currentUser?.uid
+        ?: userId
+
+    Log.e("BOOKING_VM", "MyBookingsScreen COMPOSED")
+    Log.e("BOOKING_VM", "  userId param   = '$userId'")
+    Log.e("BOOKING_VM", "  resolvedUserId = '$resolvedUserId'")
+    Log.e("BOOKING_VM", "  userRole       = '$userRole'")
+    Log.e("BOOKING_VM", "  isAuthReady    = '${authUiState.isAuthReady}'")
+
+    // ✅ FIX: isAuthReady bhi dependency mein add kiya
+    // Pehle userRole blank hota tha jab LaunchedEffect fire hota tha
+    // Ab isAuthReady true hone ka wait karega
+    LaunchedEffect(resolvedUserId, userRole, authUiState.isAuthReady) {
+        if (resolvedUserId.isBlank()) {
+            Log.e("BOOKING_VM", "❌ Skipping — blank userId")
+            return@LaunchedEffect
+        }
+        // ✅ FIX: Auth ready hone ka wait karo — blank role se galat data fetch hoga
+        if (!authUiState.isAuthReady) {
+            Log.e("BOOKING_VM", "⏳ Auth not ready yet — waiting")
+            return@LaunchedEffect
+        }
+        val effectiveRole = userRole.ifBlank { "tenant" }
+        Log.e("BOOKING_VM", "LaunchedEffect FIRING — userId='$resolvedUserId' role='$effectiveRole'")
+        viewModel.loadBookings(userId = resolvedUserId, role = effectiveRole)
     }
 
-    LaunchedEffect(userId) {
-        if (userId.isNotEmpty()) {
-            paymentViewModel.loadPaymentHistory(userId)
+    // ✅ FIX: Payment load — same isAuthReady check
+    LaunchedEffect(resolvedUserId, userRole, authUiState.isAuthReady) {
+        if (resolvedUserId.isBlank()) return@LaunchedEffect
+        if (!authUiState.isAuthReady) return@LaunchedEffect
+        val effectiveRole = userRole.ifBlank { "tenant" }
+        if (effectiveRole.lowercase() == "landlord") {
+            paymentViewModel.loadLandlordPayments(resolvedUserId)
+        } else {
+            paymentViewModel.loadPaymentHistory(resolvedUserId)
         }
     }
-
-    val uiState    by viewModel.uiState.collectAsState()
-    val isLandlord  = userRole.lowercase() == "landlord"
 
     var selectedTab    by remember { mutableIntStateOf(initialTab) }
     var focusBookingId by remember { mutableStateOf<String?>(null) }
@@ -112,13 +140,17 @@ fun MyBookingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.errorMessage) {
-        uiState.errorMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearMessages() }
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessages()
+        }
     }
+
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             snackbarHostState.showSnackbar("Action completed successfully")
             viewModel.clearMessages()
-            if (userRole.isNotEmpty()) viewModel.loadBookings(userId = userId, role = userRole)
+            viewModel.forceRefreshBookings()
         }
     }
 
@@ -154,7 +186,6 @@ fun MyBookingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        // ✅ FIX: sirf tab cancel karo jab bookingId blank nahi ho
                         if (cancelBookingId.isNotBlank()) {
                             viewModel.cancelBooking(cancelBookingId)
                             selectedTab = 5
@@ -207,8 +238,6 @@ fun MyBookingsScreen(
         Column(
             Modifier.fillMaxSize().background(background).padding(top = paddingValues.calculateTopPadding())
         ) {
-
-            // ── Tab Row ───────────────────────────────────────────
             Box(Modifier.fillMaxWidth().background(surface).padding(vertical = 4.dp)) {
                 ScrollableTabRow(
                     selectedTabIndex = selectedTab,
@@ -281,9 +310,15 @@ fun MyBookingsScreen(
                 }
             }
 
-            // ── Content ───────────────────────────────────────────
             when {
-                uiState.isLoading || userRole.isEmpty() -> {
+                // ✅ FIX: Auth ready nahi — loading dikhao
+                !authUiState.isAuthReady -> {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        CircularProgressIndicator(color = tertiary, modifier = Modifier.size(48.dp), strokeWidth = 3.dp)
+                    }
+                }
+
+                uiState.isLoading -> {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
                         CircularProgressIndicator(color = tertiary, modifier = Modifier.size(48.dp), strokeWidth = 3.dp)
                     }
@@ -316,7 +351,6 @@ fun MyBookingsScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         items(items = filteredBookings, key = { it.bookingId }) { booking ->
-
                             val bookingPayment = paymentUiState.paymentHistory
                                 .find { it.bookingId == booking.bookingId }
 
@@ -327,7 +361,6 @@ fun MyBookingsScreen(
                                 paymentMethod = bookingPayment?.paymentMethod,
                                 onTap         = { navController.navigate(Screen.BookingDetails.createRoute(booking.bookingId)) },
                                 onPayNow      = {
-                                    // ✅ FIX: totalAmount Double ko String mein convert karo
                                     focusBookingId = booking.bookingId
                                     navController.navigate(
                                         Screen.Payment.createRoute(
@@ -337,12 +370,10 @@ fun MyBookingsScreen(
                                             payerName = booking.tenantName,
                                             payeeName = booking.landlordName,
                                             amount    = booking.totalAmount
-
                                         )
                                     )
                                 },
                                 onCancel  = {
-                                    // ✅ FIX: sirf set karo jab bookingId valid ho
                                     if (booking.bookingId.isNotBlank()) {
                                         cancelBookingId  = booking.bookingId
                                         showCancelDialog = true
@@ -359,7 +390,6 @@ fun MyBookingsScreen(
     }
 }
 
-// ── Booking Card ──────────────────────────────────────────────────
 @Composable
 private fun PremiumBookingCard(
     booking       : Booking,
@@ -381,10 +411,10 @@ private fun PremiumBookingCard(
     val (statusColor, statusText, statusBg) = when (booking.bookingStatus) {
         BookingStatus.PENDING          -> Triple(Color(0xFFF59E0B), "Pending",           Color(0xFFFFF8E1))
         BookingStatus.PENDING_APPROVAL -> Triple(BookingAmber,      "Awaiting Approval",  Color(0xFFFFF3E0))
-        BookingStatus.CONFIRMED        -> Triple(BookingGreen,       "Confirmed",          Color(0xFFE8F5E9))
-        BookingStatus.CHECKED_IN       -> Triple(BookingBlue,        "Checked In",         Color(0xFFE3F2FD))
-        BookingStatus.COMPLETED        -> Triple(onSurfaceVariant,   "Completed",          MaterialTheme.colorScheme.surfaceVariant)
-        BookingStatus.CANCELLED        -> Triple(BookingRed,         "Cancelled",          Color(0xFFFFEBEE))
+        BookingStatus.CONFIRMED        -> Triple(BookingGreen,      "Confirmed",           Color(0xFFE8F5E9))
+        BookingStatus.CHECKED_IN       -> Triple(BookingBlue,       "Checked In",          Color(0xFFE3F2FD))
+        BookingStatus.COMPLETED        -> Triple(onSurfaceVariant,  "Completed",           MaterialTheme.colorScheme.surfaceVariant)
+        BookingStatus.CANCELLED        -> Triple(BookingRed,        "Cancelled",           Color(0xFFFFEBEE))
     }
 
     Card(
@@ -436,44 +466,34 @@ private fun PremiumBookingCard(
                 if (paymentStatus != null) {
                     Spacer(Modifier.height(10.dp))
                     Row(
-                        Modifier
-                            .fillMaxWidth()
+                        Modifier.fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(
-                                when (paymentStatus) {
-                                    "COMPLETED" -> BookingGreen.copy(0.09f)
-                                    "PENDING"   -> Color(0xFFFFF8E1)
-                                    "FAILED"    -> BookingRed.copy(0.09f)
-                                    else        -> Color(0xFFF5F5F5)
-                                }
-                            )
+                            .background(when (paymentStatus) {
+                                "COMPLETED" -> BookingGreen.copy(0.09f)
+                                "PENDING"   -> Color(0xFFFFF8E1)
+                                "FAILED"    -> BookingRed.copy(0.09f)
+                                else        -> Color(0xFFF5F5F5)
+                            })
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Payment, null,
+                            Icon(Icons.Default.Payment, null,
                                 tint = when (paymentStatus) {
                                     "COMPLETED" -> BookingGreen
                                     "PENDING"   -> BookingAmber
                                     "FAILED"    -> BookingRed
                                     else        -> Color(0xFF9E9E9E)
-                                },
-                                modifier = Modifier.size(15.dp)
-                            )
+                                }, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(
-                                "Payment: $paymentStatus",
-                                fontSize   = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = when (paymentStatus) {
+                            Text("Payment: $paymentStatus", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                color = when (paymentStatus) {
                                     "COMPLETED" -> BookingGreen
                                     "PENDING"   -> BookingAmber
                                     "FAILED"    -> BookingRed
                                     else        -> Color(0xFF9E9E9E)
-                                }
-                            )
+                                })
                         }
                         if (!paymentMethod.isNullOrEmpty()) {
                             Text(paymentMethod, fontSize = 11.sp, color = Color(0xFF9E9E9E), fontWeight = FontWeight.Medium)
@@ -481,27 +501,19 @@ private fun PremiumBookingCard(
                     }
                 }
 
-                // TENANT PENDING: Cancel + Pay Now
                 if (!isLandlord && booking.bookingStatus == BookingStatus.PENDING) {
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(
-                            onClick  = onCancel,
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            shape    = RoundedCornerShape(12.dp),
-                            border   = BorderStroke(1.5.dp, BookingRed),
-                            colors   = ButtonDefaults.outlinedButtonColors(contentColor = BookingRed)
-                        ) {
+                        OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(12.dp), border = BorderStroke(1.5.dp, BookingRed),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BookingRed)) {
                             Icon(Icons.Default.Close, null, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(5.dp))
                             Text("Cancel", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
-                        Button(
-                            onClick  = onPayNow,
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            shape    = RoundedCornerShape(12.dp),
-                            colors   = ButtonDefaults.buttonColors(containerColor = primary)
-                        ) {
+                        Button(onClick = onPayNow, modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = primary)) {
                             Icon(Icons.Default.Payment, null, tint = tertiary, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(5.dp))
                             Text("Pay Now", fontSize = 13.sp, color = tertiary, fontWeight = FontWeight.Bold)
@@ -509,27 +521,19 @@ private fun PremiumBookingCard(
                     }
                 }
 
-                // LANDLORD: Approve + Reject
                 if (isLandlord && (booking.bookingStatus == BookingStatus.PENDING || booking.bookingStatus == BookingStatus.PENDING_APPROVAL)) {
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(
-                            onClick  = onReject,
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            shape    = RoundedCornerShape(12.dp),
-                            border   = BorderStroke(1.5.dp, BookingRed),
-                            colors   = ButtonDefaults.outlinedButtonColors(contentColor = BookingRed)
-                        ) {
+                        OutlinedButton(onClick = onReject, modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(12.dp), border = BorderStroke(1.5.dp, BookingRed),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BookingRed)) {
                             Icon(Icons.Default.Close, null, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(5.dp))
                             Text("Reject", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
-                        Button(
-                            onClick  = onApprove,
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            shape    = RoundedCornerShape(12.dp),
-                            colors   = ButtonDefaults.buttonColors(containerColor = BookingGreen)
-                        ) {
+                        Button(onClick = onApprove, modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BookingGreen)) {
                             Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(5.dp))
                             Text("Approve", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold)
@@ -537,29 +541,23 @@ private fun PremiumBookingCard(
                     }
                 }
 
-                // TENANT awaiting approval strip
                 if (!isLandlord && booking.bookingStatus == BookingStatus.PENDING_APPROVAL) {
                     Spacer(Modifier.height(12.dp))
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(BookingAmber.copy(0.09f)).padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(BookingAmber.copy(0.09f)).padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.HourglassEmpty, null, tint = BookingAmber, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Column {
                             Text("Payment received — awaiting landlord approval", fontSize = 12.sp, color = BookingAmber, fontWeight = FontWeight.Medium)
-                            Text("Landlord approve kare ga tab confirmed hogi",   fontSize = 11.sp, color = BookingAmber.copy(0.7f))
+                            Text("Landlord approve kare ga tab confirmed hogi", fontSize = 11.sp, color = BookingAmber.copy(0.7f))
                         }
                     }
                 }
 
-                // CONFIRMED strip
                 if (booking.bookingStatus == BookingStatus.CONFIRMED) {
                     Spacer(Modifier.height(12.dp))
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(BookingGreen.copy(0.08f)).padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(BookingGreen.copy(0.08f)).padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CheckCircle, null, tint = BookingGreen, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Booking confirmed — payment received", fontSize = 12.sp, color = BookingGreen, fontWeight = FontWeight.Medium)
@@ -570,7 +568,6 @@ private fun PremiumBookingCard(
     }
 }
 
-// ── Stat pill ─────────────────────────────────────────────────────
 @Composable
 private fun MBStat(
     icon        : androidx.compose.ui.graphics.vector.ImageVector,
@@ -580,7 +577,10 @@ private fun MBStat(
     onSurfaceVar: Color,
     primary     : Color
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         Box(
             Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(primary.copy(0.06f)),
             Alignment.Center
@@ -593,3 +593,14 @@ private fun MBStat(
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+

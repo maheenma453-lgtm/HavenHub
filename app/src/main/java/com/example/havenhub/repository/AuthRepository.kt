@@ -27,8 +27,6 @@ class AuthRepository @Inject constructor(
 
     fun isUserSignedIn(): Boolean = auth.currentUser != null
 
-    // FIX: Manual parser — toObject() silently fails on Double->Float
-    // for landlordRating field, returning 0f even when Firestore has 4.5.
     private fun parseUser(doc: DocumentSnapshot): User? {
         return try {
             User(
@@ -48,7 +46,6 @@ class AuthRepository @Inject constructor(
                 idFrontUrl          = doc.getString("idFrontUrl")         ?: "",
                 idBackUrl           = doc.getString("idBackUrl")          ?: "",
                 fcmToken            = doc.getString("fcmToken")           ?: "",
-                // KEY FIX: getDouble().toFloat() — toObject() skips Double->Float conversion
                 landlordRating      = doc.getDouble("landlordRating")?.toFloat()  ?: 0f,
                 landlordReviewCount = doc.getLong("landlordReviewCount")?.toInt() ?: 0,
                 location = doc.get("location")?.let { raw ->
@@ -78,10 +75,42 @@ class AuthRepository @Inject constructor(
             val token = FirebaseMessaging.getInstance().token.await()
             if (token.isNotEmpty()) {
                 usersCollection.document(userId).update("fcmToken", token).await()
-                Log.d("HAVEN_AUTH", "FCM token saved for user: $userId")
             }
         } catch (e: Exception) {
             Log.e("HAVEN_AUTH", "saveFcmToken error: ${e.localizedMessage}")
+        }
+    }
+
+    // ── Helper: new social user document banao ────────────────────
+    private suspend fun createSocialUserIfNew(
+        user    : FirebaseUser,
+        fcmToken: String
+    ) {
+        val doc = usersCollection.document(user.uid).get().await()
+        if (!doc.exists()) {
+            val userDoc = mapOf(
+                "userId"              to user.uid,
+                "fullName"            to (user.displayName ?: ""),
+                "email"               to (user.email ?: ""),
+                "role"                to "TENANT",
+                "profileImageUrl"     to (user.photoUrl?.toString() ?: ""),
+                "cnicNumber"          to "",
+                "cnicImageUrl"        to "",
+                "verificationStatus"  to "PENDING",
+                "isVerified"          to false,
+                "isActive"            to true,
+                "isBanned"            to false,
+                "phoneNumber"         to "",
+                "fcmToken"            to fcmToken,
+                "landlordRating"      to 0.0,
+                "landlordReviewCount" to 0,
+                "createdAt"           to FieldValue.serverTimestamp(),
+                "updatedAt"           to FieldValue.serverTimestamp()
+            )
+            usersCollection.document(user.uid).set(userDoc).await()
+        } else {
+            usersCollection.document(user.uid)
+                .update("fcmToken", fcmToken).await()
         }
     }
 
@@ -132,16 +161,14 @@ class AuthRepository @Inject constructor(
                 "createdAt"           to FieldValue.serverTimestamp(),
                 "updatedAt"           to FieldValue.serverTimestamp()
             )
-
             usersCollection.document(user.uid).set(userDoc).await()
-            Log.d("HAVEN_AUTH", "User registered: ${user.uid} role=$role")
             Resource.Success(user)
         } catch (e: Exception) {
-            Log.e("HAVEN_AUTH", "registerUser error: ${e.localizedMessage}")
             Resource.Error(e.localizedMessage ?: "Registration failed")
         }
     }
 
+    // ── Google Sign In ────────────────────────────────────────────
     suspend fun signInWithGoogle(idToken: String): Resource<FirebaseUser?> {
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -152,34 +179,10 @@ class AuthRepository @Inject constructor(
                 FirebaseMessaging.getInstance().token.await()
             } catch (e: Exception) { "" }
 
-            val doc = usersCollection.document(user.uid).get().await()
-            if (!doc.exists()) {
-                val userDoc = mapOf(
-                    "userId"              to user.uid,
-                    "fullName"            to (user.displayName ?: ""),
-                    "email"               to (user.email ?: ""),
-                    "role"                to "TENANT",
-                    "profileImageUrl"     to (user.photoUrl?.toString() ?: ""),
-                    "cnicNumber"          to "",
-                    "cnicImageUrl"        to "",
-                    "verificationStatus"  to "PENDING",
-                    "isVerified"          to false,
-                    "isActive"            to true,
-                    "isBanned"            to false,
-                    "phoneNumber"         to "",
-                    "fcmToken"            to fcmToken,
-                    "landlordRating"      to 0.0,
-                    "landlordReviewCount" to 0,
-                    "createdAt"           to FieldValue.serverTimestamp(),
-                    "updatedAt"           to FieldValue.serverTimestamp()
-                )
-                usersCollection.document(user.uid).set(userDoc).await()
-            } else {
-                usersCollection.document(user.uid).update("fcmToken", fcmToken).await()
-            }
-
+            createSocialUserIfNew(user, fcmToken)
             Resource.Success(user)
         } catch (e: Exception) {
+            Log.e("HAVEN_AUTH", "signInWithGoogle error: ${e.localizedMessage}")
             Resource.Error(e.localizedMessage ?: "Google sign in failed")
         }
     }
@@ -263,8 +266,6 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // FIX: Replaced toObject(User::class.java) with parseUser() helper.
-    // toObject() silently returns 0f for landlordRating (Double->Float issue).
     suspend fun getUser(uid: String): Resource<User> {
         return try {
             val directDoc = usersCollection.document(uid).get().await()
