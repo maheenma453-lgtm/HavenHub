@@ -2,6 +2,7 @@ package com.example.havenhub.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -26,9 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.ReportsViewModel
 
-// Semantic stat colors — theme se bahar hain, intentional hain
+// ── Semantic status colors — intentional, outside theme ──────────────────────
 private val GreenStat  = Color(0xFF27AE60)
 private val OrangeStat = Color(0xFFE67E22)
 private val RedStat    = Color(0xFFE74C3C)
@@ -39,10 +41,13 @@ fun ReportsScreen(
     navController: NavController,
     viewModel    : ReportsViewModel = hiltViewModel()
 ) {
-    val uiState        by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+
+    // ── Period state — drives both UI highlight and filtered data fetch ────────
     var selectedPeriod by remember { mutableStateOf("All Time") }
     val periods = listOf("All Time", "Today", "This Month")
 
+    // ── Theme colors ──────────────────────────────────────────────────────────
     val primary          = MaterialTheme.colorScheme.primary
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
     val tertiary         = MaterialTheme.colorScheme.tertiary
@@ -79,6 +84,7 @@ fun ReportsScreen(
                             fontWeight    = FontWeight.Bold,
                             letterSpacing = 0.3.sp
                         )
+                        // Subtitle shows active period
                         Text(
                             selectedPeriod,
                             color    = tertiary.copy(alpha = 0.85f),
@@ -86,6 +92,7 @@ fun ReportsScreen(
                         )
                     }
                 }
+                // Gold shimmer accent line
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -106,7 +113,7 @@ fun ReportsScreen(
             contentPadding = PaddingValues(bottom = 40.dp)
         ) {
 
-            // ── Period Filter ──────────────────────────────────────────────────
+            // ── Period Filter Chips ────────────────────────────────────────────
             item {
                 Box(
                     modifier = Modifier
@@ -120,8 +127,9 @@ fun ReportsScreen(
                             FilterChip(
                                 selected = selected,
                                 onClick  = {
+                                    // FIX: period is now passed to viewModel
                                     selectedPeriod = period
-                                    viewModel.loadAllReportsData()
+                                    viewModel.loadReportsByPeriod(period)
                                 },
                                 label = {
                                     Text(
@@ -150,7 +158,7 @@ fun ReportsScreen(
                 }
             }
 
-            // ── Summary Header ─────────────────────────────────────────────────
+            // ── Summary Section Header ─────────────────────────────────────────
             item {
                 Spacer(Modifier.height(22.dp))
                 PremiumSectionHeader(
@@ -175,46 +183,46 @@ fun ReportsScreen(
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             PremiumStatCard(
-                                icon        = Icons.Default.AccountBalanceWallet,
-                                label       = "Total Revenue",
-                                value       = "PKR ${String.format("%,.0f", uiState.stats.totalRevenue)}",
-                                gradient    = listOf(primary, Color(0xFF6A1B9A)),
-                                accentColor = Color(0xFFAB47BC),
-                                surfaceColor = surface,
+                                icon           = Icons.Default.AccountBalanceWallet,
+                                label          = "Total Revenue",
+                                value          = "PKR ${String.format("%,.0f", uiState.stats.totalRevenue)}",
+                                gradient       = listOf(primary, Color(0xFF6A1B9A)),
+                                accentColor    = Color(0xFFAB47BC),
+                                surfaceColor   = surface,
                                 onSurfaceColor = onSurface,
-                                modifier    = Modifier.weight(1f)
+                                modifier       = Modifier.weight(1f)
                             )
                             PremiumStatCard(
-                                icon        = Icons.Default.CalendarMonth,
-                                label       = "Total Bookings",
-                                value       = "${uiState.stats.totalBookings}",
-                                gradient    = listOf(primary, Color(0xFF00796B)),
-                                accentColor = GreenStat,
-                                surfaceColor = surface,
+                                icon           = Icons.Default.CalendarMonth,
+                                label          = "Total Bookings",
+                                value          = "${uiState.stats.totalBookings}",
+                                gradient       = listOf(primary, Color(0xFF00796B)),
+                                accentColor    = GreenStat,
+                                surfaceColor   = surface,
                                 onSurfaceColor = onSurface,
-                                modifier    = Modifier.weight(1f)
+                                modifier       = Modifier.weight(1f)
                             )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             PremiumStatCard(
-                                icon        = Icons.Default.People,
-                                label       = "Total Users",
-                                value       = "${uiState.stats.totalUsers}",
-                                gradient    = listOf(primary, primaryContainer),
-                                accentColor = tertiary,
-                                surfaceColor = surface,
+                                icon           = Icons.Default.People,
+                                label          = "Total Users",
+                                value          = "${uiState.stats.totalUsers}",
+                                gradient       = listOf(primary, primaryContainer),
+                                accentColor    = tertiary,
+                                surfaceColor   = surface,
                                 onSurfaceColor = onSurface,
-                                modifier    = Modifier.weight(1f)
+                                modifier       = Modifier.weight(1f)
                             )
                             PremiumStatCard(
-                                icon        = Icons.Default.Home,
-                                label       = "Active Props",
-                                value       = "${uiState.stats.activeProperties}",
-                                gradient    = listOf(tertiary.copy(0.8f), tertiary),
-                                accentColor = tertiary,
-                                surfaceColor = surface,
+                                icon           = Icons.Default.Home,
+                                label          = "Active Props",
+                                value          = "${uiState.stats.activeProperties}",
+                                gradient       = listOf(tertiary.copy(0.8f), tertiary),
+                                accentColor    = tertiary,
+                                surfaceColor   = surface,
                                 onSurfaceColor = onSurface,
-                                modifier    = Modifier.weight(1f)
+                                modifier       = Modifier.weight(1f)
                             )
                         }
                     }
@@ -233,9 +241,9 @@ fun ReportsScreen(
                 Spacer(Modifier.height(14.dp))
 
                 val total        = uiState.stats.totalBookings.toFloat()
-                val pendingCount = uiState.stats.totalBookings -
+                val pendingCount = (uiState.stats.totalBookings -
                         uiState.stats.completedBookings -
-                        uiState.stats.cancelledBookings
+                        uiState.stats.cancelledBookings).coerceAtLeast(0)
 
                 Column(
                     modifier            = Modifier.padding(horizontal = 16.dp),
@@ -298,6 +306,7 @@ fun ReportsScreen(
                         colors    = CardDefaults.cardColors(containerColor = surface),
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
+                        // Top accent bar
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -305,21 +314,56 @@ fun ReportsScreen(
                                 .background(Brush.horizontalGradient(listOf(primary, tertiary)))
                         )
 
+                        // FIX: Each item now has a clickable route to an existing screen.
+                        // No new screens needed — reusing what's already built.
+                        //
+                        // Payment Transactions → PaymentReportsScreen (existing)
+                        // Property Analytics   → ManagePropertiesScreen (existing)
+                        // User Activity        → ManageUsersScreen (existing)
+                        // Revenue Breakdown    → PaymentReportsScreen (same, existing)
                         val navItems = listOf(
-                            Triple(Icons.Default.Payment,  "Payment Transactions", "View all ${uiState.payments.size} transactions"),
-                            Triple(Icons.Default.Home,     "Property Analytics",   "Performance overview"),
-                            Triple(Icons.Default.People,   "User Activity",        "Registration & engagement"),
-                            Triple(Icons.Default.BarChart, "Revenue Breakdown",    "Monthly & category split"),
+                            Triple(
+                                Icons.Default.Payment,
+                                "Payment Transactions",
+                                "View all ${uiState.payments.size} transactions"
+                            ) to Screen.PaymentReports.route,
+
+                            Triple(
+                                Icons.Default.Home,
+                                "Property Analytics",
+                                "Properties performance overview"
+                            ) to Screen.ManageProperties.route,
+
+                            Triple(
+                                Icons.Default.People,
+                                "User Activity",
+                                "Registration & user management"
+                            ) to Screen.ManageUsers.route,
+
+                            Triple(
+                                Icons.Default.BarChart,
+                                "Revenue Breakdown",
+                                "Payment history & revenue data"
+                            ) to Screen.PaymentReports.route,
                         )
 
-                        navItems.forEachIndexed { idx, (icon, title, sub) ->
+                        navItems.forEachIndexed { idx, (item, route) ->
+                            val (icon, title, sub) = item
+
                             Row(
-                                modifier              = Modifier
+                                modifier = Modifier
                                     .fillMaxWidth()
+                                    // FIX: clickable navigates to existing screen
+                                    .clickable {
+                                        navController.navigate(route) {
+                                            launchSingleTop = true
+                                        }
+                                    }
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment     = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
+                                // Icon circle
                                 Box(
                                     modifier = Modifier
                                         .size(42.dp)
@@ -329,10 +373,23 @@ fun ReportsScreen(
                                 ) {
                                     Icon(icon, null, tint = tertiary, modifier = Modifier.size(20.dp))
                                 }
+
+                                // Title + subtitle
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = onSurface)
-                                    Text(sub, fontSize = 11.sp, color = onSurface.copy(alpha = 0.45f))
+                                    Text(
+                                        title,
+                                        fontSize   = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color      = onSurface
+                                    )
+                                    Text(
+                                        sub,
+                                        fontSize = 11.sp,
+                                        color    = onSurface.copy(alpha = 0.45f)
+                                    )
                                 }
+
+                                // Arrow indicator
                                 Box(
                                     modifier = Modifier
                                         .size(28.dp)
@@ -348,6 +405,8 @@ fun ReportsScreen(
                                     )
                                 }
                             }
+
+                            // Divider between items, not after last
                             if (idx < navItems.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -379,7 +438,13 @@ private fun PremiumSectionHeader(
                 .background(lineColor)
         )
         Spacer(Modifier.width(10.dp))
-        Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor, letterSpacing = 0.2.sp)
+        Text(
+            text,
+            fontSize      = 16.sp,
+            fontWeight    = FontWeight.Bold,
+            color         = textColor,
+            letterSpacing = 0.2.sp
+        )
     }
 }
 
@@ -429,7 +494,12 @@ private fun PremiumStatCard(
                 Spacer(Modifier.height(12.dp))
                 Text(value, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = onSurfaceColor)
                 Spacer(Modifier.height(3.dp))
-                Text(label, fontSize = 11.sp, color = onSurfaceColor.copy(alpha = 0.5f), fontWeight = FontWeight.Medium)
+                Text(
+                    label,
+                    fontSize   = 11.sp,
+                    color      = onSurfaceColor.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }
@@ -462,6 +532,7 @@ private fun PremiumStatusRow(
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
             Row(modifier = Modifier.fillMaxWidth()) {
+                // Colored left accent bar
                 Box(
                     modifier = Modifier
                         .width(4.dp)
@@ -508,7 +579,7 @@ private fun PremiumStatusRow(
                             )
                         }
                     }
-
+                    // Progress bar
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

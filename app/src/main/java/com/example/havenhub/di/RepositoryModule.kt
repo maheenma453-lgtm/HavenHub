@@ -17,6 +17,7 @@ import com.example.havenhub.repository.ReviewRepository
 import com.example.havenhub.repository.SettingsRepository
 import com.example.havenhub.utils.PreferenceManager
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase       // ✦ NEW — Realtime DB
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.Module
@@ -32,6 +33,10 @@ object RepositoryModule {
 
     // ══════════════════════════════════════════════════════════════════════════
     // FIREBASE CORE
+    //
+    // FirebaseAuth, FirebaseFirestore, FirebaseMessaging are provided here.
+    // FirebaseDatabase (Realtime DB) is provided in FirebaseModule — Hilt
+    // merges both modules automatically so it is injectable everywhere.
     // ══════════════════════════════════════════════════════════════════════════
 
     @Provides
@@ -71,11 +76,16 @@ object RepositoryModule {
         firestore: FirebaseFirestore
     ): FirebaseDataManager = FirebaseDataManager(firestore)
 
+    // ✦ UPDATED — realtimeDatabase parameter added
+    // FirebaseRealtimeListener now needs both Firestore (for messages,
+    // notifications, bookings) and Realtime Database (for user presence).
+    // Hilt injects FirebaseDatabase from FirebaseModule automatically.
     @Provides
     @Singleton
     fun provideFirebaseRealtimeListener(
-        firestore: FirebaseFirestore
-    ): FirebaseRealtimeListener = FirebaseRealtimeListener(firestore)
+        firestore       : FirebaseFirestore,
+        realtimeDatabase: FirebaseDatabase          // ✦ NEW — from FirebaseModule
+    ): FirebaseRealtimeListener = FirebaseRealtimeListener(firestore, realtimeDatabase)
 
     @Provides
     @Singleton
@@ -96,6 +106,9 @@ object RepositoryModule {
 
     // ══════════════════════════════════════════════════════════════════════════
     // REPOSITORIES
+    //
+    // Each repository is constructed manually (not with @Inject constructor)
+    // so that Hilt can inject the exact instances provided above.
     // ══════════════════════════════════════════════════════════════════════════
 
     @Provides

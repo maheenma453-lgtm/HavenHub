@@ -29,7 +29,7 @@ import com.example.havenhub.viewmodel.ReportsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Semantic colors — intentional
+// ── Semantic colors — intentional ─────────────────────────────────────────────
 private val GreenOk = Color(0xFF27AE60)
 private val RedErr  = Color(0xFFE74C3C)
 
@@ -39,12 +39,18 @@ fun PaymentReportsScreen(
     navController: NavController,
     viewModel    : ReportsViewModel = hiltViewModel()
 ) {
-    val uiState        by viewModel.uiState.collectAsState()
-    var selectedPeriod by remember { mutableStateOf("All") }
-    val appLocale      = remember { Locale.getDefault() }
-    val dateFormatter  = remember { SimpleDateFormat("dd MMM yyyy", appLocale) }
-    val periods        = listOf("All", "Today", "This Month")
+    val uiState       by viewModel.uiState.collectAsState()
+    val appLocale     = remember { Locale.getDefault() }
+    val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", appLocale) }
 
+    // ── Period state — matches ReportsScreen periods ───────────────────────────
+    // FIX: selectedPeriod is now tracked and passed to viewModel
+    // Previously chip click called loadAllReportsData() without any period —
+    // all data was shown regardless of which chip was selected
+    var selectedPeriod by remember { mutableStateOf("All Time") }
+    val periods = listOf("All Time", "Today", "This Month")
+
+    // ── Theme colors ──────────────────────────────────────────────────────────
     val primary          = MaterialTheme.colorScheme.primary
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
     val tertiary         = MaterialTheme.colorScheme.tertiary
@@ -64,7 +70,9 @@ fun PaymentReportsScreen(
                     .statusBarsPadding()
             ) {
                 Row(
-                    modifier          = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 14.dp),
+                    modifier          = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -72,14 +80,31 @@ fun PaymentReportsScreen(
                     }
                     Spacer(Modifier.width(4.dp))
                     Column {
-                        Text("Payment Reports", color = onPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp)
-                        Text(selectedPeriod, color = tertiary.copy(alpha = 0.85f), fontSize = 12.sp)
+                        Text(
+                            "Payment Reports",
+                            color         = onPrimary,
+                            fontSize      = 20.sp,
+                            fontWeight    = FontWeight.Bold,
+                            letterSpacing = 0.3.sp
+                        )
+                        // Subtitle shows active period
+                        Text(
+                            selectedPeriod,
+                            color    = tertiary.copy(alpha = 0.85f),
+                            fontSize = 12.sp
+                        )
                     }
                 }
+                // Gold shimmer accent line
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth().height(2.dp)
-                        .background(Brush.horizontalGradient(listOf(background.copy(0f), tertiary, background.copy(0f))))
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(background.copy(0f), tertiary, background.copy(0f))
+                            )
+                        )
                         .align(Alignment.BottomCenter)
                 )
             }
@@ -91,7 +116,7 @@ fun PaymentReportsScreen(
             contentPadding = PaddingValues(bottom = 40.dp)
         ) {
 
-            // ── Period Filter ──────────────────────────────────────
+            // ── Period Filter Chips ────────────────────────────────────────────
             item {
                 Box(
                     modifier = Modifier
@@ -105,11 +130,16 @@ fun PaymentReportsScreen(
                             FilterChip(
                                 selected = selected,
                                 onClick  = {
+                                    // FIX: pass period to viewModel for filtered fetch
                                     selectedPeriod = period
-                                    viewModel.loadAllReportsData()
+                                    viewModel.loadReportsByPeriod(period)
                                 },
                                 label = {
-                                    Text(period, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                    Text(
+                                        period,
+                                        fontSize   = 12.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                    )
                                 },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = tertiary,
@@ -131,18 +161,32 @@ fun PaymentReportsScreen(
                 }
             }
 
-            // ── Revenue Overview Header ────────────────────────────
+            // ── Revenue Overview Header ────────────────────────────────────────
             item {
                 Spacer(Modifier.height(22.dp))
-                Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.width(4.dp).height(20.dp).clip(RoundedCornerShape(2.dp)).background(tertiary))
+                Row(
+                    modifier          = Modifier.padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(tertiary)
+                    )
                     Spacer(Modifier.width(10.dp))
-                    Text("Revenue Overview", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = onBackground)
+                    Text(
+                        "Revenue Overview",
+                        fontSize   = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = onBackground
+                    )
                 }
                 Spacer(Modifier.height(14.dp))
             }
 
-            // ── Revenue Card ───────────────────────────────────────
+            // ── Revenue Summary Card ───────────────────────────────────────────
             item {
                 if (uiState.isLoading) {
                     Box(Modifier.fillMaxWidth().height(140.dp), Alignment.Center) {
@@ -150,12 +194,14 @@ fun PaymentReportsScreen(
                     }
                 } else {
                     Box(
-                        modifier = Modifier.padding(horizontal = 16.dp).shadow(
-                            elevation    = 6.dp,
-                            shape        = RoundedCornerShape(18.dp),
-                            ambientColor = primary.copy(0.10f),
-                            spotColor    = primary.copy(0.14f)
-                        )
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .shadow(
+                                elevation    = 6.dp,
+                                shape        = RoundedCornerShape(18.dp),
+                                ambientColor = primary.copy(0.10f),
+                                spotColor    = primary.copy(0.14f)
+                            )
                     ) {
                         Card(
                             modifier  = Modifier.fillMaxWidth(),
@@ -163,21 +209,38 @@ fun PaymentReportsScreen(
                             colors    = CardDefaults.cardColors(containerColor = surface),
                             elevation = CardDefaults.cardElevation(0.dp)
                         ) {
+                            // Top accent bar
                             Box(
-                                modifier = Modifier.fillMaxWidth().height(4.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
                                     .background(Brush.horizontalGradient(listOf(primary, tertiary)))
                             )
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
-                                        modifier = Modifier.size(44.dp).clip(CircleShape).background(primary),
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .background(primary),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.AccountBalanceWallet, null, tint = tertiary, modifier = Modifier.size(22.dp))
+                                        Icon(
+                                            Icons.Default.AccountBalanceWallet,
+                                            null,
+                                            tint     = tertiary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
                                     }
                                     Spacer(Modifier.width(14.dp))
                                     Column {
-                                        Text("Net Revenue", fontSize = 12.sp, color = onSurface.copy(alpha = 0.5f), fontWeight = FontWeight.Medium)
+                                        Text(
+                                            "Net Revenue",
+                                            fontSize   = 12.sp,
+                                            color      = onSurface.copy(alpha = 0.5f),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        // Revenue updates based on filtered period
                                         Text(
                                             "PKR ${String.format(appLocale, "%,.0f", uiState.stats.totalRevenue)}",
                                             fontSize   = 26.sp,
@@ -191,10 +254,29 @@ fun PaymentReportsScreen(
                                 HorizontalDivider(color = onSurface.copy(alpha = 0.07f))
                                 Spacer(Modifier.height(14.dp))
 
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                    PRRevenueStatPill("Total Sales", "PKR ${String.format(appLocale, "%,.0f", uiState.stats.totalRevenue)}", tertiary, onSurface)
-                                    Box(modifier = Modifier.width(1.dp).height(40.dp).background(onSurface.copy(alpha = 0.08f)))
-                                    PRRevenueStatPill("Bookings", "${uiState.stats.totalBookings}", primary, onSurface)
+                                Row(
+                                    modifier              = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    PRRevenueStatPill(
+                                        label    = "Total Sales",
+                                        value    = "PKR ${String.format(appLocale, "%,.0f", uiState.stats.totalRevenue)}",
+                                        color    = tertiary,
+                                        onSurface = onSurface
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .width(1.dp)
+                                            .height(40.dp)
+                                            .background(onSurface.copy(alpha = 0.08f))
+                                    )
+                                    // Bookings count also filters by period
+                                    PRRevenueStatPill(
+                                        label    = "Bookings",
+                                        value    = "${uiState.stats.totalBookings}",
+                                        color    = primary,
+                                        onSurface = onSurface
+                                    )
                                 }
                             }
                         }
@@ -202,47 +284,100 @@ fun PaymentReportsScreen(
                 }
             }
 
-            // ── Recent Transactions Header ─────────────────────────
+            // ── Recent Transactions Header ─────────────────────────────────────
             item {
                 Spacer(Modifier.height(26.dp))
-                Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.width(4.dp).height(20.dp).clip(RoundedCornerShape(2.dp)).background(tertiary))
+                Row(
+                    modifier          = Modifier.padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(tertiary)
+                    )
                     Spacer(Modifier.width(10.dp))
-                    Text("Recent Transactions", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = onBackground)
+                    Text(
+                        "Recent Transactions",
+                        fontSize   = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = onBackground
+                    )
                     Spacer(Modifier.weight(1f))
+                    // Record count badge — updates with period filter
                     if (!uiState.isLoading && uiState.payments.isNotEmpty()) {
-                        Surface(color = primary.copy(0.08f), shape = RoundedCornerShape(20.dp)) {
-                            Text("${uiState.payments.size} records", fontSize = 11.sp, color = primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                        Surface(
+                            color = primary.copy(0.08f),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Text(
+                                "${uiState.payments.size} records",
+                                fontSize   = 11.sp,
+                                color      = primary,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
                         }
                     }
                 }
                 Spacer(Modifier.height(14.dp))
             }
 
-            // ── Empty State ────────────────────────────────────────
+            // ── Empty State ────────────────────────────────────────────────────
             if (!uiState.isLoading && uiState.payments.isEmpty()) {
                 item {
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                            .clip(RoundedCornerShape(16.dp)).background(surface)
-                            .border(1.dp, onSurface.copy(0.08f), RoundedCornerShape(16.dp)).padding(vertical = 48.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(surface)
+                            .border(1.dp, onSurface.copy(0.08f), RoundedCornerShape(16.dp))
+                            .padding(vertical = 48.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(primary.copy(0.07f)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.AutoMirrored.Filled.ReceiptLong, null, tint = primary.copy(0.4f), modifier = Modifier.size(30.dp))
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(primary.copy(0.07f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ReceiptLong,
+                                    null,
+                                    tint     = primary.copy(0.4f),
+                                    modifier = Modifier.size(30.dp)
+                                )
                             }
-                            Text("No transactions found", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = onSurface.copy(0.45f))
-                            Text("Transactions will appear here", fontSize = 12.sp, color = onSurface.copy(0.3f))
+                            Text(
+                                "No transactions found",
+                                fontSize   = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color      = onSurface.copy(0.45f)
+                            )
+                            // Shows which period has no data
+                            Text(
+                                "No payments recorded for $selectedPeriod",
+                                fontSize = 12.sp,
+                                color    = onSurface.copy(0.3f)
+                            )
                         }
                     }
                 }
             }
 
-            // ── Transaction Items ──────────────────────────────────
+            // ── Transaction List — filtered by selected period ─────────────────
             if (!uiState.isLoading) {
                 items(uiState.payments) { payment ->
-                    val dateString = payment.createdAt?.toDate()?.let { dateFormatter.format(it) } ?: "N/A"
+                    val dateString = payment.createdAt?.toDate()
+                        ?.let { dateFormatter.format(it) } ?: "N/A"
                     PRTransactionItem(
                         transactionId = payment.paymentId,
                         amount        = "PKR ${String.format(appLocale, "%,.0f", payment.amount)}",
@@ -260,15 +395,27 @@ fun PaymentReportsScreen(
     }
 }
 
+// ── Revenue Stat Pill ─────────────────────────────────────────────────────────
 @Composable
-private fun PRRevenueStatPill(label: String, value: String, color: Color, onSurface: Color) {
+private fun PRRevenueStatPill(
+    label    : String,
+    value    : String,
+    color    : Color,
+    onSurface: Color
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 11.sp, color = onSurface.copy(alpha = 0.45f), fontWeight = FontWeight.Medium)
+        Text(
+            label,
+            fontSize   = 11.sp,
+            color      = onSurface.copy(alpha = 0.45f),
+            fontWeight = FontWeight.Medium
+        )
         Spacer(Modifier.height(4.dp))
         Text(value, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = color)
     }
 }
 
+// ── Transaction Item ──────────────────────────────────────────────────────────
 @Composable
 private fun PRTransactionItem(
     transactionId: String,
@@ -281,17 +428,22 @@ private fun PRTransactionItem(
     onSurface    : Color,
     modifier     : Modifier = Modifier
 ) {
-    val isFailed  = status.contains("FAILED", ignoreCase = true) || status.contains("CANCELLED", ignoreCase = true)
-    val isSuccess = status.contains("SUCCESS", ignoreCase = true) || status.contains("COMPLETED", ignoreCase = true)
+    val isFailed  = status.contains("FAILED",    ignoreCase = true) ||
+            status.contains("CANCELLED", ignoreCase = true)
+    val isSuccess = status.contains("SUCCESS",   ignoreCase = true) ||
+            status.contains("COMPLETED", ignoreCase = true)
     val iconColor = when { isFailed -> RedErr; isSuccess -> GreenOk; else -> tertiary }
 
     Box(
-        modifier = modifier.fillMaxWidth().padding(vertical = 5.dp).shadow(
-            elevation    = 3.dp,
-            shape        = RoundedCornerShape(14.dp),
-            ambientColor = primary.copy(0.06f),
-            spotColor    = primary.copy(0.08f)
-        )
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp)
+            .shadow(
+                elevation    = 3.dp,
+                shape        = RoundedCornerShape(14.dp),
+                ambientColor = primary.copy(0.06f),
+                spotColor    = primary.copy(0.08f)
+            )
     ) {
         Card(
             modifier  = Modifier.fillMaxWidth(),
@@ -300,29 +452,64 @@ private fun PRTransactionItem(
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
             Row(modifier = Modifier.fillMaxWidth()) {
-                Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(iconColor))
+                // Colored left accent bar
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .background(iconColor)
+                )
                 Row(
-                    modifier              = Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 14.dp),
+                    modifier              = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Icon circle
                     Box(
-                        modifier = Modifier.size(44.dp).clip(CircleShape).background(primary),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(primary),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (isFailed) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                            imageVector        = if (isFailed) Icons.Default.ArrowUpward
+                            else Icons.Default.ArrowDownward,
                             contentDescription = null,
-                            tint     = if (isFailed) RedErr else tertiary,
-                            modifier = Modifier.size(20.dp)
+                            tint               = if (isFailed) RedErr else tertiary,
+                            modifier           = Modifier.size(20.dp)
                         )
                     }
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("ID: ${transactionId.take(16)}…", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+                    // Transaction ID + date
+                    Column(
+                        modifier            = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            "ID: ${transactionId.take(16)}…",
+                            fontSize   = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = onSurface,
+                            maxLines   = 1,
+                            overflow   = TextOverflow.Ellipsis
+                        )
                         Text(date, fontSize = 11.sp, color = onSurface.copy(alpha = 0.45f))
                     }
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(amount, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = if (isFailed) RedErr else onSurface)
+
+                    // Amount + status badge
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text(
+                            amount,
+                            fontSize   = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color      = if (isFailed) RedErr else onSurface
+                        )
                         Surface(
                             color    = iconColor.copy(alpha = 0.10f),
                             shape    = RoundedCornerShape(20.dp),
@@ -333,8 +520,18 @@ private fun PRTransactionItem(
                                 verticalAlignment     = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(iconColor))
-                                Text(status, fontSize = 10.sp, color = iconColor, fontWeight = FontWeight.Bold)
+                                Box(
+                                    modifier = Modifier
+                                        .size(5.dp)
+                                        .clip(CircleShape)
+                                        .background(iconColor)
+                                )
+                                Text(
+                                    status,
+                                    fontSize   = 10.sp,
+                                    color      = iconColor,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }

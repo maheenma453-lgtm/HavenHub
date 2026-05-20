@@ -43,13 +43,20 @@ fun SearchScreen(
     navController: NavController,
     viewModel    : SearchViewModel = hiltViewModel()
 ) {
-    val uiState       by viewModel.uiState.collectAsState()
-    val focusRequester = remember { FocusRequester() }
-    val focusManager   = LocalFocusManager.current
-    val isSearching    = uiState.searchQuery.isNotEmpty()
+    val uiState        by viewModel.uiState.collectAsState()
+    val focusRequester  = remember { FocusRequester() }
+    val focusManager    = LocalFocusManager.current
+    val isSearching     = uiState.searchQuery.isNotEmpty()
 
+    // ── Keyboard auto-focus on first composition ──────────────────────────────
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+    }
+
+    // ✅ NEW: Screen pe focus aane par fresh search taake latest
+    //         approved/rejected properties reflect hon
+    LaunchedEffect(Unit) {
+        viewModel.refreshSearch()
     }
 
     val primary          = MaterialTheme.colorScheme.primary
@@ -96,9 +103,9 @@ fun SearchScreen(
                         color = MaterialTheme.colorScheme.surface
                     ) {
                         TextField(
-                            value       = uiState.searchQuery,
+                            value         = uiState.searchQuery,
                             onValueChange = { viewModel.onQueryChange(it) },
-                            placeholder = {
+                            placeholder   = {
                                 Text(
                                     "Search city, area or type...",
                                     color    = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -132,8 +139,10 @@ fun SearchScreen(
                                 viewModel.addToHistory(uiState.searchQuery)
                                 focusManager.clearFocus()
                             }),
-                            modifier = Modifier.fillMaxSize().focusRequester(focusRequester),
-                            colors   = TextFieldDefaults.colors(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .focusRequester(focusRequester),
+                            colors = TextFieldDefaults.colors(
                                 focusedContainerColor   = MaterialTheme.colorScheme.surface,
                                 unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                                 focusedIndicatorColor   = MaterialTheme.colorScheme.surface,
@@ -355,21 +364,20 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
 @Composable
 fun EmptySearchUI(query: String) {
     Column(
-        modifier            = Modifier.fillMaxSize().padding(40.dp),
+        modifier = Modifier.fillMaxSize().padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
             Icons.Default.Search, null,
             modifier = Modifier.size(60.dp),
-            tint     = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(20.dp))
         Text(
             "No results for \"$query\"",
             fontWeight = FontWeight.Bold,
-            color      = MaterialTheme.colorScheme.onBackground
+            color = MaterialTheme.colorScheme.onBackground
         )
     }
 }
-

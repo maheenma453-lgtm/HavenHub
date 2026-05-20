@@ -30,14 +30,20 @@ data class ReviewUiState(
     val replySuccess   : Boolean = false,
     val replyError     : String? = null,
 
-    // ── Global reviews (GlobalReviewsScreen) ──────────────────────
+    // ── Global Reviews (GlobalReviewsScreen) ──────────────────────
     val allReviews      : List<Review> = emptyList(),
     val isLoadingAll    : Boolean      = false,
     val allReviewsError : String?      = null,
-    val selectedFilter  : String       = "All",    // "All", "5★", "4★", "3★", "2★", "1★"
-    val selectedSort    : String       = "Newest", // "Newest", "Highest", "Lowest"
+    val selectedFilter  : String       = "All",
+    val selectedSort    : String       = "Newest",
 
-    // ── Property search state (AddReviewScreen ke liye) ────────────
+    // ── Delete Review State ────────────────────────────────────────
+    // Landlord + Tenant dono k liye same state use hoti hai
+    val isDeleteReviewLoading : Boolean = false,
+    val deleteReviewError     : String? = null,
+    val deleteReviewSuccess   : Boolean = false,
+
+    // ── Property Search (AddReviewScreen dropdown) ─────────────────
     val propertySearchResults : List<Property> = emptyList(),
     val isSearchingProperties : Boolean        = false,
     val propertySearchError   : String?        = null
@@ -53,7 +59,9 @@ class ReviewViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ReviewUiState())
     val uiState: StateFlow<ReviewUiState> = _uiState.asStateFlow()
 
-    // ── Load Property-Specific Reviews ────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // LOAD: Property-specific reviews
+    // ─────────────────────────────────────────────────────────────────────────
     fun loadPropertyReviews(propertyId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -75,7 +83,9 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    // ── Load All Reviews (Global Reviews Tab) ─────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // LOAD: All reviews — Tenant ke liye (GlobalReviewsScreen)
+    // ─────────────────────────────────────────────────────────────────────────
     fun loadAllReviews() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingAll = true, allReviewsError = null) }
@@ -91,31 +101,128 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    // ── Filter / Sort (Global Reviews Tab) ───────────────────────
-    fun setFilter(filter: String) {
-        _uiState.update { it.copy(selectedFilter = filter) }
-    }
-
-    fun setSort(sort: String) {
-        _uiState.update { it.copy(selectedSort = sort) }
-    }
-
-    fun getFilteredReviews(state: ReviewUiState): List<Review> {
-        val filtered = when (state.selectedFilter) {
-            "All" -> state.allReviews
-            else  -> {
-                val star = state.selectedFilter.first().digitToIntOrNull() ?: 0
-                state.allReviews.filter { it.overallRating.toInt() == star }
+    // ─────────────────────────────────────────────────────────────────────────
+    // LOAD: Sirf landlord ki properties k reviews (GlobalReviewsScreen)
+    // ─────────────────────────────────────────────────────────────────────────
+    fun loadLandlordReviews() {
+        viewModelScope.launch {
+            val landlordId = authRepository.currentUser?.uid ?: run {
+                _uiState.update {
+                    it.copy(isLoadingAll = false, allReviewsError = "User not logged in")
+                }
+                return@launch
+            }
+            _uiState.update { it.copy(isLoadingAll = true, allReviewsError = null) }
+            when (val result = reviewRepository.getReviewsForLandlord(landlordId)) {
+                is Resource.Success -> _uiState.update {
+                    it.copy(isLoadingAll = false, allReviews = result.data)
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isLoadingAll = false, allReviewsError = result.message)
+                }
+                Resource.Loading -> Unit
             }
         }
-        return when (state.selectedSort) {
-            "Highest" -> filtered.sortedByDescending { it.overallRating }
-            "Lowest"  -> filtered.sortedBy { it.overallRating }
-            else      -> filtered.sortedByDescending { it.createdAt?.seconds ?: 0L }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FILTER + SORT setters
+    // ─────────────────────────────────────────────────────────────────────────
+    fun setFilter(filter: String) = _uiState.update { it.copy(selectedFilter = filter) }
+    fun setSort(sort: String)     = _uiState.update { it.copy(selectedSort = sort) }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DELETE: Landlord — vulgar review hatata hai (kisi bhi tenant ka)
+    //
+    // Flow:
+    //   GlobalReviewsScreen → long press → bottom sheet → confirm
+    //   → viewModel.deleteReview(reviewId, propertyId)
+    //   → repository checks landlord owns the property → Firestore delete
+    // ─────────────────────────────────────────────────────────────────────────
+    fun deleteReview(reviewId: String, propertyId: String) {
+        viewModelScope.launch {
+            val landlordId = authRepository.currentUser?.uid ?: return@launch
+            _uiState.update { it.copy(isDeleteReviewLoading = true, deleteReviewError = null) }
+
+            when (val result = reviewRepository.deleteReview(
+                reviewId   = reviewId,
+                propertyId = propertyId,
+                landlordId = landlordId
+            )) {
+                is Resource.Success -> _uiState.update {
+                    it.copy(
+                        isDeleteReviewLoading = false,
+                        deleteReviewSuccess   = true,
+                        // Dono lists se hatao taake UI instantly update ho
+                        reviews    = it.reviews.filter    { r -> r.reviewId != reviewId },
+                        allReviews = it.allReviews.filter { r -> r.reviewId != reviewId }
+                    )
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isDeleteReviewLoading = false, deleteReviewError = result.message)
+                }
+                Resource.Loading -> Unit
+            }
         }
     }
 
-    // ── Property Search (AddReviewScreen dropdown ke liye) ────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // DELETE: Tenant — sirf APNA review delete kar sakta hai
+    //
+    // Flow:
+    //   GlobalReviewsScreen → "Delete" button (sirf apne card par dikhta hai)
+    //   → AlertDialog confirm → viewModel.deleteOwnReview(reviewId)
+    //   → repository verifies reviewerId == tenantId → Firestore delete
+    //
+    // Security layers:
+    //   Layer 1 (UI)         → isOwnReview check: button sirf apne card par
+    //   Layer 2 (ViewModel)  → tenantId auth se leta hai, UI se nahi
+    //   Layer 3 (Repository) → Firestore fetch karke reviewerId verify karta hai
+    //   Layer 4 (Firestore)  → Security rules: delete sirf owner kar sakta hai
+    // ─────────────────────────────────────────────────────────────────────────
+    fun deleteOwnReview(reviewId: String) {
+        viewModelScope.launch {
+            // Auth se UID lo — UI se trust mat karo
+            val tenantId = authRepository.currentUser?.uid ?: run {
+                _uiState.update {
+                    it.copy(deleteReviewError = "Aap logged in nahi hain.")
+                }
+                return@launch
+            }
+
+            _uiState.update { it.copy(isDeleteReviewLoading = true, deleteReviewError = null) }
+
+            when (val result = reviewRepository.deleteOwnReview(
+                reviewId = reviewId,
+                tenantId = tenantId   // Repository yahan verify karega k reviewerId match kare
+            )) {
+                is Resource.Success -> _uiState.update {
+                    it.copy(
+                        isDeleteReviewLoading = false,
+                        deleteReviewSuccess   = true,
+                        // Local lists se bhi hatao — screen refresh nahi karni padegi
+                        reviews    = it.reviews.filter    { r -> r.reviewId != reviewId },
+                        allReviews = it.allReviews.filter { r -> r.reviewId != reviewId }
+                    )
+                }
+                is Resource.Error -> _uiState.update {
+                    it.copy(isDeleteReviewLoading = false, deleteReviewError = result.message)
+                }
+                Resource.Loading -> Unit
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CLEAR: Delete state flags reset (snackbar dikhane ke baad call karo)
+    // ─────────────────────────────────────────────────────────────────────────
+    fun clearDeleteReviewState() {
+        _uiState.update { it.copy(deleteReviewSuccess = false, deleteReviewError = null) }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SEARCH: Properties for AddReviewScreen dropdown
+    // ─────────────────────────────────────────────────────────────────────────
     @OptIn(FlowPreview::class)
     fun searchProperties(query: String) {
         if (query.length < 2) {
@@ -155,7 +262,9 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    // ── Add Review ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // ADD: Naya review submit karna
+    // ─────────────────────────────────────────────────────────────────────────
     fun addReview(
         propertyId        : String,
         bookingId         : String,
@@ -169,8 +278,7 @@ class ReviewViewModel @Inject constructor(
             val userId   = authRepository.currentUser?.uid ?: return@launch
             val userName = authRepository.currentUser?.displayName
                 ?.takeIf { it.isNotBlank() }
-                ?: authRepository.currentUser?.email
-                    ?.substringBefore("@")
+                ?: authRepository.currentUser?.email?.substringBefore("@")
                 ?: "User"
 
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -200,7 +308,9 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    // ── Landlord Reply to Review ───────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // REPLY: Landlord ka tenant review par reply
+    // ─────────────────────────────────────────────────────────────────────────
     fun replyToReview(
         reviewId     : String,
         propertyId   : String,
@@ -218,9 +328,6 @@ class ReviewViewModel @Inject constructor(
                 reviewerName = reviewerName
             )) {
                 is Resource.Success -> {
-                    // hasLandlordReply ek computed property hai: landlordReply.isNotEmpty()
-                    // isliye sirf landlordReply update karo — copy() mein
-                    // hasLandlordReply pass karne ki zaroorat nahi hai
                     val updatedReviews = _uiState.value.reviews.map { r ->
                         if (r.reviewId == reviewId) r.copy(landlordReply = reply) else r
                     }
@@ -240,13 +347,6 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    // ── Clear Reply Success Flag ───────────────────────────────────
-    fun clearReplySuccess() {
-        _uiState.update { it.copy(replySuccess = false, replyError = null) }
-    }
-
-    // ── Clear Messages ────────────────────────────────────────────
-    fun clearMessages() {
-        _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
-    }
+    fun clearReplySuccess() = _uiState.update { it.copy(replySuccess = false, replyError = null) }
+    fun clearMessages()     = _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
 }

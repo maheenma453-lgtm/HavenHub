@@ -7,23 +7,49 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-/**
- * FirebaseModule — Firebase SDK instances
- *
- * Note: FirebaseAuth aur FirebaseFirestore already RepositoryModule
- * mein provide ho rahe hain — yahan sirf FirebaseDatabase hai
- * jo RepositoryModule mein nahi tha.
- */
+// ══════════════════════════════════════════════════════════════════════════════
+// FirebaseModule
+//
+// This module provides Firebase services that are NOT already in RepositoryModule.
+//
+// Already provided in RepositoryModule — do NOT duplicate:
+//   • FirebaseAuth       → provideFirebaseAuth()
+//   • FirebaseFirestore  → provideFirebaseFirestore()
+//   • FirebaseMessaging  → provideFirebaseMessaging()
+//
+// Only addition here:
+//   • FirebaseDatabase (Realtime DB) → for user online presence only
+//
+// Why a separate Realtime Database?
+//   Firestore has no .onDisconnect() support. If the app crashes or loses
+//   network, Firestore cannot auto-mark the user offline. Realtime Database
+//   runs .onDisconnect() server-side — even on unexpected disconnections —
+//   so the user is never stuck showing "Online" after a crash.
+// ══════════════════════════════════════════════════════════════════════════════
+
 @Module
 @InstallIn(SingletonComponent::class)
 object FirebaseModule {
 
-    /**
-     * Provides FirebaseDatabase instance (Realtime Database).
-     * Used for chat messages, notifications and live data sync.
-     */
+    // ── Firebase Realtime Database ────────────────────────────────────────────
+    // Used exclusively for: /status/{userId}/isOnline + lastSeen
+    // Everything else (messages, bookings, properties) stays in Firestore.
+    //
+    // setPersistenceEnabled(true) → local disk cache so brief network drops
+    // don't immediately flip the user to offline on the listener side.
+    //
+    // @Singleton guarantees this runs exactly once — calling
+    // setPersistenceEnabled() twice on the same instance throws an exception.
     @Provides
     @Singleton
-    fun provideFirebaseDatabase(): FirebaseDatabase =
-        FirebaseDatabase.getInstance()
+    fun provideFirebaseRealtimeDatabase(): FirebaseDatabase {
+        val database = FirebaseDatabase.getInstance()
+        try {
+            database.setPersistenceEnabled(true)
+        } catch (e: Exception) {
+            // Safe to ignore — already enabled if getInstance() was called
+            // before Hilt ran this provider (e.g. during app startup)
+        }
+        return database
+    }
 }

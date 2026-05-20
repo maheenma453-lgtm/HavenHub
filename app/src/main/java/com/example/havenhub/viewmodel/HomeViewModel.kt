@@ -28,7 +28,7 @@ data class HomeUiState(
     val errorMessage         : String?        = null,
     val totalProperties      : Int            = 0,
     val activeBookingsCount  : Int            = 0,
-    val activeTenantsCount   : Int            = 0,   // ✦ added
+    val activeTenantsCount   : Int            = 0,
     val pendingRequestsCount : Int            = 0,
     val totalRevenue         : Double         = 0.0,
     val averageRating        : Float          = 0f,
@@ -58,9 +58,10 @@ class HomeViewModel @Inject constructor(
         loadUserInfo()
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Load user info and favourite IDs
-    // ─────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    // USER INFO
+    // ══════════════════════════════════════════════════════════════════════════
+
     private fun loadUserInfo() {
         viewModelScope.launch {
             try {
@@ -88,9 +89,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // FAVOURITES — IDs load
-    // ─────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    // FAVOURITES
+    // ══════════════════════════════════════════════════════════════════════════
+
     private fun loadFavouriteIds(userId: String) {
         if (userId.isEmpty()) return
         viewModelScope.launch {
@@ -99,15 +101,10 @@ class HomeViewModel @Inject constructor(
                 if (result is Resource.Success) {
                     _uiState.update { it.copy(favouriteIds = result.data.toSet()) }
                 }
-            } catch (_: Exception) {
-                // silent
-            }
+            } catch (_: Exception) { /* silent */ }
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // FAVOURITES — Full list load
-    // ─────────────────────────────────────────────────────────────
     fun loadFavouriteProperties() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
@@ -122,8 +119,7 @@ class HomeViewModel @Inject constructor(
                             isFavouritesLoading = false
                         )
                     }
-                    is Resource.Error   -> _uiState.update { it.copy(isFavouritesLoading = false) }
-                    else                -> _uiState.update { it.copy(isFavouritesLoading = false) }
+                    else -> _uiState.update { it.copy(isFavouritesLoading = false) }
                 }
             } catch (_: Exception) {
                 _uiState.update { it.copy(isFavouritesLoading = false) }
@@ -131,9 +127,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // FAVOURITES — Toggle (add/remove)
-    // ─────────────────────────────────────────────────────────────
     fun toggleFavourite(propertyId: String) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
@@ -154,111 +147,139 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // TENANT: load all approved properties
-    // ─────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    // TENANT — load approved properties
+    //
+    // ✅ FIX: loadHomeData() aur refreshHomeData() dono fetchAndUpdateTenantData()
+    //    call karte hain bina kisi condition ke.
+    //
+    // ✅ ROOT FIX (ExploreMap properties missing):
+    //    Pehle fetchAndUpdateTenantData() mein:
+    //      - getFeaturedProperties() sirf isFeatured=true wali laata tha
+    //      - getNearbyProperties() sirf isFeatured=false wali
+    //      - combined = featured + nearby
+    //      - Nai properties jo isFeatured=false hain woh nearby mein aati thin
+    //        LEKIN agar nearby result empty tha toh combined bhi incomplete tha
+    //
+    //    Ab:
+    //      - seedAll = propertyRepository.getAllProperties() → SAARI APPROVED
+    //      - featured = seedAll mein se isFeatured=true
+    //      - nearby   = seedAll mein se isFeatured=false
+    //      - allProperties = seedAll (poora list, koi miss nahi)
+    //
+    //    Isse ExploreMapScreen ko allProperties mein SAARI nai 12 properties
+    //    milti hain — chahe koi featured ho ya nearby.
+    // ══════════════════════════════════════════════════════════════════════════
+
     fun loadHomeData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            try {
-                val featuredResult = propertyRepository.getFeaturedProperties()
-                val featured: List<Property> =
-                    if (featuredResult is Resource.Success) featuredResult.data else emptyList()
+            fetchAndUpdateTenantData()
+        }
+    }
 
-                val nearbyResult = propertyRepository.getNearbyProperties()
-                val nearby: List<Property> =
-                    if (nearbyResult is Resource.Success) nearbyResult.data else emptyList()
+    fun refreshHomeData() {
+        viewModelScope.launch {
+            fetchAndUpdateTenantData()
+        }
+    }
 
-                val combined = (featured + nearby).distinctBy { it.propertyId }
+    private suspend fun fetchAndUpdateTenantData() {
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        try {
+            // ✅ SINGLE SOURCE OF TRUTH: Ek hi Firestore query → saari APPROVED properties
+            // PropertyRepository.getAllProperties() → fetchApproved() → whereEqualTo("status","APPROVED")
+            val allResult = propertyRepository.getAllProperties()
 
-                val finalAll      : List<Property>
-                val finalFeatured : List<Property>
-                val finalNearby   : List<Property>
+            val allList: List<Property> =
+                if (allResult is Resource.Success) allResult.data else emptyList()
 
-                if (combined.isEmpty()) {
-                    val allResult = propertyRepository.getAllProperties()
-                    val allList: List<Property> =
-                        if (allResult is Resource.Success) allResult.data else emptyList()
-                    finalAll      = allList
-                    finalFeatured = allList.filter {  it.isFeatured }
-                    finalNearby   = allList.filter { !it.isFeatured }
-                } else {
-                    finalAll      = combined
-                    finalFeatured = featured.ifEmpty { combined.filter {  it.isFeatured } }
-                    finalNearby   = nearby.ifEmpty   { combined.filter { !it.isFeatured } }
-                }
+            // ✅ Client-side split: featured aur nearby allList se nikalte hain
+            // Koi property miss nahi hogi — same list ko sirf filter kiya hai
+            val finalFeatured = allList.filter { it.isFeatured }
+            val finalNearby   = allList.filter { !it.isFeatured }
+            val finalAll      = allList  // ExploreMap yahi use karta hai
 
-                val errorMsg = when {
-                    featuredResult is Resource.Error -> featuredResult.message
-                    nearbyResult   is Resource.Error -> nearbyResult.message
-                    else                             -> null
-                }
+            val errorMsg = if (allResult is Resource.Error) allResult.message else null
 
-                _uiState.update { state ->
-                    state.copy(
-                        featuredProperties = finalFeatured,
-                        nearbyProperties   = finalNearby,
-                        allProperties      = finalAll,
-                        isLoading          = false,
-                        errorMessage       = if (finalAll.isEmpty()) errorMsg else null
-                    )
-                }
+            _uiState.update { state ->
+                state.copy(
+                    featuredProperties = finalFeatured,
+                    nearbyProperties   = finalNearby,
+                    allProperties      = finalAll,
+                    isLoading          = false,
+                    errorMessage       = if (finalAll.isEmpty()) errorMsg else null
+                )
+            }
 
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(isLoading = false, errorMessage = e.localizedMessage)
-                }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(isLoading = false, errorMessage = e.localizedMessage)
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // LANDLORD: load stats and own properties
-    // ─────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    // LANDLORD — own properties + booking stats + revenue
+    // ══════════════════════════════════════════════════════════════════════════
+
     fun loadLandlordStats(landlordId: String) {
         viewModelScope.launch {
-            try {
-                val propertiesResult = propertyRepository.getMyProperties(landlordId)
-                val properties: List<Property> =
-                    if (propertiesResult is Resource.Success) propertiesResult.data
-                    else emptyList()
+            fetchAndUpdateLandlordStats(landlordId)
+        }
+    }
 
-                val totalProps = properties.size
-                val avgRating  = if (properties.isNotEmpty())
-                    properties.map { it.averageRating }.average().toFloat()
-                else 0f
+    fun refreshLandlordStats() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        viewModelScope.launch {
+            fetchAndUpdateLandlordStats(uid)
+        }
+    }
 
-                val bookings     = bookingRepository.getLandlordBookings(landlordId)
-                val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
-                val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
+    private suspend fun fetchAndUpdateLandlordStats(landlordId: String) {
+        try {
+            // getMyProperties → ALL statuses (PENDING, APPROVED, REJECTED)
+            val propertiesResult = propertyRepository.getMyProperties(landlordId)
+            val properties: List<Property> =
+                if (propertiesResult is Resource.Success) propertiesResult.data
+                else emptyList()
 
-                val activeTenantsCount = bookings
-                    .filter { it.status == BookingStatus.CONFIRMED.name }
-                    .map { it.tenantId }
-                    .distinct()
-                    .size
+            val totalProps = properties.size
 
-                val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
-                val revenue: Double =
-                    if (paymentsResult is Resource.Success) paymentsResult.data.sumOf { it.amountDouble }
-                    else 0.0
+            val avgRating = if (properties.isNotEmpty())
+                properties.map { it.averageRating }.average().toFloat()
+            else 0f
 
-                _uiState.update { state ->
-                    state.copy(
-                        featuredProperties   = properties,
-                        allProperties        = properties,
-                        totalProperties      = totalProps,
-                        activeBookingsCount  = activeCount,
-                        activeTenantsCount   = activeTenantsCount,
-                        pendingRequestsCount = pendingCount,
-                        totalRevenue         = revenue,
-                        averageRating        = avgRating
-                    )
-                }
+            val bookings     = bookingRepository.getLandlordBookings(landlordId)
+            val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
+            val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
-            } catch (_: Exception) {
-                // silent fail
+            val activeTenantsCount = bookings
+                .filter  { it.status == BookingStatus.CONFIRMED.name }
+                .map     { it.tenantId }
+                .distinct()
+                .size
+
+            val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
+            val revenue: Double =
+                if (paymentsResult is Resource.Success)
+                    paymentsResult.data.sumOf { it.amountDouble }
+                else 0.0
+
+            _uiState.update { state ->
+                state.copy(
+                    featuredProperties   = properties,
+                    allProperties        = properties,
+                    totalProperties      = totalProps,
+                    activeBookingsCount  = activeCount,
+                    activeTenantsCount   = activeTenantsCount,
+                    pendingRequestsCount = pendingCount,
+                    totalRevenue         = revenue,
+                    averageRating        = avgRating
+                )
             }
+
+        } catch (_: Exception) {
+            // Silent fail — stale data stays visible
         }
     }
 }

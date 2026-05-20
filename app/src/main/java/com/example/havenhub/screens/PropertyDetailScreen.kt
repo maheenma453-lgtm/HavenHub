@@ -1,5 +1,8 @@
 package com.example.havenhub.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -23,11 +26,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.PropertyViewModel
@@ -37,8 +42,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 // Semantic colors — intentional, do NOT theme these
-private val Green = Color(0xFF22C55E)
-private val Red   = Color(0xFFEF4444)
+private val Green  = Color(0xFF22C55E)
+private val Red    = Color(0xFFEF4444)
+private val Orange = Color(0xFFF97316)   // ✅ NEW: Already Booked banner color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +58,11 @@ fun PropertyDetailScreen(
     val vacState  by vacationViewModel.uiState.collectAsState()
     val property  = uiState.propertyDetail
     val isLoading = uiState.isLoading
+
+    // ✅ NEW: Booking status state
+    // null = check abhi nahi hua, true = booked, false = available
+    val isPropertyBooked    = uiState.isPropertyCurrentlyBooked
+    val isCheckingBooking   = uiState.isCheckingBooking
 
     val configuration = LocalConfiguration.current
     val screenWidth   = configuration.screenWidthDp.dp
@@ -72,6 +83,8 @@ fun PropertyDetailScreen(
     LaunchedEffect(propertyId) {
         viewModel.loadPropertyDetail(propertyId)
         vacationViewModel.loadPackagesForProperty(propertyId)
+        // ✅ NEW: Property khulte hi booking status check karo
+        viewModel.checkPropertyBookingStatus(propertyId)
     }
 
     val isTenant   = currentUserRole.equals("tenant",   ignoreCase = true)
@@ -100,9 +113,9 @@ fun PropertyDetailScreen(
                 val isOwner = property.ownerId == currentUserId
 
                 val bottomPad = when {
-                    roleLoaded && isTenant && !isOwner && hasActivePackage -> 130.dp
-                    roleLoaded && isTenant && !isOwner                     -> 80.dp
-                    else                                                   -> 62.dp
+                    roleLoaded && isTenant && !isOwner && hasActivePackage -> 140.dp
+                    roleLoaded && isTenant && !isOwner                     -> 90.dp
+                    else                                                   -> 110.dp
                 }
 
                 LazyColumn(
@@ -110,21 +123,50 @@ fun PropertyDetailScreen(
                     contentPadding = PaddingValues(bottom = bottomPad)
                 ) {
 
-                    // 1. HERO IMAGE
+                    // ── 1. HERO IMAGE ──────────────────────────────────────────
                     item {
                         val heroHeight = (screenWidth.value * 0.72f).dp.coerceIn(220.dp, 360.dp)
 
                         Box(Modifier.fillMaxWidth().height(heroHeight)) {
-                            Image(
-                                painter            = painterResource(id = getPropertyImage(
-                                    property.drawableImageName.ifEmpty {
-                                        property.resolvedDrawableName.ifEmpty { propertyId }
-                                    }
-                                )),
-                                contentDescription = null,
-                                modifier           = Modifier.fillMaxSize(),
-                                contentScale       = ContentScale.Crop
-                            )
+
+                            val remoteUrl = property.imageUrls.firstOrNull { it.startsWith("http") }
+
+                            when {
+                                !remoteUrl.isNullOrEmpty() -> {
+                                    AsyncImage(
+                                        model              = remoteUrl,
+                                        contentDescription = property.title,
+                                        modifier           = Modifier.fillMaxSize(),
+                                        contentScale       = ContentScale.Crop
+                                    )
+                                }
+                                property.drawableImageName.isNotBlank() -> {
+                                    Image(
+                                        painter            = painterResource(id = getPropertyImage(property.drawableImageName)),
+                                        contentDescription = property.title,
+                                        modifier           = Modifier.fillMaxSize(),
+                                        contentScale       = ContentScale.Crop
+                                    )
+                                }
+                                property.resolvedDrawableName.isNotBlank() -> {
+                                    Image(
+                                        painter            = painterResource(id = getPropertyImage(property.resolvedDrawableName)),
+                                        contentDescription = property.title,
+                                        modifier           = Modifier.fillMaxSize(),
+                                        contentScale       = ContentScale.Crop
+                                    )
+                                }
+                                else -> {
+                                    Image(
+                                        painter            = painterResource(id = getPropertyImage(propertyId)),
+                                        contentDescription = property.title,
+                                        modifier           = Modifier.fillMaxSize(),
+                                        contentScale       = ContentScale.Crop
+                                    )
+                                }
+                            }
+
+                            // Gradient overlay
                             Box(
                                 Modifier.fillMaxSize().background(
                                     Brush.verticalGradient(
@@ -134,6 +176,7 @@ fun PropertyDetailScreen(
                                     )
                                 )
                             )
+
                             // Back button
                             Box(
                                 modifier = Modifier
@@ -144,23 +187,37 @@ fun PropertyDetailScreen(
                             ) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = onPrimary, modifier = Modifier.size(20.dp))
                             }
-                            // Availability badge
+
+                            // ✅ UPDATED: Availability badge — ab booking check bhi include hai
+                            // Priority: isPropertyBooked > property.isAvailable
                             Box(
                                 modifier = Modifier
                                     .statusBarsPadding().padding(16.dp).align(Alignment.TopEnd)
                                     .clip(RoundedCornerShape(20.dp))
-                                    .background(if (property.isAvailable) Green else Red)
+                                    .background(
+                                        when {
+                                            isPropertyBooked == true -> Orange  // Actively booked
+                                            property.isAvailable     -> Green   // Available
+                                            else                     -> Red     // Unavailable/Pending
+                                        }
+                                    )
                                     .padding(horizontal = 10.dp, vertical = 5.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(Modifier.size(5.dp).clip(CircleShape).background(onPrimary))
                                     Spacer(Modifier.width(5.dp))
                                     Text(
-                                        if (property.isAvailable) "Available" else "Unavailable",
+                                        text = when {
+                                            isCheckingBooking        -> "Checking..."
+                                            isPropertyBooked == true -> "Booked"
+                                            property.isAvailable     -> "Available"
+                                            else                     -> "Unavailable"
+                                        },
                                         color = onPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
+
                             // Title overlay
                             Column(
                                 Modifier.align(Alignment.BottomStart).fillMaxWidth()
@@ -181,6 +238,58 @@ fun PropertyDetailScreen(
                                     Text("${property.address}, ${property.city}", color = onPrimary.copy(0.85f), fontSize = 12.sp)
                                 }
                             }
+                        }
+                    }
+
+                    // ✅ NEW: ALREADY BOOKED BANNER
+                    // Sirf tenants ko dikhao jab property booked ho
+                    // Landlord/owner ko nahi dikhega — unhe pata hota hai
+                    item {
+                        AnimatedVisibility(
+                            visible = isPropertyBooked == true && roleLoaded && isTenant && property.ownerId != currentUserId,
+                            enter   = fadeIn() + expandVertically()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Orange.copy(alpha = 0.12f))
+                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier         = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Orange.copy(alpha = 0.18f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector        = Icons.Default.EventBusy,
+                                        contentDescription = null,
+                                        tint               = Orange,
+                                        modifier           = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(14.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text       = "Already Booked",
+                                        fontSize   = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color      = Orange
+                                    )
+                                    Text(
+                                        text     = "Yeh property abhi kisi aur ne book kar li hai. Baad mein check karein.",
+                                        fontSize = 12.sp,
+                                        color    = onSurface.copy(alpha = 0.65f),
+                                        lineHeight = 17.sp
+                                    )
+                                }
+                            }
+                        }
+                        // Agar booked hai toh divider bhi dikhao
+                        if (isPropertyBooked == true) {
+                            HorizontalDivider(color = Orange.copy(alpha = 0.2f), thickness = 1.dp)
                         }
                     }
 
@@ -215,11 +324,11 @@ fun PropertyDetailScreen(
                             modifier              = Modifier.fillMaxWidth().background(surface).padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            PDDetailStatItem("🛏️", "${property.bedrooms}",                        "Beds",   onSurface, onSurfaceVariant)
+                            PDDetailStatItem("🛏️", "${property.bedrooms}",                 "Beds",   onSurface, onSurfaceVariant)
                             Box(Modifier.width(1.dp).height(40.dp).background(background))
-                            PDDetailStatItem("🚿", "${property.bathrooms}",                       "Baths",  onSurface, onSurfaceVariant)
+                            PDDetailStatItem("🚿", "${property.bathrooms}",                "Baths",  onSurface, onSurfaceVariant)
                             Box(Modifier.width(1.dp).height(40.dp).background(background))
-                            PDDetailStatItem("👥", "${property.maxGuests}",                       "Guests", onSurface, onSurfaceVariant)
+                            PDDetailStatItem("👥", "${property.maxGuests}",                "Guests", onSurface, onSurfaceVariant)
                             Box(Modifier.width(1.dp).height(40.dp).background(background))
                             PDDetailStatItem("📐", "${property.areaSqFt?.toInt() ?: "—"}", "Sqft",  onSurface, onSurfaceVariant)
                         }
@@ -357,23 +466,49 @@ fun PropertyDetailScreen(
                                 }
                             }
                         }
-                        // ── Reviews section yahan se HATA di gayi hai ──────────────
-                        // Reviews bottom navbar ke "Reviews" tab mein available hain
                     }
                 }
 
-                // ── STICKY BOTTOM BAR ──────────────────────────────────────────────
+                // ── STICKY BOTTOM BAR ──────────────────────────────────────────
                 Surface(
                     modifier        = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                     shadowElevation = 16.dp,
                     color           = surface
                 ) {
                     if (roleLoaded && isTenant && !isOwner) {
+                        // ── TENANT BOTTOM BAR ──────────────────────────────────
                         Column(
                             modifier            = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Row 1 — Price + Message + Book Now
+                            // ✅ NEW: Already Booked mini-notice inside bottom bar
+                            if (isPropertyBooked == true) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Orange.copy(alpha = 0.10f))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment     = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector        = Icons.Default.EventBusy,
+                                        contentDescription = null,
+                                        tint               = Orange,
+                                        modifier           = Modifier.size(15.dp)
+                                    )
+                                    Spacer(Modifier.width(7.dp))
+                                    Text(
+                                        text       = "Yeh property already booked hai",
+                                        fontSize   = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color      = Orange,
+                                        textAlign  = TextAlign.Center
+                                    )
+                                }
+                            }
+
                             Row(
                                 modifier              = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -383,6 +518,8 @@ fun PropertyDetailScreen(
                                     Text("Per night", fontSize = 9.sp, color = onSurfaceVariant)
                                     Text(property.formattedPrice, fontSize = 16.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
                                 }
+
+                                // Message button — booked ho ya na ho, message kar sakte hain
                                 if (property.ownerId.isNotEmpty()) {
                                     OutlinedButton(
                                         onClick        = {
@@ -407,20 +544,43 @@ fun PropertyDetailScreen(
                                         )
                                     }
                                 }
+
+                                // ✅ UPDATED: Book Now button — disabled agar property booked hai
                                 Button(
-                                    onClick        = { navController.navigate(Screen.Booking.createRoute(propertyId)) },
+                                    onClick  = {
+                                        if (isPropertyBooked != true) {
+                                            navController.navigate(Screen.Booking.createRoute(propertyId))
+                                        }
+                                    },
+                                    enabled        = isPropertyBooked != true,   // ← KEY CHANGE
                                     modifier       = Modifier.height(42.dp),
                                     shape          = RoundedCornerShape(10.dp),
-                                    colors         = ButtonDefaults.buttonColors(containerColor = primary, contentColor = onPrimary),
+                                    colors         = ButtonDefaults.buttonColors(
+                                        containerColor         = if (isPropertyBooked == true) onSurfaceVariant.copy(0.3f) else primary,
+                                        contentColor           = if (isPropertyBooked == true) onSurfaceVariant else onPrimary,
+                                        disabledContainerColor = onSurfaceVariant.copy(0.2f),
+                                        disabledContentColor   = onSurfaceVariant.copy(0.5f)
+                                    ),
                                     contentPadding = PaddingValues(horizontal = 20.dp),
-                                    elevation      = ButtonDefaults.buttonElevation(3.dp)
+                                    elevation      = ButtonDefaults.buttonElevation(
+                                        defaultElevation  = if (isPropertyBooked == true) 0.dp else 3.dp
+                                    )
                                 ) {
-                                    Text("Book Now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    // Button text change hoti hai booking status ke mutabiq
+                                    Text(
+                                        text       = when {
+                                            isCheckingBooking        -> "Checking..."
+                                            isPropertyBooked == true -> "Booked"
+                                            else                     -> "Book Now"
+                                        },
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize   = 13.sp
+                                    )
                                 }
                             }
 
-                            // Row 2 — Book with Package (sirf tab jab active package ho)
-                            if (hasActivePackage) {
+                            // ✅ UPDATED: "Book with Package" — sirf tab dikhao jab property booked na ho
+                            if (hasActivePackage && isPropertyBooked != true) {
                                 Button(
                                     onClick   = { navController.navigate(Screen.PreBooking.createRoute(propertyId)) },
                                     modifier  = Modifier.fillMaxWidth().height(46.dp),
@@ -433,31 +593,81 @@ fun PropertyDetailScreen(
                                     Text("Book with Package", fontWeight = FontWeight.Black, fontSize = 14.sp)
                                 }
                             }
-                        }
-                    } else {
-                        // Landlord / Admin / Owner bottom bar
-                        Row(
-                            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment     = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Per night", fontSize = 9.sp, color = onSurfaceVariant)
-                                Text(property.formattedPrice, fontSize = 16.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
-                            }
-                            if (roleLoaded && isLandlord && isOwner) {
-                                Button(
-                                    onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
-                                    modifier       = Modifier.height(44.dp),
-                                    shape          = RoundedCornerShape(10.dp),
-                                    colors         = ButtonDefaults.buttonColors(containerColor = primary, contentColor = tertiary),
-                                    contentPadding = PaddingValues(horizontal = 18.dp),
-                                    elevation      = ButtonDefaults.buttonElevation(3.dp)
+
+                            // ✅ NEW: Agar booked hai toh "Package" wali jagah yeh dikhao
+                            if (hasActivePackage && isPropertyBooked == true) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(onSurfaceVariant.copy(0.08f))
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment     = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
                                 ) {
-                                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(15.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Edit Property", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Icon(
+                                        imageVector        = Icons.Default.LocalOffer,
+                                        contentDescription = null,
+                                        tint               = onSurfaceVariant.copy(0.5f),
+                                        modifier           = Modifier.size(15.dp)
+                                    )
+                                    Spacer(Modifier.width(7.dp))
+                                    Text(
+                                        text       = "Package available — property free hone par book karein",
+                                        fontSize   = 11.sp,
+                                        color      = onSurfaceVariant.copy(0.6f),
+                                        textAlign  = TextAlign.Center
+                                    )
                                 }
+                            }
+                        }
+
+                    } else {
+                        // ── LANDLORD / OWNER BOTTOM BAR ───────────────────────
+                        Column(
+                            modifier            = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier              = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment     = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Per night", fontSize = 9.sp, color = onSurfaceVariant)
+                                    Text(property.formattedPrice, fontSize = 16.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
+                                }
+                                if (roleLoaded && isLandlord && isOwner) {
+                                    Button(
+                                        onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
+                                        modifier       = Modifier.height(44.dp),
+                                        shape          = RoundedCornerShape(10.dp),
+                                        colors         = ButtonDefaults.buttonColors(containerColor = primary, contentColor = tertiary),
+                                        contentPadding = PaddingValues(horizontal = 18.dp),
+                                        elevation      = ButtonDefaults.buttonElevation(3.dp)
+                                    ) {
+                                        Icon(Icons.Default.Edit, null, modifier = Modifier.size(15.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Edit Property", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick        = { navController.navigate(Screen.ViewReviews.createRoute(propertyId)) },
+                                modifier       = Modifier.fillMaxWidth().height(42.dp),
+                                shape          = RoundedCornerShape(10.dp),
+                                border         = BorderStroke(1.5.dp, tertiary),
+                                colors         = ButtonDefaults.outlinedButtonColors(contentColor = tertiary),
+                                contentPadding = PaddingValues(horizontal = 14.dp)
+                            ) {
+                                Icon(Icons.Default.RateReview, null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "View Reviews (${property.reviewCount})",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize   = 13.sp
+                                )
                             }
                         }
                     }

@@ -24,6 +24,7 @@ import androidx.navigation.NavController
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.PaymentStatus
+import com.example.havenhub.data.PropertyStatus
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.AuthViewModel
@@ -74,7 +75,7 @@ fun BookingScreen(
     var showCheckInPicker  by remember { mutableStateOf(false) }
     var showCheckOutPicker by remember { mutableStateOf(false) }
 
-    // ✅ FIX: Double-tap guard — booking ek baar hi create hogi
+    // Double-tap guard — booking ek baar hi create hogi
     var isSubmitting by remember { mutableStateOf(false) }
 
     val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
@@ -87,7 +88,7 @@ fun BookingScreen(
         }
     }
 
-    // ✅ FIX: actionSuccess pe navigate — isSubmitting reset bhi karo
+    // Navigate to confirmation on success
     LaunchedEffect(uiState.actionSuccess, uiState.createdBookingId) {
         if (uiState.actionSuccess && !uiState.createdBookingId.isNullOrEmpty()) {
             isSubmitting = false
@@ -98,40 +99,51 @@ fun BookingScreen(
         }
     }
 
-    // ✅ FIX: Error pe bhi isSubmitting reset karo
+    // Reset submitting flag on error
     LaunchedEffect(uiState.errorMessage) {
         if (uiState.errorMessage != null) {
             isSubmitting = false
         }
     }
 
-    // Check-in date picker
+    // ── Date pickers ──────────────────────────────────────────────────────────
     if (showCheckInPicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = System.currentTimeMillis()
+        )
         DatePickerDialog(
             onDismissRequest = { showCheckInPicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { checkInDate = dateFormatter.format(Date(it)) }
+                    datePickerState.selectedDateMillis?.let {
+                        checkInDate = dateFormatter.format(Date(it))
+                    }
                     showCheckInPicker = false
                 }) { Text("OK") }
             },
-            dismissButton = { TextButton(onClick = { showCheckInPicker = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { showCheckInPicker = false }) { Text("Cancel") }
+            }
         ) { DatePicker(state = datePickerState) }
     }
 
-    // Check-out date picker
     if (showCheckOutPicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis() + 86400000L)
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = System.currentTimeMillis() + 86400000L
+        )
         DatePickerDialog(
             onDismissRequest = { showCheckOutPicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { checkOutDate = dateFormatter.format(Date(it)) }
+                    datePickerState.selectedDateMillis?.let {
+                        checkOutDate = dateFormatter.format(Date(it))
+                    }
                     showCheckOutPicker = false
                 }) { Text("OK") }
             },
-            dismissButton = { TextButton(onClick = { showCheckOutPicker = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { showCheckOutPicker = false }) { Text("Cancel") }
+            }
         ) { DatePicker(state = datePickerState) }
     }
 
@@ -140,7 +152,9 @@ fun BookingScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text("Complete Booking", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text("Complete Booking", fontWeight = FontWeight.Bold)
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -164,36 +178,53 @@ fun BookingScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when {
+                // ── Loading ───────────────────────────────────────────────────
                 propUiState.isLoading -> {
-                    Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = if (isDark) DarkGoldPrimary else navyColor)
+                    Box(
+                        Modifier.fillMaxWidth().height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = if (isDark) DarkGoldPrimary else navyColor
+                        )
                     }
                 }
+
+                // ── Property load failed ──────────────────────────────────────
                 property == null -> {
-                    Card(
-                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Property load nahi ho rahi. Wapas jao aur dobara try karo.",
-                            color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                    BookingBlockedCard(
+                        message = "Property load nahi ho rahi. Wapas jao aur dobara try karo."
+                    )
                 }
-                property.status != "APPROVED" -> {
-                    Card(
-                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Yeh property abhi admin se approve nahi hui — booking nahi ho sakti.",
-                            color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(16.dp)
-                        )
-                    }
+
+                // ════════════════════════════════════════════════════════════
+                // ✅ FIX: Property "already booked" check
+                //
+                // Problem: Pehle sirf APPROVED check tha. Agar property ka
+                // status "BOOKED" ho gaya (kisi ne already book kar liya)
+                // toh tenant phir bhi booking screen khol sakta tha.
+                //
+                // Fix: status == "BOOKED" alag friendly message dikhao.
+                // ════════════════════════════════════════════════════════════
+                property.status.equals(PropertyStatus.APPROVED.name, ignoreCase = true).not()
+                        && property.status.equals("BOOKED", ignoreCase = true) -> {
+                    BookingBlockedCard(
+                        message  = "Yeh property abhi already booked hai — phir baad mein try karein.",
+                        isBooked = true
+                    )
                 }
+
+                // ── Not approved by admin yet ─────────────────────────────────
+                property.status.equals(PropertyStatus.APPROVED.name, ignoreCase = true).not() -> {
+                    BookingBlockedCard(
+                        message = "Yeh property abhi admin se approve nahi hui — booking nahi ho sakti."
+                    )
+                }
+
+                // ── Property is APPROVED and available — show booking form ─────
                 else -> {
 
-                    // ── 1. Property Summary ───────────────────────
+                    // 1. Property Summary card
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -201,19 +232,38 @@ fun BookingScreen(
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Property", fontSize = 13.sp, color = hintColor)
-                            Text(property.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textPrimary)
+                            Text(
+                                "Property",
+                                fontSize = 13.sp,
+                                color    = hintColor
+                            )
+                            Text(
+                                property.title,
+                                fontSize   = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = textPrimary
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.LocationOn, null, tint = goldColor, modifier = Modifier.size(14.dp))
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    null,
+                                    tint     = goldColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
                                 Text(" ${property.city}", fontSize = 13.sp, color = hintColor)
                                 Spacer(modifier = Modifier.weight(1f))
-                                Text(property.formattedPrice + "/night", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textPrimary)
+                                Text(
+                                    property.formattedPrice + "/night",
+                                    fontSize   = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = textPrimary
+                                )
                             }
                         }
                     }
 
-                    // ── 2. Duration Type ──────────────────────────
+                    // 2. Duration Type card
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -221,7 +271,12 @@ fun BookingScreen(
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Rental Duration Type", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textPrimary)
+                            Text(
+                                "Rental Duration Type",
+                                fontSize   = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = textPrimary
+                            )
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf("Daily", "Weekly", "Monthly").forEach { duration ->
@@ -247,7 +302,7 @@ fun BookingScreen(
                         }
                     }
 
-                    // ── 3. Date Selection ─────────────────────────
+                    // 3. Date Selection card
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -255,36 +310,55 @@ fun BookingScreen(
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Select Dates", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textPrimary)
+                            Text(
+                                "Select Dates",
+                                fontSize   = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = textPrimary
+                            )
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 OutlinedButton(
                                     onClick  = { showCheckInPicker = true },
                                     modifier = Modifier.weight(1f),
                                     shape    = RoundedCornerShape(8.dp),
-                                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = textPrimary)
+                                    colors   = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = textPrimary
+                                    )
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Check-in",  fontSize = 11.sp, color = hintColor)
-                                        Text(checkInDate.ifEmpty  { "Select" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = textPrimary)
+                                        Text(
+                                            checkInDate.ifEmpty  { "Select" },
+                                            fontSize   = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color      = textPrimary
+                                        )
                                     }
                                 }
                                 OutlinedButton(
                                     onClick  = { showCheckOutPicker = true },
                                     modifier = Modifier.weight(1f),
                                     shape    = RoundedCornerShape(8.dp),
-                                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = textPrimary)
+                                    colors   = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = textPrimary
+                                    )
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Check-out", fontSize = 11.sp, color = hintColor)
-                                        Text(checkOutDate.ifEmpty { "Select" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = textPrimary)
+                                        Text(
+                                            checkOutDate.ifEmpty { "Select" },
+                                            fontSize   = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color      = textPrimary
+                                        )
                                     }
                                 }
                             }
                         }
                     }
 
-                    // ── 4. Stay Details ───────────────────────────
+                    // 4. Stay Details card
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -292,7 +366,12 @@ fun BookingScreen(
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Stay Details", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textPrimary)
+                            Text(
+                                "Stay Details",
+                                fontSize   = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = textPrimary
+                            )
                             Spacer(modifier = Modifier.height(16.dp))
                             CounterRow(
                                 label       = "Number of Nights",
@@ -311,13 +390,14 @@ fun BookingScreen(
                             )
                             Text(
                                 "Max ${property.maxGuests} guests allowed",
-                                fontSize = 12.sp, color = hintColor,
+                                fontSize = 12.sp,
+                                color    = hintColor,
                                 modifier = Modifier.padding(top = 8.dp)
                             )
                         }
                     }
 
-                    // ── 5. Price Breakdown ────────────────────────
+                    // 5. Price Breakdown card
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -325,45 +405,81 @@ fun BookingScreen(
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Price Breakdown", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(
+                                "Price Breakdown",
+                                fontSize   = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color      = Color.White
+                            )
                             Spacer(modifier = Modifier.height(12.dp))
-                            PriceRow("${property.formattedPrice} × $nights nights", "PKR ${"%.0f".format(property.pricePerNight * nights)}")
+                            PriceRow(
+                                "${property.formattedPrice} × $nights nights",
+                                "PKR ${"%.0f".format(property.pricePerNight * nights)}"
+                            )
                             if (property.securityDeposit > 0) {
-                                PriceRow("Security Deposit", "PKR ${"%.0f".format(property.securityDeposit)}")
+                                PriceRow(
+                                    "Security Deposit",
+                                    "PKR ${"%.0f".format(property.securityDeposit)}"
+                                )
                             }
-                            HorizontalDivider(color = dividerCol, modifier = Modifier.padding(vertical = 8.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Total", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = goldColor)
+                            HorizontalDivider(
+                                color    = dividerCol,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                            Row(
+                                modifier              = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Total",
+                                    fontSize   = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = goldColor
+                                )
                                 Text(
                                     "PKR ${"%.0f".format(totalAmount + property.securityDeposit)}",
-                                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = goldColor
+                                    fontSize   = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = goldColor
                                 )
                             }
                         }
                     }
 
-                    // Error message
+                    // Error message card
                     uiState.errorMessage?.let { error ->
                         Card(
-                            colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                            colors   = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFFEBEE)
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(error, color = Color(0xFFB71C1C), fontSize = 14.sp, modifier = Modifier.padding(12.dp))
+                            Text(
+                                error,
+                                color    = Color(0xFFB71C1C),
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(12.dp)
+                            )
                         }
                     }
 
-                    // ── 6. Confirm Button ─────────────────────────
-                    val isFormComplete = checkInDate.isNotEmpty() && checkOutDate.isNotEmpty()
+                    // 6. Confirm Booking button
+                    val isFormComplete =
+                        checkInDate.isNotEmpty() && checkOutDate.isNotEmpty()
 
                     Button(
                         onClick = {
-                            // ✅ FIX: Double tap guard
+                            // Double tap guard
                             if (isSubmitting) return@Button
                             isSubmitting = true
 
                             val sdfParse = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-                            val checkIn  = try { sdfParse.parse(checkInDate)  } catch (e: Exception) { null }
-                            val checkOut = try { sdfParse.parse(checkOutDate) } catch (e: Exception) { null }
+                            val checkIn  = try {
+                                sdfParse.parse(checkInDate)
+                            } catch (e: Exception) { null }
+                            val checkOut = try {
+                                sdfParse.parse(checkOutDate)
+                            } catch (e: Exception) { null }
 
                             val booking = Booking(
                                 propertyId       = propertyId,
@@ -383,13 +499,16 @@ fun BookingScreen(
                                 totalNights      = nights,
                                 guestCount       = guests,
                                 paymentMethod    = "Pending",
-                                checkInDate      = checkIn?.let  { com.google.firebase.Timestamp(it) },
-                                checkOutDate     = checkOut?.let { com.google.firebase.Timestamp(it) }
+                                checkInDate      = checkIn?.let {
+                                    com.google.firebase.Timestamp(it)
+                                },
+                                checkOutDate     = checkOut?.let {
+                                    com.google.firebase.Timestamp(it)
+                                }
                             )
                             viewModel.createBooking(booking)
                         },
                         modifier = Modifier.fillMaxWidth().height(54.dp),
-                        // ✅ FIX: isSubmitting bhi disabled condition mein add
                         enabled  = !uiState.isLoading && isFormComplete && !isSubmitting,
                         shape    = RoundedCornerShape(12.dp),
                         colors   = ButtonDefaults.buttonColors(
@@ -400,9 +519,17 @@ fun BookingScreen(
                         )
                     ) {
                         if (uiState.isLoading || isSubmitting) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                            CircularProgressIndicator(
+                                modifier    = Modifier.size(20.dp),
+                                color       = Color.White,
+                                strokeWidth = 2.dp
+                            )
                         } else {
-                            Text("Confirm Booking", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Confirm Booking",
+                                fontSize   = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
 
@@ -418,7 +545,52 @@ fun BookingScreen(
     }
 }
 
-// ── Counter Row ───────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// BOOKING BLOCKED CARD
+// Shown when booking is not possible — not approved, or already booked.
+// isBooked = true shows a house icon + different wording.
+// ════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun BookingBlockedCard(
+    message : String,
+    isBooked: Boolean = false
+) {
+    val bgColor   = if (isBooked) Color(0xFFFFF3E0) else Color(0xFFFFEBEE)
+    val textColor = if (isBooked) Color(0xFFE65100) else Color(0xFFB71C1C)
+
+    Card(
+        colors   = CardDefaults.cardColors(containerColor = bgColor),
+        modifier = Modifier.fillMaxWidth(),
+        shape    = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier          = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                // House icon for booked, warning for unapproved
+                imageVector = if (isBooked) Icons.Default.Home else Icons.Default.Warning,
+                contentDescription = null,
+                tint        = textColor,
+                modifier    = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                message,
+                color      = textColor,
+                fontSize   = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// COUNTER ROW
+// Reusable decrement / label / increment row for nights and guest counts.
+// ════════════════════════════════════════════════════════════════════════════
+
 @Composable
 private fun CounterRow(
     label      : String,
@@ -441,9 +613,17 @@ private fun CounterRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(
                 onClick  = onDecrement,
-                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(minusBg)
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(minusBg)
             ) {
-                Icon(Icons.Default.Remove, contentDescription = null, tint = textColor, modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Default.Remove,
+                    contentDescription = null,
+                    tint               = textColor,
+                    modifier           = Modifier.size(18.dp)
+                )
             }
             Text(
                 text       = "$count",
@@ -454,54 +634,36 @@ private fun CounterRow(
             )
             IconButton(
                 onClick  = onIncrement,
-                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(plusBg)
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(plusBg)
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = plusIconTint, modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = null,
+                    tint               = plusIconTint,
+                    modifier           = Modifier.size(18.dp)
+                )
             }
         }
     }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// PRICE ROW
+// Label + value pair inside the dark price breakdown card.
+// ════════════════════════════════════════════════════════════════════════════
+
 @Composable
 private fun PriceRow(label: String, value: String) {
     Row(
-        modifier              = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier              = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, fontSize = 13.sp, color = Color.White.copy(0.8f))
         Text(value, fontSize = 13.sp, color = Color.White)
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

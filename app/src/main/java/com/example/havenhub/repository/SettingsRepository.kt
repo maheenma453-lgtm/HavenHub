@@ -15,30 +15,32 @@ import javax.inject.Singleton
 @Singleton
 class SettingsRepository @Inject constructor(
     private val preferenceManager: PreferenceManager,
-    private val firestore: FirebaseFirestore
+    private val firestore        : FirebaseFirestore
 ) {
 
     private val userPreferencesCollection = firestore.collection("user_preferences")
-    private val appSettingsCollection = firestore.collection("app_settings")
+    private val appSettingsCollection     = firestore.collection("app_settings")
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Local Preferences (SharedPreferences)
+    // LOCAL PREFERENCES
     // ─────────────────────────────────────────────────────────────────────────
 
-    fun setDarkMode(isDarkMode: Boolean) = preferenceManager.setDarkMode(isDarkMode)
-    fun isDarkMode(): Boolean = preferenceManager.isDarkMode()
-
-    fun setLanguage(languageCode: String) = preferenceManager.setLanguage(languageCode)
-    fun getLanguage(): String = preferenceManager.getLanguage()
-
+    fun setDarkMode(isDarkMode: Boolean)        = preferenceManager.setDarkMode(isDarkMode)
+    fun isDarkMode(): Boolean                   = preferenceManager.isDarkMode()
+    fun setLanguage(languageCode: String)       = preferenceManager.setLanguage(languageCode)
+    fun getLanguage(): String                   = preferenceManager.getLanguage()
     fun setNotificationsEnabled(enabled: Boolean) = preferenceManager.setPushEnabled(enabled)
-    fun areNotificationsEnabled(): Boolean = preferenceManager.isPushEnabled()
+    fun areNotificationsEnabled(): Boolean      = preferenceManager.isPushEnabled()
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Remote User Preferences (Firestore)
+    // REMOTE USER PREFERENCES
     // ─────────────────────────────────────────────────────────────────────────
 
     suspend fun getUserPreferences(userId: String): Resource<UserPreferences> {
+        if (userId.isBlank()) {
+            return Resource.Error("Cannot fetch preferences: user ID is missing.")
+        }
+
         return try {
             val snapshot = userPreferencesCollection.document(userId).get().await()
 
@@ -49,19 +51,25 @@ class SettingsRepository @Inject constructor(
             val data = snapshot.data
                 ?: return Resource.Success(UserPreferences(userId = userId))
 
-            // ✅ FIX: updatedAt manually parse karo
-            // Purana data Long (epoch millis) ho sakta hai — crash rokne ke liye
-            val updatedAt = when (val raw = data["updatedAt"]) {
-                is Timestamp -> raw
-                is Long      -> Timestamp(Date(raw))
-                is Date      -> Timestamp(raw)
-                else         -> null
-            }
-
-            // ✅ toObject se baqi fields lo, sirf updatedAt override karo
-            val prefs = snapshot.toObject(UserPreferences::class.java)
-                ?.copy(updatedAt = updatedAt)
-                ?: UserPreferences(userId = userId, updatedAt = updatedAt)
+            // ✅ Manual parsing — missing fields automatically get Kotlin default values
+            // toObject() was failing silently when fields like locationAccess/dataSharing
+            // were absent from Firestore, returning null instead of the default value.
+            val prefs = UserPreferences(
+                userId               = data["userId"]               as? String  ?: userId,
+                notifyBookingUpdates = data["notifyBookingUpdates"] as? Boolean ?: true,
+                notifyMessages       = data["notifyMessages"]       as? Boolean ?: true,
+                notifyPayments       = data["notifyPayments"]       as? Boolean ?: true,
+                notifyPromotions     = data["notifyPromotions"]     as? Boolean ?: false,
+                notifyAdminAlerts    = data["notifyAdminAlerts"]    as? Boolean ?: true,
+                isProfilePublic      = data["isProfilePublic"]      as? Boolean ?: true,
+                showPhoneNumber      = data["showPhoneNumber"]      as? Boolean ?: false,
+                showEmail            = data["showEmail"]            as? Boolean ?: false,
+                locationAccess       = data["locationAccess"]       as? Boolean ?: true,
+                dataSharing          = data["dataSharing"]          as? Boolean ?: false,
+                preferredLanguage    = data["preferredLanguage"]    as? String  ?: "en",
+                isDarkMode           = data["isDarkMode"]           as? Boolean ?: false,
+                updatedAt            = parseTimestamp(data["updatedAt"])
+            )
 
             Resource.Success(prefs)
 
@@ -71,40 +79,49 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun saveUserPreferences(preferences: UserPreferences): Resource<Unit> {
+        if (preferences.userId.isBlank()) {
+            return Resource.Error("Cannot save preferences: user ID is missing.")
+        }
+
         return try {
-            // ✅ Save karte waqt Timestamp.now() set karo taake future reads sahi hon
             val updatedPrefs = preferences.copy(updatedAt = Timestamp.now())
+
             userPreferencesCollection
                 .document(updatedPrefs.userId)
                 .set(updatedPrefs)
                 .await()
+
             Resource.Success(Unit)
+
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to save user preferences")
         }
     }
 
-    // ✅ FIXED: update() ki jagah set() with merge use kiya
-    // Pehle agar document exist nahi hota tha to crash ho jata tha
-    // Ab document na ho to khud bana leta hai, ho to sirf update karta hai
     suspend fun updateUserPreferences(userId: String, fields: Map<String, Any>): Resource<Unit> {
+        if (userId.isBlank()) {
+            return Resource.Error("Cannot update preferences: user ID is missing.")
+        }
+
         return try {
-            // ✅ updatedAt har update pe Timestamp format mein set karo
             val updatedFields = fields.toMutableMap().apply {
                 put("updatedAt", Timestamp.now())
             }
+
             userPreferencesCollection
                 .document(userId)
                 .set(updatedFields, SetOptions.merge())
                 .await()
+
             Resource.Success(Unit)
+
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to update user preferences")
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Global App Settings (Firestore)
+    // GLOBAL APP SETTINGS
     // ─────────────────────────────────────────────────────────────────────────
 
     suspend fun getAppSettings(): Resource<AppSettings> {
@@ -117,30 +134,24 @@ class SettingsRepository @Inject constructor(
 
             val data = snapshot.data ?: return Resource.Success(AppSettings())
 
-            // ✅ Already fixed — Long/Date/Timestamp sab handle ho rahe hain
-            val updatedAt = when (val raw = data["updatedAt"]) {
-                is Timestamp -> raw
-                is Date      -> Timestamp(raw)
-                is Long      -> Timestamp(Date(raw))
-                else         -> Timestamp.now()
-            }
+            val updatedAt = parseTimestamp(data["updatedAt"]) ?: Timestamp.now()
 
             val settings = AppSettings(
-                isMaintenanceMode    = data["isMaintenanceMode"] as? Boolean ?: false,
-                maintenanceMessage   = data["maintenanceMessage"] as? String,
-                minimumAppVersion    = data["minimumAppVersion"] as? String ?: "1.0.0",
-                latestAppVersion     = data["latestAppVersion"] as? String ?: "1.0.0",
-                forceUpdate          = data["forceUpdate"] as? Boolean ?: false,
-                platformFeePercent   = (data["platformFeePercent"] as? Number)?.toDouble() ?: 5.0,
-                maxPropertyImages    = (data["maxPropertyImages"] as? Number)?.toInt() ?: 10,
-                maxBookingDaysAdvance = (data["maxBookingDaysAdvance"] as? Number)?.toInt() ?: 90,
-                featuredPropertyIds  = (data["featuredPropertyIds"] as? List<*>)
+                isMaintenanceMode     = data["isMaintenanceMode"]      as? Boolean ?: false,
+                maintenanceMessage    = data["maintenanceMessage"]      as? String,
+                minimumAppVersion     = data["minimumAppVersion"]       as? String  ?: "1.0.0",
+                latestAppVersion      = data["latestAppVersion"]        as? String  ?: "1.0.0",
+                forceUpdate           = data["forceUpdate"]             as? Boolean ?: false,
+                platformFeePercent    = (data["platformFeePercent"]     as? Number)?.toDouble() ?: 5.0,
+                maxPropertyImages     = (data["maxPropertyImages"]      as? Number)?.toInt()    ?: 10,
+                maxBookingDaysAdvance = (data["maxBookingDaysAdvance"]  as? Number)?.toInt()    ?: 90,
+                featuredPropertyIds   = (data["featuredPropertyIds"]    as? List<*>)
                     ?.filterIsInstance<String>() ?: emptyList(),
-                announcementBanner   = data["announcementBanner"] as? String,
-                supportEmail         = data["supportEmail"] as? String ?: "support@havenhub.co.za",
-                termsOfServiceUrl    = data["termsOfServiceUrl"] as? String ?: "https://havenhub.co.za/terms",
-                privacyPolicyUrl     = data["privacyPolicyUrl"] as? String ?: "https://havenhub.co.za/privacy",
-                updatedAt            = updatedAt
+                announcementBanner    = data["announcementBanner"]      as? String,
+                supportEmail          = data["supportEmail"]            as? String  ?: "support@havenhub.co.za",
+                termsOfServiceUrl     = data["termsOfServiceUrl"]       as? String  ?: "https://havenhub.co.za/terms",
+                privacyPolicyUrl      = data["privacyPolicyUrl"]        as? String  ?: "https://havenhub.co.za/privacy",
+                updatedAt             = updatedAt
             )
 
             Resource.Success(settings)
@@ -148,5 +159,16 @@ class SettingsRepository @Inject constructor(
         } catch (e: Exception) {
             Resource.Error(e.localizedMessage ?: "Failed to fetch app settings")
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PRIVATE HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun parseTimestamp(raw: Any?): Timestamp? = when (raw) {
+        is Timestamp -> raw
+        is Long      -> Timestamp(Date(raw))
+        is Date      -> Timestamp(raw)
+        else         -> null
     }
 }

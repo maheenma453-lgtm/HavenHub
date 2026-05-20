@@ -22,7 +22,8 @@ class ReviewRepository @Inject constructor(
     private val propertiesCol = firestore.collection("properties")
     private val reviewsCol    = firestore.collection("reviews")
 
-    // ── WRITE ─────────────────────────────────────────────────────────────────
+    // ── Add New Review ────────────────────────────────────────────────────────
+    // Tenant submits a review — saves to Firestore + notifies landlord & admin
     suspend fun addReview(review: Review): Resource<String> {
         val result = dataManager.addReview(review)
         if (result is Resource.Success) {
@@ -31,7 +32,8 @@ class ReviewRepository @Inject constructor(
         return result
     }
 
-    // ── LANDLORD REPLY ────────────────────────────────────────────────────────
+    // ── Landlord Reply ────────────────────────────────────────────────────────
+    // Landlord replies to a tenant's review — saves reply + notifies tenant
     suspend fun replyToReview(
         reviewId     : String,
         propertyId   : String,
@@ -40,23 +42,21 @@ class ReviewRepository @Inject constructor(
         reviewerName : String
     ): Resource<Unit> {
         return try {
-            // Firestore mein review document update karo
             reviewsCol.document(reviewId).update(
                 mapOf(
-                    "landlordReply"    to reply,
-                    "hasLandlordReply" to true,
+                    "landlordReply"     to reply,
+                    "hasLandlordReply"  to true,
                     "landlordRepliedAt" to Timestamp.now()
                 )
             ).await()
 
-            // Tenant ko notification bhejo
             val propertyTitle = fetchPropertyTitle(propertyId)
             if (tenantId.isNotBlank()) {
                 notificationRepository.sendNotification(
                     recipientId = tenantId,
                     type        = NotificationType.NEW_REVIEW,
-                    title       = "Landlord ne aapke review ka jawab diya 💬",
-                    body        = "\"$propertyTitle\" ke landlord ne aapke review ka reply kiya: \"$reply\"",
+                    title       = "Landlord replied to your review 💬",
+                    body        = "The landlord of \"$propertyTitle\" replied: \"$reply\"",
                     referenceId = propertyId,
                     targetRole  = "tenant"
                 )
@@ -66,17 +66,148 @@ class ReviewRepository @Inject constructor(
             Resource.Success(Unit)
         } catch (e: Exception) {
             Log.e("REVIEW_REPO", "replyToReview error: ${e.localizedMessage}")
-            Resource.Error(e.localizedMessage ?: "Reply submit karne mein error aayi")
+            Resource.Error(e.localizedMessage ?: "Failed to submit reply")
         }
     }
 
-    // ── READ ──────────────────────────────────────────────────────────────────
+    // ── Delete Vulgar Review (Landlord Only) ──────────────────────────────────
+    // Landlord can delete a vulgar/abusive tenant review from their own property
+    // Security: landlord can only delete reviews where propertyId matches their property
+    suspend fun deleteReview(
+        reviewId   : String,
+        propertyId : String,
+        landlordId : String
+    ): Resource<Unit> {
+        return try {
+            // Step 1: Verify this review actually belongs to the property
+            val reviewDoc        = reviewsCol.document(reviewId).get().await()
+            val reviewPropertyId = reviewDoc.getString("propertyId") ?: ""
+
+            if (reviewPropertyId != propertyId) {
+                return Resource.Error("You can only delete reviews on your own properties")
+            }
+
+            // Step 2: Verify the property belongs to this landlord
+            val propertyDoc = propertiesCol.document(propertyId).get().await()
+            val ownerId = propertyDoc.getString("ownerId")
+                ?: propertyDoc.getString("landlordId")
+                ?: propertyDoc.getString("userId")
+                ?: ""
+
+            if (ownerId != landlordId) {
+                return Resource.Error("You are not authorized to delete this review")
+            }
+
+            // Step 3: All checks passed — delete the review
+            reviewsCol.document(reviewId).delete().await()
+            Log.d("REVIEW_REPO", "✅ Vulgar review deleted by landlord: $reviewId")
+            Resource.Success(Unit)
+
+        } catch (e: Exception) {
+            Log.e("REVIEW_REPO", "deleteReview error: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to delete review")
+        }
+    }
+
+    // ── Delete Own Review (Tenant Only) ──────────────────────────────────────
+    // Tenant apna khud ka review delete kar sakta hai
+    //
+    // Security layers:
+    //   1. reviewerId == tenantId verify hota hai Firestore se (UI pe trust nahi)
+    //   2. Firestore rules bhi ensure karti hain k sirf owner delete kare
+    //
+    // Agar koi dusre ka reviewId bheje → "You can only delete your own reviews" error
+    suspend fun deleteOwnReview(
+        reviewId : String,
+        tenantId : String
+    ): Resource<Unit> {
+        return try {
+            // Step 1: Review fetch karo Firestore se
+            val reviewDoc = reviewsCol.document(reviewId).get().await()
+
+            if (!reviewDoc.exists()) {
+                return Resource.Error("Review not found")
+            }
+
+            // Step 2: Verify karo k yeh review is tenant ka apna hai
+            // tenantId FirebaseAuth.uid se aata hai — UI se nahi
+            val reviewerId = reviewDoc.getString("reviewerId") ?: ""
+            if (reviewerId != tenantId) {
+                Log.w("REVIEW_REPO", "⛔ Unauthorized delete attempt: tenant=$tenantId, reviewer=$reviewerId")
+                return Resource.Error("You can only delete your own reviews")
+            }
+
+            // Step 3: Ownership confirmed — Firestore se delete karo
+            reviewsCol.document(reviewId).delete().await()
+            Log.d("REVIEW_REPO", "✅ Tenant deleted own review: $reviewId")
+            Resource.Success(Unit)
+
+        } catch (e: Exception) {
+            Log.e("REVIEW_REPO", "deleteOwnReview error: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to delete your review")
+        }
+    }
+
+    // ── Get Reviews by Property ───────────────────────────────────────────────
+    // Returns all reviews for a specific property
     suspend fun getPropertyReviews(propertyId: String): Resource<List<Review>> =
         dataManager.getReviewsByProperty(propertyId)
 
+    // ── Get All Reviews ───────────────────────────────────────────────────────
+    // Returns every review across the platform (GlobalReviewsScreen for tenant/admin)
     suspend fun getAllReviews(): Resource<List<Review>> =
         dataManager.getAllReviews()
 
+    // ── Get Reviews for Landlord's Own Properties ─────────────────────────────
+    // Fetches only the reviews that belong to properties owned by this landlord
+    // Used in GlobalReviewsScreen when user role is LANDLORD
+    suspend fun getReviewsForLandlord(landlordId: String): Resource<List<Review>> {
+        return try {
+            // Step 1: Is landlord ki saari properties ka ID nikalo
+            val propertiesSnapshot = propertiesCol
+                .whereEqualTo("ownerId", landlordId)
+                .get()
+                .await()
+
+            val propertyIds = propertiesSnapshot.documents.map { it.id }
+
+            if (propertyIds.isEmpty()) {
+                Log.d("REVIEW_REPO", "Landlord $landlordId has no properties — returning empty")
+                return Resource.Success(emptyList())
+            }
+
+            // Step 2: Firestore 'whereIn' max 10 items support karta hai
+            // 10 se zyada properties hain to chunked queries use hoti hain
+            val allReviews = mutableListOf<Review>()
+            val batches    = propertyIds.chunked(10)
+
+            for (batch in batches) {
+                val snapshot = reviewsCol
+                    .whereIn("propertyId", batch)
+                    .get()
+                    .await()
+
+                val reviews = snapshot.documents.mapNotNull { doc ->
+                    try {
+                        doc.toObject(Review::class.java)
+                    } catch (e: Exception) {
+                        Log.e("REVIEW_REPO", "Parse fail for review ${doc.id}: ${e.localizedMessage}")
+                        null
+                    }
+                }
+                allReviews.addAll(reviews)
+            }
+
+            Log.d("REVIEW_REPO", "Landlord reviews fetched: ${allReviews.size}")
+            Resource.Success(allReviews)
+
+        } catch (e: Exception) {
+            Log.e("REVIEW_REPO", "getReviewsForLandlord error: ${e.localizedMessage}")
+            Resource.Error(e.localizedMessage ?: "Failed to fetch your property reviews")
+        }
+    }
+
+    // ── Get Average Rating ────────────────────────────────────────────────────
     suspend fun getAverageRating(propertyId: String): Resource<Double> {
         val reviewsResult = dataManager.getReviewsByProperty(propertyId)
         if (reviewsResult is Resource.Error) return Resource.Error(reviewsResult.message)
@@ -96,23 +227,19 @@ class ReviewRepository @Inject constructor(
             val propertyId    = review.propertyId
             val propertyTitle = fetchPropertyTitle(propertyId)
 
-            // 1. Landlord ko NEW_REVIEW batao
             val landlordId = resolveLandlordId(propertyId, review)
             if (landlordId.isNotBlank()) {
                 notificationRepository.sendNotification(
                     recipientId = landlordId,
                     type        = NotificationType.NEW_REVIEW,
                     title       = "New Review Received ⭐",
-                    body        = "$reviewerName ne \"$propertyTitle\" ko $rating star diye.",
+                    body        = "$reviewerName rated \"$propertyTitle\" $rating stars.",
                     referenceId = propertyId,
                     targetRole  = "landlord"
                 )
                 Log.d("REVIEW_REPO", "✅ Review notification sent to landlord $landlordId")
             }
-
-            // 2. Admin ko bhi inform karo
             sendReviewNotificationToAdmins(reviewerName, propertyTitle, rating, propertyId)
-
         } catch (e: Exception) {
             Log.e("REVIEW_REPO", "sendReviewNotifications error: ${e.localizedMessage}")
         }
@@ -123,10 +250,7 @@ class ReviewRepository @Inject constructor(
         return try {
             val doc = propertiesCol.document(propertyId).get().await()
             doc.getString("title") ?: "Property"
-        } catch (e: Exception) {
-            Log.e("REVIEW_REPO", "fetchPropertyTitle error: ${e.localizedMessage}")
-            "Property"
-        }
+        } catch (e: Exception) { "Property" }
     }
 
     private suspend fun resolveLandlordId(propertyId: String, review: Review): String {
@@ -138,10 +262,7 @@ class ReviewRepository @Inject constructor(
                 ?: doc.getString("landlordId")
                 ?: doc.getString("userId")
                 ?: ""
-        } catch (e: Exception) {
-            Log.e("REVIEW_REPO", "resolveLandlordId error: ${e.localizedMessage}")
-            ""
-        }
+        } catch (e: Exception) { "" }
     }
 
     private suspend fun sendReviewNotificationToAdmins(
@@ -160,7 +281,7 @@ class ReviewRepository @Inject constructor(
                     recipientId = doc.id,
                     type        = NotificationType.NEW_REVIEW,
                     title       = "New Review Posted",
-                    body        = "$reviewerName ne \"$propertyTitle\" ko $rating star diye.",
+                    body        = "$reviewerName rated \"$propertyTitle\" $rating stars.",
                     referenceId = propertyId,
                     targetRole  = "admin"
                 )

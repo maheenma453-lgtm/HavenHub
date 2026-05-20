@@ -18,7 +18,6 @@ import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.NotificationViewModel
 import com.example.havenhub.viewmodel.MessagingViewModel
 
-// ── Auth flow routes — no bottom bar shown on these ──────────────────────────
 private val authRoutes = listOf(
     Screen.Splash.route,
     Screen.Onboarding.route,
@@ -28,7 +27,6 @@ private val authRoutes = listOf(
     Screen.ForgotPassword.route
 )
 
-// ── Routes only accessible by admin role (both super_admin and sub_admin) ─────
 private val strictAdminRoutes = listOf(
     Screen.AdminDashboard.route,
     Screen.ManageUsers.route,
@@ -42,7 +40,6 @@ private val strictAdminRoutes = listOf(
     Screen.PaymentReports.route,
 )
 
-// ── Routes accessible by all logged-in users ──────────────────────────────────
 private val sharedRoutes = listOf(
     Screen.Notifications.route,
     Screen.NotificationDetail.route,
@@ -62,25 +59,16 @@ private val sharedRoutes = listOf(
 fun HavenHubNavGraph(
     navController: NavHostController
 ) {
-    val authViewModel   : AuthViewModel        = hiltViewModel()
-    val uiState         by authViewModel.uiState.collectAsState()
+    val authViewModel        : AuthViewModel         = hiltViewModel()
+    val uiState              by authViewModel.uiState.collectAsState()
     val notificationViewModel: NotificationViewModel = hiltViewModel()
     val messagingViewModel   : MessagingViewModel    = hiltViewModel()
-    val messagingUiState by messagingViewModel.uiState.collectAsState()
+    val messagingUiState     by messagingViewModel.uiState.collectAsState()
 
-    val currentUserId = uiState.currentUser?.uid ?: ""
+    val currentUserId         = uiState.currentUser?.uid ?: ""
+    val isCurrentUserLandlord = uiState.userRole == "landlord"
+    val isCurrentUserAdmin    = uiState.userRole == "admin"
 
-    // ── Role flags ────────────────────────────────────────────────────────────
-    val isCurrentUserLandlord : Boolean = uiState.userRole == "landlord"
-
-    // isAdmin is true for both super_admin and sub_admin
-    val isCurrentUserAdmin    : Boolean = uiState.userRole == "admin"
-
-    // adminType determines super_admin vs sub_admin inside admin role
-    val isSuperAdmin          : Boolean = isCurrentUserAdmin && uiState.adminType == "super_admin"
-    val isSubAdmin            : Boolean = isCurrentUserAdmin && uiState.adminType == "sub_admin"
-
-    // Redirect to SignIn if user is not logged in
     LaunchedEffect(uiState.isLoggedIn, uiState.isAuthReady) {
         if (uiState.isAuthReady && !uiState.isLoggedIn) {
             val currentRoute = navController.currentBackStackEntry?.destination?.route
@@ -103,7 +91,6 @@ fun HavenHubNavGraph(
     val currentRoute = navBackStackEntry?.destination?.route
 
     val isAuthRoute  = currentRoute in authRoutes
-
     val isAdminRoute = when {
         strictAdminRoutes.any { currentRoute == it }                     -> true
         currentRoute?.startsWith("property_verification_detail") == true -> true
@@ -112,11 +99,12 @@ fun HavenHubNavGraph(
         currentRoute?.startsWith("notification_detail") == true          -> isCurrentUserAdmin
         else                                                             -> false
     }
+    val isExploreMap = currentRoute == Screen.ExploreMap.route
 
     Scaffold(
         bottomBar = {
             when {
-                isAuthRoute  -> { /* No bottom bar on auth screens */ }
+                isAuthRoute || isExploreMap -> { }
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
                 else         -> BottomNavBar(
                     navController      = navController,
@@ -157,9 +145,21 @@ fun HavenHubNavGraph(
             composable(Screen.Search.route) { SearchScreen(navController) }
             composable(Screen.Filter.route) { FilterScreen(navController) }
 
+// ── Explore Map ───────────────────────────────────────────────────────────────
+            composable(Screen.ExploreMap.route) {
+                ExploreMapScreen(navController = navController)
+            }
+
 // ── Global Reviews ────────────────────────────────────────────────────────────
+// FIX: currentUserId aur isLandlord dono pass kiye —
+// pehle yeh missing the isliye isOwnReview hamesha false tha
+// aur tenant ka delete button kabhi nahi dikhta tha
             composable(Screen.GlobalReviews.route) {
-                GlobalReviewsScreen(navController = navController)
+                GlobalReviewsScreen(
+                    navController = navController,
+                    isLandlord    = isCurrentUserLandlord,  // ← FIXED: pehle pass nahi tha
+                    currentUserId = currentUserId           // ← FIXED: yeh bhi missing tha
+                )
             }
 
 // ── Property ──────────────────────────────────────────────────────────────────
@@ -361,10 +361,9 @@ fun HavenHubNavGraph(
                     }
                 )
             ) { back ->
-                val pid = back.arguments?.getString(Screen.AddReview.ARG_PROPERTY_ID) ?: ""
                 AddReviewScreen(
                     navController = navController,
-                    propertyId    = pid,
+                    propertyId    = back.arguments?.getString(Screen.AddReview.ARG_PROPERTY_ID) ?: "",
                     bookingId     = "",
                     propertyTitle = ""
                 )
@@ -481,72 +480,34 @@ fun HavenHubNavGraph(
                 )
             }
 
-// ── Admin ─────────────────────────────────────────────────────────────────────
-// Both super_admin and sub_admin land on AdminDashboard
-// AdminDashboard internally checks isSuperAdmin vs isSubAdmin
-// and shows/hides options based on adminType and permissions
-
+// ── Admin Screens ─────────────────────────────────────────────────────────────
             composable(Screen.AdminDashboard.route) {
-                AdminDashboardScreen(
-                    navController = navController,
-                    isSuperAdmin  = isSuperAdmin   // dashboard uses this to show full vs limited UI
-                )
+                AdminDashboardScreen(navController = navController)
             }
 
-            // Manage Users — super_admin always, sub_admin only if canViewUsers == true
             composable(Screen.ManageUsers.route) {
-                when {
-                    isSuperAdmin -> ManageUsersScreen(navController)
-                    isSubAdmin && uiState.permissions.canViewUsers -> ManageUsersScreen(navController)
-                    else -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-                }
+                if (isCurrentUserAdmin) ManageUsersScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
             composable(Screen.ManageProperties.route) {
-                when {
-                    isSuperAdmin -> ManagePropertiesScreen(navController)
-                    isSubAdmin && uiState.permissions.canApproveProperties ->
-                        ManagePropertiesScreen(navController)
-                    else -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-                }
+                if (isCurrentUserAdmin) ManagePropertiesScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
-            // Manage Bookings — super_admin always, sub_admin only if canViewBookings == true
             composable(Screen.ManageBookings.route) {
-                when {
-                    isSuperAdmin -> ManageBookingsScreen(navController)
-                    isSubAdmin && uiState.permissions.canViewBookings -> ManageBookingsScreen(navController)
-                    else -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-                }
+                if (isCurrentUserAdmin) ManageBookingsScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
-            // Verify Properties — super_admin always, sub_admin only if canApproveProperties == true
             composable(Screen.VerifyProperties.route) {
-                when {
-                    isSuperAdmin -> VerifyPropertiesScreen(navController)
-                    isSubAdmin && uiState.permissions.canApproveProperties ->
-                        VerifyPropertiesScreen(navController)
-                    else -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-                }
+                if (isCurrentUserAdmin) VerifyPropertiesScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
-            // Verify Users — super_admin only
             composable(Screen.VerifyUsers.route) {
-                when {
-                    isSuperAdmin -> VerifyUsersScreen(navController)
-                    isSubAdmin && uiState.permissions.canVerifyUsers -> VerifyUsersScreen(navController)
-                    else -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-                }
+                if (isCurrentUserAdmin) VerifyUsersScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
             composable(
@@ -581,26 +542,14 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // Reports — super_admin always, sub_admin only if canViewPayments == true
             composable(Screen.Reports.route) {
-                when {
-                    isSuperAdmin -> ReportsScreen(navController)
-                    isSubAdmin && uiState.permissions.canViewPayments -> ReportsScreen(navController)
-                    else -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-                }
+                if (isCurrentUserAdmin) ReportsScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
             composable(Screen.PaymentReports.route) {
-                when {
-                    isSuperAdmin -> PaymentReportsScreen(navController)
-                    isSubAdmin && uiState.permissions.canViewPayments ->
-                        PaymentReportsScreen(navController)
-                    else -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-                }
+                if (isCurrentUserAdmin) PaymentReportsScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
             }
         }
     }

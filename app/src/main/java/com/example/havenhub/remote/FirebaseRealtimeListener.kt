@@ -4,6 +4,12 @@ import android.util.Log
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.Message
 import com.example.havenhub.data.Notification
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ServerValue
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
@@ -13,13 +19,32 @@ import kotlinx.coroutines.flow.callbackFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// ══════════════════════════════════════════════════════════════════════════════
+// FirebaseRealtimeListener
+//
+// This class handles two separate Firebase systems:
+//   1. Firestore  → Messages, Notifications, Bookings (real-time listeners)
+//   2. Realtime Database → User Online Presence (isOnline / lastSeen)
+//
+// Why Realtime DB for presence?
+//   Firestore does NOT support .onDisconnect() — so if the app crashes or
+//   loses connection, Firestore cannot automatically mark the user offline.
+//   Firebase Realtime Database has built-in .onDisconnect() which runs
+//   server-side even if the client disconnects abruptly.
+// ══════════════════════════════════════════════════════════════════════════════
+
 @Singleton
 class FirebaseRealtimeListener @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore       : FirebaseFirestore,
+    private val realtimeDatabase: FirebaseDatabase        // ✦ Injected via FirebaseModule
 ) {
 
     // ══════════════════════════════════════════════════════════════════════════
-    // MESSAGING
+    // SECTION 1 — MESSAGING (Firestore)
+    //
+    // Listens to messages inside a conversation document in real-time.
+    // Path: conversations/{conversationId}/messages
+    // Ordered by timestamp ascending so newest message appears at bottom.
     // ══════════════════════════════════════════════════════════════════════════
 
     fun listenToMessages(conversationId: String): Flow<List<Message>> = callbackFlow {
@@ -30,7 +55,7 @@ class FirebaseRealtimeListener @Inject constructor(
             .orderBy("timestamp", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("REALTIME", "listenToMessages: ${error.localizedMessage}")
+                    Log.e("REALTIME", "listenToMessages error: ${error.localizedMessage}")
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -40,90 +65,152 @@ class FirebaseRealtimeListener @Inject constructor(
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // ✦ NEW — USER PRESENCE (Online / Last Seen)
+    // SECTION 2 — USER PRESENCE (Firebase Realtime Database)
     //
-    // Firebase Realtime Database mein user presence track karta hai.
-    // Structure:
-    //   /status/{userId}/
-    //     - isOnline: Boolean
-    //     - lastSeen: Long (epoch ms)
+    // Realtime DB path: /status/{userId}/
+    //   - isOnline : Boolean  → true if user is currently in the app
+    //   - lastSeen : Long     → epoch milliseconds of last seen time
     //
-    // ChatScreen header mein "Online" ya "Last seen 10:30 AM" dikhane ke liye.
+    // How it works:
+    //   • When user opens the app → set isOnline=true via updateMyPresence()
+    //   • When user closes/backgrounds app → set isOnline=false manually
+    //   • If app CRASHES or network drops → .onDisconnect() runs server-side
+    //     automatically and sets isOnline=false + lastSeen=ServerValue.TIMESTAMP
+    //
+    // This guarantees the user is never stuck as "Online" after a crash.
     // ══════════════════════════════════════════════════════════════════════════
 
+    /**
+     * Data class representing another user's online presence state.
+     * Used in MessagingUiState and displayed in ChatScreen header.
+     */
     data class UserPresence(
         val isOnline: Boolean = false,
-        val lastSeen: Long    = 0L
+        val lastSeen: Long = 0L
     )
 
+    /**
+     * Observe another user's online/lastSeen status in real-time.
+     * Call this when ChatScreen opens with the other user's ID.
+     *
+     * Returns a Flow<UserPresence> that emits whenever the other user's
+     * presence changes (they come online, go offline, etc.).
+     */
     fun listenToUserPresence(userId: String): Flow<UserPresence> = callbackFlow {
+        // Guard: empty userId — emit default (offline) and close
         if (userId.isEmpty()) {
             trySend(UserPresence())
             awaitClose()
             return@callbackFlow
         }
 
-        val reg: ListenerRegistration = firestore
-            .collection("status")
-            .document(userId)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("REALTIME", "listenToUserPresence: ${error.localizedMessage}")
-                    trySend(UserPresence())
-                    return@addSnapshotListener
-                }
-                val isOnline = snapshot?.getBoolean("isOnline") ?: false
-                val lastSeen = snapshot?.getLong("lastSeen") ?: 0L
+        // Reference to /status/{userId} in Realtime Database
+        val presenceRef: DatabaseReference = realtimeDatabase
+            .getReference("status")
+            .child(userId)
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                // Read isOnline field — default false if missing
+                val isOnline = snapshot.child("isOnline").getValue(Boolean::class.java) ?: false
+
+                // Read lastSeen field — default 0 if missing
+                val lastSeen = snapshot.child("lastSeen").getValue(Long::class.java) ?: 0L
+
+                Log.d("PRESENCE", "userId=$userId isOnline=$isOnline lastSeen=$lastSeen")
                 trySend(UserPresence(isOnline = isOnline, lastSeen = lastSeen))
             }
-        awaitClose { reg.remove() }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("PRESENCE", "listenToUserPresence cancelled: ${error.message}")
+                trySend(UserPresence())   // emit offline on error
+            }
+        }
+
+        presenceRef.addValueEventListener(listener)
+
+        // When the Flow collector cancels (ChatScreen leaves composition)
+        // remove the listener to avoid memory leaks
+        awaitClose { presenceRef.removeEventListener(listener) }
     }
 
     /**
-     * Apni presence Firestore mein update karo.
-     * Call karo: app foreground mein aaye toh isOnline=true,
-     * background/close hone pe isOnline=false + lastSeen=now.
+     * Update the current logged-in user's presence in Realtime Database.
+     *
+     * Call with isOnline = true  → when user opens the app / returns to foreground
+     * Call with isOnline = false → when user goes to background or logs out
+     *
+     * IMPORTANT: This also sets up .onDisconnect() so the server automatically
+     * marks the user offline if the connection drops unexpectedly (crash, no internet).
+     *
+     * The .onDisconnect() is re-registered every time this function is called
+     * with isOnline = true, which is the correct pattern.
      */
     fun updateMyPresence(userId: String, isOnline: Boolean) {
         if (userId.isEmpty()) return
-        val data = if (isOnline) {
-            mapOf("isOnline" to true, "lastSeen" to System.currentTimeMillis())
+
+        // Reference to /status/{userId} in Realtime Database
+        val presenceRef: DatabaseReference = realtimeDatabase
+            .getReference("status")
+            .child(userId)
+
+        if (isOnline) {
+            // ── Going Online ──────────────────────────────────────────────────
+            // Step 1: Register .onDisconnect() BEFORE setting online=true.
+            //         This tells the Firebase server: "If this client disconnects
+            //         for any reason (crash, network loss), run this update."
+            //         ServerValue.TIMESTAMP = server fills in the exact time.
+            presenceRef.onDisconnect().updateChildren(
+                mapOf(
+                    "isOnline" to false,
+                    "lastSeen" to ServerValue.TIMESTAMP   // server-side timestamp
+                )
+            ).addOnSuccessListener {
+                // Step 2: Only after .onDisconnect() is registered, set online=true.
+                //         This ordering matters — if we set online first and then
+                //         .onDisconnect() registration fails, user stays stuck as online.
+                presenceRef.updateChildren(
+                    mapOf(
+                        "isOnline" to true,
+                        "lastSeen" to ServerValue.TIMESTAMP
+                    )
+                ).addOnFailureListener {
+                    Log.e("PRESENCE", "updateMyPresence online=true failed: ${it.localizedMessage}")
+                }
+            }.addOnFailureListener {
+                Log.e("PRESENCE", "onDisconnect registration failed: ${it.localizedMessage}")
+            }
+
         } else {
-            mapOf("isOnline" to false, "lastSeen" to System.currentTimeMillis())
+            // ── Going Offline (manual) ────────────────────────────────────────
+            // Called when user backgrounds the app or logs out gracefully.
+            // Cancel any pending .onDisconnect() (not strictly needed but clean).
+            presenceRef.onDisconnect().cancel()
+
+            presenceRef.updateChildren(
+                mapOf(
+                    "isOnline" to false,
+                    "lastSeen" to ServerValue.TIMESTAMP
+                )
+            ).addOnFailureListener {
+                Log.e("PRESENCE", "updateMyPresence online=false failed: ${it.localizedMessage}")
+            }
         }
-        firestore.collection("status").document(userId).set(data)
-            .addOnFailureListener { Log.e("REALTIME", "updateMyPresence failed: ${it.localizedMessage}") }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // NOTIFICATIONS — ✅ BUG FIX
+    // SECTION 3 — NOTIFICATIONS (Firestore)
     //
-    // PROBLEM WAS:
-    //   • Bell badge   → listenToAdminNotifications() → filter: targetRole == "admin"
-    //   • Screen count → listenToNotifications(userId) → filter: recipientId == userId
-    //   Dono ALAG queries the, isliye counts mismatch hote the (bell=5, screen=2).
-    //
-    // FIX:
-    //   • Bell badge (DashboardViewModel) → unreadNotifCount ab
-    //     listenToAdminNotifications() se aata hai (targetRole == "admin")
-    //     lekin yeh SIRF admin dashboard activity feed ke liye hai.
-    //
-    //   • AdminTopBar notification badge ab DashboardViewModel.unreadNotifCount
-    //     use karta hai jo sirf admin-targeted notifications count karta hai.
-    //
-    //   • NotificationsScreen → listenToNotifications(userId) use karta hai
-    //     jo recipientId == userId filter karta hai — screen pe wahi dikhega
-    //     jo is admin user ko bheja gaya hai.
-    //
-    //   SOLUTION: Admin ke liye dono same user ka userId use karein.
-    //   DashboardViewModel mein unreadNotifCount ab userId-based count se
-    //   aata hai, targetRole se nahi. Yeh fix DashboardViewModel mein hai.
+    // BUG FIX NOTES (kept from original):
+    //   • Bell badge uses listenToNotifications(userId) — recipientId filter
+    //   • Admin activity feed uses listenToAdminNotifications() — targetRole filter
+    //   • Both are separate flows to avoid count mismatch between badge & screen
     // ══════════════════════════════════════════════════════════════════════════
 
     /**
-     * User-specific notifications (recipientId == userId).
-     * NotificationsScreen + DashboardViewModel unread badge dono yahi use karein.
-     * orderBy hata diya — composite index issue avoid karne ke liye, client-side sort.
+     * Listen to notifications for a specific user (recipientId == userId).
+     * Used by: NotificationsScreen + DashboardViewModel unread badge.
+     * orderBy removed to avoid composite index requirement — sorted client-side.
      */
     fun listenToNotifications(userId: String): Flow<List<Notification>> = callbackFlow {
         if (userId.isEmpty()) {
@@ -134,27 +221,32 @@ class FirebaseRealtimeListener @Inject constructor(
         val reg: ListenerRegistration = firestore
             .collection("notifications")
             .whereEqualTo("recipientId", userId)
-            // ✅ orderBy removed — no composite index needed
+            // orderBy intentionally removed — no composite index needed
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("REALTIME", "listenToNotifications: ${error.localizedMessage}")
+                    Log.e("REALTIME", "listenToNotifications error: ${error.localizedMessage}")
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
+                // Sort client-side by createdAt descending
                 val list = snapshot
                     ?.toObjects(Notification::class.java)
-                    ?.sortedByDescending { it.createdAt?.seconds }  // ✅ client-side sort
+                    ?.sortedByDescending { it.createdAt?.seconds }
                     ?: emptyList()
-                Log.d("REALTIME", "✅ ${list.size} notifications | unread: ${list.count { !it.isRead }} | userId: $userId")
+
+                Log.d(
+                    "REALTIME",
+                    "Notifications: ${list.size} total | unread: ${list.count { !it.isRead }}"
+                )
                 trySend(list)
             }
         awaitClose { reg.remove() }
     }
 
     /**
-     * Admin activity feed — targetRole == "admin" wali notifications.
-     * ONLY dashboard "Recent Activity" section ke liye use karo.
-     * Badge count ke liye mat use karo — userId-based listenToNotifications use karo.
+     * Admin activity feed — only notifications with targetRole == "admin".
+     * Used ONLY for the dashboard recent activity section.
+     * Do NOT use this for the notification badge count.
      */
     fun listenToAdminNotifications(): Flow<List<Notification>> = callbackFlow {
         val reg: ListenerRegistration = firestore
@@ -162,7 +254,7 @@ class FirebaseRealtimeListener @Inject constructor(
             .whereEqualTo("targetRole", "admin")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("REALTIME", "listenToAdminNotifications: ${error.localizedMessage}")
+                    Log.e("REALTIME", "listenToAdminNotifications error: ${error.localizedMessage}")
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -170,14 +262,16 @@ class FirebaseRealtimeListener @Inject constructor(
                     ?.toObjects(Notification::class.java)
                     ?.sortedByDescending { it.createdAt?.seconds }
                     ?: emptyList()
-                Log.d("REALTIME", "✅ Admin activity feed: ${list.size}")
+
+                Log.d("REALTIME", "Admin activity feed: ${list.size} notifications")
                 trySend(list)
             }
         awaitClose { reg.remove() }
     }
 
     /**
-     * Dashboard recent activity section — last 15 admin notifications.
+     * Dashboard recent activity — last 15 admin-targeted notifications.
+     * Same as listenToAdminNotifications but limited to 15 items client-side.
      */
     fun listenToRecentActivities(): Flow<List<Notification>> = callbackFlow {
         val reg: ListenerRegistration = firestore
@@ -185,7 +279,7 @@ class FirebaseRealtimeListener @Inject constructor(
             .whereEqualTo("targetRole", "admin")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("REALTIME", "listenToRecentActivities: ${error.localizedMessage}")
+                    Log.e("REALTIME", "listenToRecentActivities error: ${error.localizedMessage}")
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -200,69 +294,89 @@ class FirebaseRealtimeListener @Inject constructor(
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // BOOKINGS
+    // SECTION 4 — BOOKINGS (Firestore)
+    //
+    // Real-time booking listeners for tenant, landlord, and admin views.
+    // All use Firestore snapshots with orderBy createdAt descending.
     // ══════════════════════════════════════════════════════════════════════════
 
+    /** Tenant's own bookings (tenantId == userId), newest first. */
     fun getBookingsFlow(userId: String): Flow<List<Booking>> = callbackFlow {
-        if (userId.isEmpty()) { trySend(emptyList()); awaitClose(); return@callbackFlow }
+        if (userId.isEmpty()) {
+            trySend(emptyList()); awaitClose(); return@callbackFlow
+        }
         val reg: ListenerRegistration = firestore
             .collection("bookings")
             .whereEqualTo("tenantId", userId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { Log.e("REALTIME", "getBookingsFlow: ${error.localizedMessage}"); trySend(emptyList()); return@addSnapshotListener }
+                if (error != null) {
+                    Log.e("REALTIME", "getBookingsFlow error: ${error.localizedMessage}")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
                 trySend(snapshot?.toObjects(Booking::class.java) ?: emptyList())
             }
         awaitClose { reg.remove() }
     }
 
+    /** All bookings for a specific property — used by landlord and admin. */
     fun listenToPropertyBookings(propertyId: String): Flow<List<Booking>> = callbackFlow {
         val reg: ListenerRegistration = firestore
             .collection("bookings")
             .whereEqualTo("propertyId", propertyId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { Log.e("REALTIME", "listenToPropertyBookings: ${error.localizedMessage}"); trySend(emptyList()); return@addSnapshotListener }
+                if (error != null) {
+                    Log.e("REALTIME", "listenToPropertyBookings error: ${error.localizedMessage}")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
                 trySend(snapshot?.toObjects(Booking::class.java) ?: emptyList())
             }
         awaitClose { reg.remove() }
     }
 
+    /** All bookings in the system — admin dashboard use only. */
     fun listenToAllBookings(): Flow<List<Booking>> = callbackFlow {
         val reg: ListenerRegistration = firestore
             .collection("bookings")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { Log.e("REALTIME", "listenToAllBookings: ${error.localizedMessage}"); trySend(emptyList()); return@addSnapshotListener }
-                val bookings = try { snapshot?.toObjects(Booking::class.java) ?: emptyList() }
-                catch (e: Exception) { Log.e("REALTIME", "Booking parse: ${e.localizedMessage}"); emptyList() }
-                Log.d("REALTIME", "✅ ${bookings.size} total bookings")
+                if (error != null) {
+                    Log.e("REALTIME", "listenToAllBookings error: ${error.localizedMessage}")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val bookings = try {
+                    snapshot?.toObjects(Booking::class.java) ?: emptyList()
+                } catch (e: Exception) {
+                    Log.e("REALTIME", "Booking parse error: ${e.localizedMessage}")
+                    emptyList()
+                }
+                Log.d("REALTIME", "All bookings: ${bookings.size}")
                 trySend(bookings)
             }
         awaitClose { reg.remove() }
     }
 
+    /** Landlord's incoming bookings (landlordId == landlordId), newest first. */
     fun listenToLandlordBookings(landlordId: String): Flow<List<Booking>> = callbackFlow {
-        if (landlordId.isEmpty()) { trySend(emptyList()); awaitClose(); return@callbackFlow }
+        if (landlordId.isEmpty()) {
+            trySend(emptyList()); awaitClose(); return@callbackFlow
+        }
         val reg: ListenerRegistration = firestore
             .collection("bookings")
             .whereEqualTo("landlordId", landlordId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { Log.e("REALTIME", "listenToLandlordBookings: ${error.localizedMessage}"); trySend(emptyList()); return@addSnapshotListener }
+                if (error != null) {
+                    Log.e("REALTIME", "listenToLandlordBookings error: ${error.localizedMessage}")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
                 trySend(snapshot?.toObjects(Booking::class.java) ?: emptyList())
             }
         awaitClose { reg.remove() }
     }
 }
-
-
-
-
-
-
-
-
-
-
-

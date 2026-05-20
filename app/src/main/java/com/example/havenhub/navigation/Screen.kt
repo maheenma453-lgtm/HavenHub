@@ -17,7 +17,6 @@ sealed class Screen(val route: String) {
     object Filter     : Screen("filter")
     object Favourites : Screen("favourites")
 
-    // Global Reviews Tab (replaces Search in bottom navbar)
     object GlobalReviews : Screen("global_reviews")
 
     object PropertyList : Screen("property_list")
@@ -32,11 +31,13 @@ sealed class Screen(val route: String) {
         fun createRoute(propertyId: String) = "edit_property/$propertyId"
     }
 
-    // ── NEW: Add Rental Package screen — landlord creates a package for their property ──
     object AddRentalPackage : Screen("add_rental_package/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "add_rental_package/$propertyId"
     }
+
+    // ── NEW: Explore Map ──────────────────────────────────────────────────────
+    object ExploreMap : Screen("explore_map")
 
     object Booking : Screen("booking/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
@@ -75,9 +76,6 @@ sealed class Screen(val route: String) {
         fun createRoute(bookingId: String) = "payment_success/$bookingId"
     }
 
-    // AddReview — propertyId is optional
-    // From PropertyDetailScreen : createRoute("abc123") → "add_review/abc123"
-    // From GlobalReviewsScreen  : createRoute("")       → "add_review/"  (search mode)
     object AddReview : Screen("add_review/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(propertyId: String) = "add_review/$propertyId"

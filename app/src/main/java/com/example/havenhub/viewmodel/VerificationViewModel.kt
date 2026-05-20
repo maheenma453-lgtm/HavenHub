@@ -7,7 +7,6 @@ import com.example.havenhub.data.Property
 import com.example.havenhub.data.User
 import com.example.havenhub.repository.NotificationRepository
 import com.example.havenhub.repository.PropertyRepository
-import com.example.havenhub.utils.Constants
 import com.example.havenhub.utils.NotificationHelper
 import com.example.havenhub.utils.Resource
 import com.google.firebase.firestore.FieldValue
@@ -22,13 +21,14 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class VerificationUiState(
-    val isLoading         : Boolean        = false,
-    val pendingProperties : List<Property> = emptyList(),
-    val pendingUsers      : List<User>     = emptyList(),
-    val selectedUser      : User?          = null,   // ✅ NEW: direct fetch ka result
-    val errorMessage      : String?        = null,
-    val successMessage    : String?        = null,
-    val actionSuccess     : Boolean        = false
+    val isLoading           : Boolean        = false,
+    val pendingProperties   : List<Property> = emptyList(),
+    val pendingUsers        : List<User>     = emptyList(),
+    val selectedUser        : User?          = null,     // Direct fetch result for user detail screen
+    val selectedProperty    : Property?      = null,     // ✅ NEW: Direct fetch result for property detail screen
+    val errorMessage        : String?        = null,
+    val successMessage      : String?        = null,
+    val actionSuccess       : Boolean        = false
 )
 
 @HiltViewModel
@@ -42,9 +42,13 @@ class VerificationViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(VerificationUiState())
     val uiState: StateFlow<VerificationUiState> = _uiState.asStateFlow()
 
-    private val usersCol = firestore.collection("users")
+    private val usersCol      = firestore.collection("users")
+    private val propertiesCol = firestore.collection("properties")
 
-    // ── Reset action state ────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // RESET / CLEAR HELPERS
+    // ════════════════════════════════════════════════════════════════════════
+
     fun resetActionState() {
         _uiState.update {
             it.copy(
@@ -55,12 +59,14 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    // ── Clear messages ────────────────────────────────────────────────────────
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, successMessage = null) }
     }
 
-    // ── Load pending properties ───────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // LOAD PENDING PROPERTIES (list screen)
+    // ════════════════════════════════════════════════════════════════════════
+
     fun loadPendingProperties() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -76,7 +82,128 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    // ── Load pending users ────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // ✅ NEW: LOAD SINGLE PROPERTY BY ID (detail screen direct open fix)
+    //
+    // Problem: PropertyVerificationDetailScreen property ko pendingProperties
+    // list mein dhundta tha. Agar admin directly detail screen pe navigate
+    // kare (notification tap, deep link) toh list empty hoti hai → "not found".
+    //
+    // Fix: Pehle pendingProperties check karo, agar nahi mila toh Firestore
+    // se direct fetch karo aur selectedProperty mein store karo.
+    // Screen dono sources se property read karta hai.
+    // ════════════════════════════════════════════════════════════════════════
+
+    fun loadPropertyById(propertyId: String) {
+        if (propertyId.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Invalid property ID") }
+            return
+        }
+
+        // Step 1: already list mein hai?
+        val cached = _uiState.value.pendingProperties.find { it.propertyId == propertyId }
+        if (cached != null) {
+            Log.d("VERIFY_VM", "✅ loadPropertyById: found in pendingProperties cache — $propertyId")
+            _uiState.update { it.copy(selectedProperty = cached) }
+            return
+        }
+
+        // Step 2: Firestore se direct fetch
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val doc = propertiesCol.document(propertyId).get().await()
+                if (!doc.exists()) {
+                    Log.e("VERIFY_VM", "❌ loadPropertyById: document does not exist — $propertyId")
+                    _uiState.update {
+                        it.copy(isLoading = false, errorMessage = "Property document not found in Firestore")
+                    }
+                    return@launch
+                }
+
+                // Manual parse ─ same fields PropertyRepository uses
+                val property = parsePropertyFromDoc(doc)
+                if (property != null) {
+                    Log.d("VERIFY_VM", "✅ loadPropertyById Firestore fetch success — $propertyId status=${property.status}")
+                    _uiState.update {
+                        it.copy(
+                            isLoading        = false,
+                            selectedProperty = property,
+                            // Also inject into pendingProperties so approve/reject
+                            // list filter works even if list was empty
+                            pendingProperties = if (it.pendingProperties.none { p -> p.propertyId == propertyId })
+                                it.pendingProperties + property
+                            else
+                                it.pendingProperties
+                        )
+                    }
+                } else {
+                    Log.e("VERIFY_VM", "❌ loadPropertyById: parse returned null — $propertyId")
+                    _uiState.update {
+                        it.copy(isLoading = false, errorMessage = "Could not parse property data")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("VERIFY_VM", "loadPropertyById error: ${e.localizedMessage}")
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.localizedMessage)
+                }
+            }
+        }
+    }
+
+    // ── Safe Firestore document → Property parser ─────────────────────────────
+    // Mirrors FirebaseDataManager.parseProperty() without the dependency.
+    private fun parsePropertyFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): Property? {
+        return try {
+            com.example.havenhub.data.Property(
+                propertyId        = doc.id,
+                ownerId           = doc.getString("ownerId")           ?: "",
+                ownerName         = doc.getString("ownerName")         ?: "",
+                title             = doc.getString("title")             ?: "",
+                description       = doc.getString("description")       ?: "",
+                propertyType      = doc.getString("propertyType")      ?: "APARTMENT",
+                status            = doc.getString("status")            ?: "PENDING",
+                address           = doc.getString("address")           ?: "",
+                city              = doc.getString("city")              ?: "",
+                pricePerNight     = doc.getDouble("pricePerNight")     ?: 0.0,
+                pricePerWeek      = doc.getDouble("pricePerWeek"),
+                pricePerMonth     = doc.getDouble("pricePerMonth"),
+                securityDeposit   = doc.getDouble("securityDeposit")   ?: 0.0,
+                bedrooms          = (doc.getLong("bedrooms")           ?: 1L).toInt(),
+                bathrooms         = (doc.getLong("bathrooms")          ?: 1L).toInt(),
+                maxGuests         = (doc.getLong("maxGuests")          ?: 2L).toInt(),
+                areaSqFt          = doc.getDouble("areaSqFt"),
+                imageUrls         = (doc.get("imageUrls") as? List<*>)
+                    ?.filterIsInstance<String>()                       ?: emptyList(),
+                pt1DocumentUrl    = doc.getString("pt1DocumentUrl")    ?: "",
+                drawableImageName = doc.getString("drawableImageName") ?: "",
+                amenities         = (doc.get("amenities") as? List<*>)
+                    ?.filterIsInstance<String>()                       ?: emptyList(),
+                petsAllowed       = doc.getBoolean("petsAllowed")      ?: false,
+                smokingAllowed    = doc.getBoolean("smokingAllowed")   ?: false,
+                partiesAllowed    = doc.getBoolean("partiesAllowed")   ?: false,
+                checkInTime       = doc.getString("checkInTime")       ?: "14:00",
+                checkOutTime      = doc.getString("checkOutTime")      ?: "11:00",
+                minNights         = (doc.getLong("minNights")          ?: 1L).toInt(),
+                averageRating     = (doc.getDouble("averageRating")    ?: 0.0).toFloat(),
+                reviewCount       = (doc.getLong("reviewCount")        ?: 0L).toInt(),
+                adminNote         = doc.getString("adminNote")         ?: "",
+                available         = doc.getBoolean("isAvailable")      ?: true,
+                featured          = doc.getBoolean("isFeatured")       ?: false,
+                createdAt         = doc.getTimestamp("createdAt"),
+                updatedAt         = doc.getTimestamp("updatedAt")
+            )
+        } catch (e: Exception) {
+            Log.e("VERIFY_VM", "parsePropertyFromDoc FAIL ${doc.id}: ${e.localizedMessage}")
+            null
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // LOAD PENDING USERS (user verification list screen)
+    // ════════════════════════════════════════════════════════════════════════
+
     fun loadPendingUsers() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -94,10 +221,12 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    // ✅ NEW: Single user ko userId se directly Firestore se fetch karo
-    // Yeh tab call hota hai jab detail screen directly open ho aur pendingUsers empty ho
+    // ════════════════════════════════════════════════════════════════════════
+    // LOAD SINGLE USER BY ID (user verification detail screen)
+    // ════════════════════════════════════════════════════════════════════════
+
     fun loadUserById(userId: String) {
-        // Pehle check karo — shayad already pendingUsers mein ho
+        // Check cache first
         val existing = _uiState.value.pendingUsers.find { it.userId == userId }
         if (existing != null) {
             _uiState.update { it.copy(selectedUser = existing) }
@@ -107,24 +236,16 @@ class VerificationViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val doc = usersCol.document(userId).get().await()
+                val doc  = usersCol.document(userId).get().await()
                 val user = doc.toObject(User::class.java)
                 if (user != null) {
-                    _uiState.update {
-                        it.copy(
-                            isLoading    = false,
-                            selectedUser = user
-                        )
-                    }
+                    _uiState.update { it.copy(isLoading = false, selectedUser = user) }
                     Log.d("VERIFY_VM", "✅ loadUserById success: $userId")
                 } else {
                     _uiState.update {
-                        it.copy(
-                            isLoading    = false,
-                            errorMessage = "User document not found in Firestore"
-                        )
+                        it.copy(isLoading = false, errorMessage = "User document not found in Firestore")
                     }
-                    Log.e("VERIFY_VM", "❌ loadUserById: document exists but toObject returned null")
+                    Log.e("VERIFY_VM", "❌ loadUserById: toObject returned null")
                 }
             } catch (e: Exception) {
                 Log.e("VERIFY_VM", "loadUserById error: ${e.localizedMessage}")
@@ -135,9 +256,9 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // PROPERTY VERIFICATION
-    // ══════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════════
+    // PROPERTY VERIFICATION — APPROVE
+    // ════════════════════════════════════════════════════════════════════════
 
     fun approveProperty(property: Property, adminNote: String = "") {
         viewModelScope.launch {
@@ -159,9 +280,9 @@ class VerificationViewModel @Inject constructor(
                         propertyTitle = property.title,
                         adminNote     = adminNote
                     )
-                    Log.d("VERIFY_VM", "✅ In-app notification sent to landlord: $ownerId")
+                    Log.d("VERIFY_VM", "✅ Approval notification sent to landlord: $ownerId")
                 } else {
-                    Log.e("VERIFY_VM", "❌ ownerId empty — in-app notification not sent")
+                    Log.e("VERIFY_VM", "❌ ownerId empty — notification not sent")
                 }
 
                 notificationHelper.showPropertyApproved(
@@ -175,6 +296,7 @@ class VerificationViewModel @Inject constructor(
                         isLoading         = false,
                         actionSuccess     = true,
                         successMessage    = "\"${property.title}\" approved! Landlord ko notification bhej di.",
+                        selectedProperty  = null, // ✅ Clear selected so detail screen pops
                         pendingProperties = state.pendingProperties.filter {
                             it.propertyId != property.propertyId
                         }
@@ -187,6 +309,10 @@ class VerificationViewModel @Inject constructor(
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // PROPERTY VERIFICATION — REJECT
+    // ════════════════════════════════════════════════════════════════════════
 
     fun rejectProperty(property: Property, adminNote: String) {
         viewModelScope.launch {
@@ -208,7 +334,7 @@ class VerificationViewModel @Inject constructor(
                         propertyTitle = property.title,
                         adminNote     = adminNote
                     )
-                    Log.d("VERIFY_VM", "✅ In-app rejection notification sent to: $ownerId")
+                    Log.d("VERIFY_VM", "✅ Rejection notification sent to: $ownerId")
                 }
 
                 notificationHelper.showPropertyRejected(
@@ -222,6 +348,7 @@ class VerificationViewModel @Inject constructor(
                         isLoading         = false,
                         actionSuccess     = true,
                         successMessage    = "\"${property.title}\" rejected. Landlord ko reason bhej diya.",
+                        selectedProperty  = null, // ✅ Clear selected so detail screen pops
                         pendingProperties = state.pendingProperties.filter {
                             it.propertyId != property.propertyId
                         }
@@ -235,9 +362,9 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // USER VERIFICATION
-    // ══════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════════
+    // USER VERIFICATION — VERIFY
+    // ════════════════════════════════════════════════════════════════════════
 
     @Suppress("unused")
     fun verifyUser(user: User) {
@@ -276,6 +403,10 @@ class VerificationViewModel @Inject constructor(
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // USER VERIFICATION — REJECT
+    // ════════════════════════════════════════════════════════════════════════
 
     fun rejectUser(user: User, reason: String = "") {
         viewModelScope.launch {

@@ -105,4 +105,6 @@ dependencies {
 //
 //    // Facebook Sign In
   //implementation("com.facebook.android:facebook-android-sdk:16.3.0")
-}
+        // ... existing dependencies ke saath yeh add karo:
+        implementation("org.osmdroid:osmdroid-android:6.1.18")
+    }

@@ -78,46 +78,15 @@ class AuthViewModel @Inject constructor(
         checkAuthState()
     }
 
-    private fun checkAuthState() {
-        _uiState.update { it.copy(isLoading = true) }
-        FirebaseAuth.getInstance().addAuthStateListener { firebaseAuth ->
-            val firebaseUser = firebaseAuth.currentUser
-            if (firebaseUser != null) {
-                viewModelScope.launch {
-                    val uid = firebaseUser.uid
-                    val role = authRepository.getUserRole(uid).lowercase().trim()
-                    val isVerified = authRepository.getUserVerified(uid)
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            isAuthReady = true,
-                            isLoggedIn = true,
-                            currentUser = firebaseUser,
-                            userRole = role,
-                            isVerified = isVerified
-                        )
-                    }
-                }
-            } else {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        isAuthReady = true,
-                        isLoggedIn = false,
-                        currentUser = null,
-                        userRole = "",
-                        isVerified = false
-                    )
-                }
-            }
-        }
-    }
-
+    // ✅ FIX: saveFcmTokenAfterLogin yahan add kiya — checkAuthState se pehle
+    // Taake checkAuthState is function ko call kar sake
     private fun saveFcmTokenAfterLogin(uid: String, role: String) {
         viewModelScope.launch {
             try {
                 val token = FirebaseMessaging.getInstance().token.await()
                 authRepository.updateUserFields(uid, mapOf("fcmToken" to token))
+                Log.d("FCM_TOKEN", "✅ Token save hua — uid=$uid role=$role")
+
                 val roleTopic = when (role.uppercase()) {
                     Constants.ROLE_ADMIN    -> Constants.TOPIC_ADMIN
                     Constants.ROLE_LANDLORD -> Constants.TOPIC_LANDLORD
@@ -125,8 +94,51 @@ class AuthViewModel @Inject constructor(
                 }
                 FirebaseMessaging.getInstance().subscribeToTopic(roleTopic).await()
                 FirebaseMessaging.getInstance().subscribeToTopic(Constants.TOPIC_ALL).await()
+                Log.d("FCM_TOKEN", "✅ Topic subscribe: $roleTopic")
             } catch (e: Exception) {
                 Log.e("AUTH_VM", "FCM token save failed: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    // ✅ FIX: checkAuthState mein saveFcmTokenAfterLogin call kiya
+    // Hardcoded/existing users ka token bhi app open karte waqt save ho jayega
+    private fun checkAuthState() {
+        _uiState.update { it.copy(isLoading = true) }
+        FirebaseAuth.getInstance().addAuthStateListener { firebaseAuth ->
+            val firebaseUser = firebaseAuth.currentUser
+            if (firebaseUser != null) {
+                viewModelScope.launch {
+                    val uid        = firebaseUser.uid
+                    val role       = authRepository.getUserRole(uid).lowercase().trim()
+                    val isVerified = authRepository.getUserVerified(uid)
+
+                    // ✅ KEY FIX: Har baar app kholne par token save karo
+                    // Is se hardcoded users ka bhi token Firestore mein save hoga
+                    saveFcmTokenAfterLogin(uid, role)
+
+                    _uiState.update {
+                        it.copy(
+                            isLoading   = false,
+                            isAuthReady = true,
+                            isLoggedIn  = true,
+                            currentUser = firebaseUser,
+                            userRole    = role,
+                            isVerified  = isVerified
+                        )
+                    }
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isLoading   = false,
+                        isAuthReady = true,
+                        isLoggedIn  = false,
+                        currentUser = null,
+                        userRole    = "",
+                        isVerified  = false
+                    )
+                }
             }
         }
     }
@@ -204,7 +216,7 @@ class AuthViewModel @Inject constructor(
 
             when (result) {
                 is Resource.Success -> {
-                    val uid        = result.data?.uid ?: ""
+                    val uid = result.data?.uid ?: ""
                     if (uid.isNotEmpty()) saveFcmTokenAfterLogin(uid, _uiState.value.selectedRole)
                     val successMsg = when {
                         isLandlord -> "Account created! Admin will verify your CNIC before you can list properties."
@@ -213,12 +225,12 @@ class AuthViewModel @Inject constructor(
                     }
                     _uiState.update {
                         it.copy(
-                            isLoading   = false,
-                            isAuthReady = true,
-                            isLoggedIn  = true,
-                            currentUser = result.data,
-                            userRole    = _uiState.value.selectedRole.lowercase().trim(),
-                            isVerified  = false,
+                            isLoading      = false,
+                            isAuthReady    = true,
+                            isLoggedIn     = true,
+                            currentUser    = result.data,
+                            userRole       = _uiState.value.selectedRole.lowercase().trim(),
+                            isVerified     = false,
                             successMessage = successMsg
                         )
                     }
@@ -231,7 +243,7 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Google Sign In ────────────────────────────────────────────
+    // ── Google Sign In ─────────────────────────────────────────────────────────
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -369,21 +381,21 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    // ── Event Handlers ────────────────────────────────────────────
-    fun onEmailChange(value: String)          { _email.value = value;    _emailError.value = null }
-    fun onPasswordChange(value: String)       { _password.value = value; _passwordError.value = null }
-    fun onConfirmPasswordChange(value: String){ _confirmPassword.value = value }
-    fun onFullNameChange(value: String)       { _fullName.value = value; _nameError.value = null }
-    fun onRoleSelected(role: String)          { _uiState.update { it.copy(selectedRole = role) } }
-    fun onCnicNumberChange(value: String)     { _cnicNumber.value = value; _cnicError.value = null }
-    fun onCnicImageSelected(uri: Uri?)        { _cnicImageUri.value = uri }
-    fun onProfileImageSelected(uri: Uri?)     { _profileImageUri.value = uri }
+    // ── Event Handlers ─────────────────────────────────────────────────────────
+    fun onEmailChange(value: String)           { _email.value = value;    _emailError.value = null }
+    fun onPasswordChange(value: String)        { _password.value = value; _passwordError.value = null }
+    fun onConfirmPasswordChange(value: String) { _confirmPassword.value = value }
+    fun onFullNameChange(value: String)        { _fullName.value = value; _nameError.value = null }
+    fun onRoleSelected(role: String)           { _uiState.update { it.copy(selectedRole = role) } }
+    fun onCnicNumberChange(value: String)      { _cnicNumber.value = value; _cnicError.value = null }
+    fun onCnicImageSelected(uri: Uri?)         { _cnicImageUri.value = uri }
+    fun onProfileImageSelected(uri: Uri?)      { _profileImageUri.value = uri }
 
-    fun clearError()   = _uiState.update { it.copy(errorMessage = null) }
-    fun clearSuccess() = _uiState.update { it.copy(successMessage = null) }
+    fun clearError()         = _uiState.update { it.copy(errorMessage = null) }
+    fun clearSuccess()       = _uiState.update { it.copy(successMessage = null) }
     fun isUserSignedIn(): Boolean = authRepository.isUserSignedIn()
 
-    // ── Validation ────────────────────────────────────────────────
+    // ── Validation ─────────────────────────────────────────────────────────────
     private fun validateSignInForm(): Boolean {
         var isValid = true
         if (!ValidationUtils.isValidEmail(_email.value.trim())) {

@@ -25,18 +25,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.utils.getPropertyImage
 import com.example.havenhub.viewmodel.VacationViewModel
+import com.example.havenhub.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VacationRentalsScreen(
     navController: NavController,
-    viewModel: VacationViewModel = hiltViewModel()
+    viewModel    : VacationViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    var selectedCategory by remember { mutableStateOf("All") }
+    val uiState           by viewModel.uiState.collectAsState()
+    var selectedCategory  by remember { mutableStateOf("All") }
 
     val filteredProperties = if (selectedCategory == "All") {
         uiState.properties
@@ -104,9 +106,9 @@ fun VacationRentalsScreen(
                     ) {
                         Text(
                             "${filteredProperties.size} Stays",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            color    = tertiary,
-                            fontSize = 12.sp,
+                            modifier   = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            color      = tertiary,
+                            fontSize   = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -116,7 +118,7 @@ fun VacationRentalsScreen(
         containerColor = background
     ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier
+            modifier       = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
             contentPadding = PaddingValues(bottom = 30.dp)
@@ -127,11 +129,15 @@ fun VacationRentalsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(210.dp)
-                        .background(Brush.verticalGradient(listOf(primaryContainer, background)))
+                        .background(
+                            Brush.verticalGradient(listOf(primaryContainer, background))
+                        )
                 ) {
-                    Canvas(modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(0.08f)) {
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(0.08f)
+                    ) {
                         val path = androidx.compose.ui.graphics.Path().apply {
                             moveTo(0f, size.height)
                             lineTo(size.width * 0.2f, size.height * 0.4f)
@@ -150,7 +156,10 @@ fun VacationRentalsScreen(
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Surface(color = tertiary.copy(0.2f), shape = RoundedCornerShape(8.dp)) {
+                        Surface(
+                            color = tertiary.copy(0.2f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
                             Text(
                                 "  PREMIUM SELECTION  ",
                                 modifier   = Modifier.padding(vertical = 4.dp),
@@ -171,21 +180,28 @@ fun VacationRentalsScreen(
 
                         // ── City filter chips ─────────────────────────────
                         Row(
-                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            modifier              = Modifier.horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            val categories = listOf("All", "Islamabad", "Hunza", "Naran", "Skardu", "Swat", "Murree")
+                            val categories = listOf(
+                                "All", "Islamabad", "Hunza", "Naran",
+                                "Skardu", "Swat", "Murree"
+                            )
                             categories.forEach { city ->
                                 Surface(
                                     modifier        = Modifier.clickable { selectedCategory = city },
-                                    color           = if (city == selectedCategory) primary else MaterialTheme.colorScheme.surface,
+                                    color           = if (city == selectedCategory) primary
+                                    else MaterialTheme.colorScheme.surface,
                                     shape           = RoundedCornerShape(12.dp),
                                     shadowElevation = 2.dp
                                 ) {
                                     Text(
                                         city,
-                                        modifier   = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                        color      = if (city == selectedCategory) onPrimary else MaterialTheme.colorScheme.onSurface,
+                                        modifier   = Modifier.padding(
+                                            horizontal = 16.dp, vertical = 8.dp
+                                        ),
+                                        color      = if (city == selectedCategory) onPrimary
+                                        else MaterialTheme.colorScheme.onSurface,
                                         fontSize   = 12.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -199,7 +215,7 @@ fun VacationRentalsScreen(
             // ── Section Header ────────────────────────────────────────────
             item {
                 Row(
-                    modifier = Modifier
+                    modifier              = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -213,7 +229,8 @@ fun VacationRentalsScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (selectedCategory == "All") "Nearby Stays" else "$selectedCategory Stays",
+                            if (selectedCategory == "All") "Nearby Stays"
+                            else "$selectedCategory Stays",
                             fontWeight = FontWeight.ExtraBold,
                             fontSize   = 18.sp,
                             color      = MaterialTheme.colorScheme.onBackground
@@ -223,7 +240,10 @@ fun VacationRentalsScreen(
                         "View Map",
                         color      = tertiary,
                         fontSize   = 13.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier   = Modifier.clickable {
+                            navController.navigate(Screen.ExploreMap.route)
+                        }
                     )
                 }
                 Spacer(Modifier.height(16.dp))
@@ -232,7 +252,12 @@ fun VacationRentalsScreen(
             // ── Loading ───────────────────────────────────────────────────
             if (uiState.isLoading) {
                 item {
-                    Box(Modifier.fillMaxWidth().height(200.dp), Alignment.Center) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        Alignment.Center
+                    ) {
                         CircularProgressIndicator(color = tertiary)
                     }
                 }
@@ -242,7 +267,9 @@ fun VacationRentalsScreen(
             else if (filteredProperties.isEmpty()) {
                 item {
                     Box(
-                        modifier         = Modifier.fillMaxWidth().height(200.dp),
+                        modifier         = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -261,7 +288,8 @@ fun VacationRentalsScreen(
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 "Try selecting a different city",
-                                color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                color    = MaterialTheme.colorScheme.onSurfaceVariant
+                                    .copy(alpha = 0.6f),
                                 fontSize = 12.sp
                             )
                         }
@@ -272,18 +300,31 @@ fun VacationRentalsScreen(
             // ── Property Cards ────────────────────────────────────────────
             else {
                 items(filteredProperties) { prop ->
+                    // ── IMAGE SOURCE DECISION ─────────────────────────────
+                    // Auto-added properties (auto-id): imageUrls list mein
+                    //   ImgBB URLs hoti hain — AsyncImage se load karo.
+                    // Manually seeded (prop_001..prop_012): imageUrls empty
+                    //   hoti hain — purana drawable system use karo.
+                    val networkImageUrl = prop.imageUrls.firstOrNull()
+                        ?.takeIf { it.startsWith("http") }
+
                     VacationPropertyCard(
-                        propertyId  = prop.propertyId,
-                        title       = prop.title,
-                        location    = prop.city,
-                        price       = prop.pricePerNight,
-                        rating      = prop.averageRating.toDouble(),
-                        amenities   = prop.amenities ?: emptyList(),
-                        onBookClick = {
-                            navController.navigate(Screen.PreBooking.createRoute(prop.propertyId))
+                        propertyId      = prop.propertyId,
+                        title           = prop.title,
+                        location        = prop.city,
+                        price           = prop.pricePerNight,
+                        rating          = prop.averageRating.toDouble(),
+                        amenities       = prop.amenities,
+                        networkImageUrl = networkImageUrl,   // ← NEW
+                        onBookClick     = {
+                            navController.navigate(
+                                Screen.PreBooking.createRoute(prop.propertyId)
+                            )
                         },
-                        onCardClick = {
-                            navController.navigate(Screen.PropertyDetail.createRoute(prop.propertyId))
+                        onCardClick     = {
+                            navController.navigate(
+                                Screen.PropertyDetail.createRoute(prop.propertyId)
+                            )
                         }
                     )
                 }
@@ -295,44 +336,74 @@ fun VacationRentalsScreen(
 // ── Property Card ─────────────────────────────────────────────────────────────
 @Composable
 fun VacationPropertyCard(
-    propertyId  : String,
-    title       : String,
-    location    : String,
-    price       : Double,
-    rating      : Double,
-    amenities   : List<String>,
-    onBookClick : () -> Unit,
-    onCardClick : () -> Unit
+    propertyId      : String,
+    title           : String,
+    location        : String,
+    price           : Double,
+    rating          : Double,
+    amenities       : List<String>,
+    networkImageUrl : String?,          // ← NEW: ImgBB URL for auto-added props
+    onBookClick     : () -> Unit,
+    onCardClick     : () -> Unit
 ) {
-    val primary   = MaterialTheme.colorScheme.primary
-    val tertiary  = MaterialTheme.colorScheme.tertiary
+    val primary = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
     val onPrimary = MaterialTheme.colorScheme.onPrimary
 
     Card(
-        modifier  = Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 12.dp)
             .clickable { onCardClick() },
-        shape     = RoundedCornerShape(24.dp),
-        colors    = CardDefaults.cardColors(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column {
             // ── Image ──────────────────────────────────────────────────────
-            Box(modifier = Modifier.fillMaxWidth().height(210.dp)) {
-                Image(
-                    painter            = painterResource(id = getPropertyImage(propertyId)),
-                    contentDescription = null,
-                    modifier           = Modifier.fillMaxSize(),
-                    contentScale       = ContentScale.Crop
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(210.dp)
+            ) {
+                // ══════════════════════════════════════════════════════════
+                // IMAGE LOADING FIX
+                //
+                // networkImageUrl != null  → auto-added property
+                //   Load from ImgBB URL using Coil AsyncImage.
+                //   Fallback: havenhub logo while loading / on error.
+                //
+                // networkImageUrl == null  → manually seeded property
+                //   Load from res/drawable using getPropertyImage(propertyId).
+                //   This is the old behaviour — unchanged.
+                // ══════════════════════════════════════════════════════════
+                if (networkImageUrl != null) {
+                    AsyncImage(
+                        model = networkImageUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.havenhub),
+                        placeholder = painterResource(R.drawable.havenhub)
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = getPropertyImage(propertyId)),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
                 // Rating badge
                 Surface(
-                    modifier = Modifier.padding(12.dp).align(Alignment.TopEnd),
-                    color    = MaterialTheme.colorScheme.inverseSurface.copy(0.6f),
-                    shape    = RoundedCornerShape(8.dp)
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .align(Alignment.TopEnd),
+                    color = MaterialTheme.colorScheme.inverseSurface.copy(0.6f),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Row(
                         Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -340,17 +411,18 @@ fun VacationPropertyCard(
                     ) {
                         Icon(
                             Icons.Default.Star, null,
-                            tint     = tertiary,
+                            tint = tertiary,
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
                             " ${"%.1f".format(rating)}",
-                            color      = MaterialTheme.colorScheme.inverseOnSurface,
-                            fontSize   = 12.sp,
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
+
                 // Price badge
                 Box(
                     modifier = Modifier
@@ -361,9 +433,9 @@ fun VacationPropertyCard(
                 ) {
                     Text(
                         "PKR ${"%.0f".format(price)}/night",
-                        color      = onPrimary,
+                        color = onPrimary,
                         fontWeight = FontWeight.Bold,
-                        fontSize   = 13.sp
+                        fontSize = 13.sp
                     )
                 }
             }
@@ -372,44 +444,44 @@ fun VacationPropertyCard(
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     location.uppercase(),
-                    color      = tertiary,
+                    color = tertiary,
                     fontWeight = FontWeight.Bold,
-                    fontSize   = 10.sp
+                    fontSize = 10.sp
                 )
                 Text(
                     title,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize   = 18.sp,
-                    color      = MaterialTheme.colorScheme.onSurface,
-                    maxLines   = 1,
-                    overflow   = TextOverflow.Ellipsis
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(12.dp))
 
                 // Amenities
                 Row(
-                    modifier              = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (amenities.isEmpty()) {
                         Text(
                             "Basic Amenities Included",
                             fontSize = 11.sp,
-                            color    = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         amenities.take(3).forEach { feature ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     Icons.Default.CheckCircle, null,
-                                    tint     = tertiary,
+                                    tint = tertiary,
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
                                     feature,
                                     fontSize = 11.sp,
-                                    color    = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -418,31 +490,44 @@ fun VacationPropertyCard(
 
                 Spacer(Modifier.height(16.dp))
 
-                // ── Two buttons ──────────────────────────────────────────────
+                // ── Two buttons ───────────────────────────────────────────
                 Row(
-                    modifier              = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
-                        onClick  = onCardClick,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape    = RoundedCornerShape(12.dp),
-                        border   = BorderStroke(1.5.dp, primary)
+                        onClick = onCardClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.5.dp, primary)
                     ) {
-                        Text("Details", color = primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(
+                            "Details",
+                            color = primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
                     }
 
                     Button(
-                        onClick   = onBookClick,
-                        modifier  = Modifier.weight(2f).height(48.dp),
-                        shape     = RoundedCornerShape(12.dp),
-                        colors    = ButtonDefaults.buttonColors(
+                        onClick = onBookClick,
+                        modifier = Modifier
+                            .weight(2f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
                             containerColor = primary,
-                            contentColor   = onPrimary  // ← YAHAN SIRF YEH BADLA HAI
+                            contentColor = onPrimary
                         ),
                         elevation = ButtonDefaults.buttonElevation(4.dp)
                     ) {
-                        Text("Reserve Your Stay", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                        Text(
+                            "Reserve Your Stay",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 14.sp
+                        )
                     }
                 }
             }

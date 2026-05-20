@@ -2,137 +2,117 @@ package com.example.havenhub.data
 
 import com.google.firebase.Timestamp
 
+// ─────────────────────────────────────────────────────────────────────────────
 // UserPreferences.kt
-// Model: Per-user notification, privacy, and display preferences.
-// Synced across devices via Firestore.
-
-/**
- * # UserPreferences
- *
- * Stores personalisation and notification preferences for an individual HavenHub user.
- * These preferences are synced to Firestore so they persist across multiple devices
- * (e.g., phone and tablet) and survive app reinstalls.
- *
- * Fast-access preferences (like dark mode) are also cached locally via
- * [PreferenceManager] / DataStore to be readable without a network call.
- *
- * ## Firestore Path
- * ```
- * user_preferences/{userId}
- * ```
- * One document per user, using their Firebase Auth UID as the document ID.
- *
- * ## Preference Categories
- * | Category       | Fields                                                    |
- * |----------------|-----------------------------------------------------------|
- * | Notifications  | bookings, messages, payments, promotions, adminAlerts     |
- * | Privacy        | isProfilePublic, showPhoneNumber, showEmail               |
- * | Display        | preferredLanguage, isDarkMode                             |
- *
- * ## Usage Example
- * ```kotlin
- * // Create with defaults (all notifications on, light mode, English)
- * val prefs = UserPreferences(userId = "uid_abc123")
- *
- * // Disable promotional notifications
- * val updated = prefs.copy(notifyPromotions = false, updatedAt = Timestamp.now())
- *
- * // Check if user wants booking alerts
- * if (prefs.notifyBookingUpdates) { /* send FCM */ }
- * ```
- *
- * @property userId               Firebase Auth UID. Used as the Firestore document ID.
- * @property notifyBookingUpdates Notify when a booking status changes (confirmed/cancelled).
- * @property notifyMessages       Notify when a new in-app chat message is received.
- * @property notifyPayments       Notify when a payment is made or received.
- * @property notifyPromotions     Notify about HavenHub promotions and offers.
- * @property notifyAdminAlerts    Notify about platform-wide admin announcements.
- * @property isProfilePublic      Whether the user's profile is visible to other users.
- * @property showPhoneNumber      Whether the phone number is displayed on listings/profile.
- * @property showEmail            Whether the email is displayed on public profile.
- * @property preferredLanguage    Preferred display language as an ISO 639-1 code.
- * @property isDarkMode           Whether the app should use dark theme for this user.
- * @property updatedAt            Firebase Timestamp of last update, used for sync conflict resolution.
- */
+//
+// Per-user personalisation, notification, and privacy preferences.
+// Synced across devices via Firestore. Fast-access fields (dark mode) are also
+// cached locally in SharedPreferences via PreferenceManager.
+//
+// Firestore path: user_preferences/{userId}
+// One document per user — Firebase Auth UID is used as the document ID.
+//
+// Preference categories:
+//   Notifications  — bookings, messages, payments, promotions, adminAlerts
+//   Privacy        — isProfilePublic, showPhoneNumber, showEmail
+//   Data           — locationAccess, dataSharing          ← NEW fields
+//   Display        — preferredLanguage, isDarkMode
+//
+// CHANGE LOG:
+//   Added locationAccess (default true)  — persists the Location Access toggle.
+//   Added dataSharing    (default false) — persists the Data Sharing toggle.
+//   Previously these two fields were NOT in this model, so the toggles in
+//   PrivacySettingsScreen had nowhere to save their value — they always reset.
+// ─────────────────────────────────────────────────────────────────────────────
 data class UserPreferences(
 
-    /**
-     * Firebase Auth UID of the user these preferences belong to.
-     * Also used as the Firestore document ID for this record.
-     */
+    // ── Identity ──────────────────────────────────────────────────────────────
+    /** Firebase Auth UID. Also used as the Firestore document ID for this record. */
     val userId: String = "",
 
-    // ── Notification Preferences ─────────────────────────────────────────────
+    // ── Notification Preferences ──────────────────────────────────────────────
 
-    /**
-     * If true, send push notifications when a booking's status changes.
-     * Covers: pending → confirmed, confirmed → cancelled, etc.
-     */
+    /** Notify when a booking status changes (pending → confirmed, cancelled, etc.). */
     val notifyBookingUpdates: Boolean = true,
 
-    /**
-     * If true, send push notifications when a new chat message is received.
-     * Disabling this prevents the message notification badge from appearing.
-     */
+    /** Notify when a new in-app chat message is received. */
     val notifyMessages: Boolean = true,
 
-    /**
-     * If true, send push notifications for payment events.
-     * Covers: payment received, payment failed, refund processed.
-     */
+    /** Notify for payment events: received, failed, refund processed. */
     val notifyPayments: Boolean = true,
 
     /**
-     * If true, allow HavenHub to send promotional push notifications.
-     * Defaults to false to respect user privacy and reduce notification fatigue.
+     * Allow HavenHub to send promotional push notifications.
+     * Default false — opt-in only, to reduce notification fatigue.
      */
     val notifyPromotions: Boolean = false,
 
-    /**
-     * If true, send push notifications for platform-wide admin announcements.
-     * Examples: maintenance windows, new feature releases, policy updates.
-     */
+    /** Notify about platform-wide admin announcements and policy updates. */
     val notifyAdminAlerts: Boolean = true,
 
-    // ── Privacy Preferences ──────────────────────────────────────────────────
+    // ── Privacy Preferences ───────────────────────────────────────────────────
 
-    /**
-     * If true, the user's profile (name, photo, bio) is visible to other users.
-     */
+    /** If true, the user's profile (name, photo, bio) is visible to other users. */
     val isProfilePublic: Boolean = true,
 
     /**
      * If true, the user's phone number is visible on their profile and listings.
+     * Default false — protect phone number unless explicitly shared.
      */
     val showPhoneNumber: Boolean = false,
 
     /**
      * If true, the user's email address is visible on their public profile.
-     * Defaults to false to protect against spam.
+     * Default false — protect email against spam by default.
      */
     val showEmail: Boolean = false,
 
-    // ── Display Preferences ──────────────────────────────────────────────────
+    // ── Data & Permissions ────────────────────────────────────────────────────
+
+    /**
+     * If true, the app is allowed to use the device's GPS location.
+     * Used for nearby property search and map features.
+     * Default true — location is core to the HavenHub experience.
+     *
+     * ✅ NEW FIELD: Added so the Location Access toggle in PrivacySettingsScreen
+     * has a real field to read from and write to. Previously this toggle had an
+     * empty lambda '{}' and never saved anything.
+     */
+    val locationAccess: Boolean = true,
+
+    /**
+     * If true, the user consents to anonymous usage analytics being shared
+     * with the HavenHub team to improve the app.
+     * Default false — analytics sharing is opt-in only.
+     *
+     * ✅ NEW FIELD: Added so the Data Sharing toggle in PrivacySettingsScreen
+     * has a real field to read from and write to. Previously this toggle had an
+     * empty lambda '{}' and never saved anything.
+     */
+    val dataSharing: Boolean = false,
+
+    // ── Display Preferences ───────────────────────────────────────────────────
 
     /**
      * User's preferred display language as an ISO 639-1 two-letter code.
-     * Examples: "en" (English), "af" (Afrikaans), "zu" (Zulu), "xh" (Xhosa).
+     * Examples: "en" (English), "ur" (Urdu), "af" (Afrikaans).
      */
     val preferredLanguage: String = "en",
 
     /**
      * If true, the app uses dark theme for this user.
-     * Cached locally for immediate startup.
+     * Also cached locally in SharedPreferences for instant startup.
      */
     val isDarkMode: Boolean = false,
 
     /**
      * Firebase Timestamp of the last time these preferences were updated.
-     * Null when the document is first created (Firestore sets it on write).
-     * Use updatedAt?.toDate()?.time to get epoch millis if needed.
+     * Null when the document has never been written (brand-new user).
+     * SettingsViewModel uses updatedAt == null to detect new users and
+     * auto-create the Firestore document with default values.
      *
-     * ✅ FIX: Changed from Long to Timestamp? to prevent Firebase
-     * deserialization crash: "Failed to convert Timestamp to long"
+     * Type is Timestamp? (not Long) to prevent the Firebase deserialization
+     * crash: "Failed to convert Timestamp to long".
      */
     val updatedAt: Timestamp? = null
 
@@ -143,8 +123,8 @@ data class UserPreferences(
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Returns true if the user has enabled at least one type of push notification.
-     * Used to determine whether to register/refresh an FCM token for this user.
+     * Returns true if the user has at least one notification channel enabled.
+     * Used to decide whether to register or refresh an FCM token.
      */
     val hasAnyNotificationsEnabled: Boolean
         get() = notifyBookingUpdates || notifyMessages ||
@@ -152,6 +132,7 @@ data class UserPreferences(
 
     /**
      * Returns a map of notification channel IDs to their enabled state.
+     * Useful for batch-updating FCM topic subscriptions.
      */
     val notificationChannelStates: Map<String, Boolean>
         get() = mapOf(
@@ -163,7 +144,8 @@ data class UserPreferences(
         )
 
     /**
-     * Returns a copy of these preferences with all notifications disabled.
+     * Returns a copy with all notification channels turned off.
+     * Called by the master notifications toggle when set to false.
      */
     fun withAllNotificationsDisabled(): UserPreferences = copy(
         notifyBookingUpdates = false,
@@ -175,13 +157,14 @@ data class UserPreferences(
     )
 
     /**
-     * Returns a copy of these preferences with all recommended notifications enabled.
+     * Returns a copy with the recommended default notification channels on.
+     * Called by the master notifications toggle when set to true.
      */
     fun withDefaultNotifications(): UserPreferences = copy(
         notifyBookingUpdates = true,
         notifyMessages       = true,
         notifyPayments       = true,
-        notifyPromotions     = false,
+        notifyPromotions     = false,   // promotions stay opt-in even on master-enable
         notifyAdminAlerts    = true,
         updatedAt            = Timestamp.now()
     )

@@ -29,17 +29,14 @@ class FirebaseDataManager @Inject constructor(
     private val notificationsCollection  = firestore.collection("notifications")
     private val rentalPackagesCollection = firestore.collection("rental_packages")
 
-    // ── Helper: Booking parse karo safely ────────────────────────────────────
-    // ✅ FIX: toObject use karo per-document — crash avoid hoga
+    // =========================================================================
+    // PARSE HELPERS
+    // =========================================================================
+
     private fun parseBooking(doc: com.google.firebase.firestore.DocumentSnapshot): Booking? {
         return try {
             val booking = doc.toObject(Booking::class.java) ?: return null
-            // ✅ bookingId set karo agar blank hai (manual documents mein @DocumentId kaam nahi karta)
-            if (booking.bookingId.isBlank()) {
-                booking.copy(bookingId = doc.id)
-            } else {
-                booking
-            }
+            if (booking.bookingId.isBlank()) booking.copy(bookingId = doc.id) else booking
         } catch (e: Exception) {
             Log.e("HAVEN_BOOKING", "parseBooking FAIL ${doc.id}: ${e.localizedMessage}")
             null
@@ -54,8 +51,64 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
+    // =========================================================================
+    // parseProperty — ROOT FIX for ExploreMap missing pins
+    //
+    // PROBLEM:
+    //   Two types of properties exist in Firestore:
+    //
+    //   1. Manually added (prop_001 to prop_012):
+    //      - NO top-level "latitude" / "longitude" fields
+    //      - Coords stored inside nested "location" object:
+    //          location.latitude  = 31.5204
+    //          location.longitude = 74.3587
+    //
+    //   2. App-added (auto-id, new landlord submissions):
+    //      - Top-level "latitude"  = 31.4504
+    //      - Top-level "longitude" = 73.135
+    //      - location.latitude = 0  (PropertyViewModel does not fill nested obj)
+    //
+    //   Old code:
+    //      latitude = doc.getDouble("latitude") ?: 0.0
+    //   For manual props → field missing → returns 0.0
+    //   0.0 matches Pakistan center fallback (30.3753, 69.3451) check in
+    //   Property.resolvedLatitude → city lookup runs → if city matches table
+    //   it shows, otherwise falls to Pakistan center → ExploreMapScreen
+    //   filters it OUT → pin never appears on map.
+    //
+    // FIX:
+    //   Try top-level latitude first (app-added props).
+    //   If zero/missing, try location.latitude (manually seeded props).
+    //   This makes ALL 25 properties resolve correctly.
+    // =========================================================================
     private fun parseProperty(doc: com.google.firebase.firestore.DocumentSnapshot): Property? {
         return try {
+
+            // -- Step 1: read top-level lat/lng (app-added properties) ---------
+            val topLat = doc.getDouble("latitude")
+            val topLng = doc.getDouble("longitude")
+
+            // -- Step 2: read nested location object (manually seeded props) ---
+            @Suppress("UNCHECKED_CAST")
+            val locationMap = doc.get("location") as? Map<String, Any>
+            val nestedLat   = (locationMap?.get("latitude")  as? Number)?.toDouble()
+            val nestedLng   = (locationMap?.get("longitude") as? Number)?.toDouble()
+
+            // -- Step 3: pick best non-zero value ------------------------------
+            // Priority: top-level (non-zero) → nested (non-zero) → 0.0
+            // 0.0 means "unknown" — Property.resolvedLatitude will then try
+            // city-name lookup and finally fall back to Pakistan center.
+            val resolvedLat = when {
+                topLat    != null && topLat    != 0.0 -> topLat
+                nestedLat != null && nestedLat != 0.0 -> nestedLat
+                else -> 0.0
+            }
+            val resolvedLng = when {
+                topLng    != null && topLng    != 0.0 -> topLng
+                nestedLng != null && nestedLng != 0.0 -> nestedLng
+                else -> 0.0
+            }
+
             Property(
                 propertyId        = doc.id,
                 ownerId           = doc.getString("ownerId")           ?: "",
@@ -66,6 +119,8 @@ class FirebaseDataManager @Inject constructor(
                 status            = doc.getString("status")            ?: "PENDING",
                 address           = doc.getString("address")           ?: "",
                 city              = doc.getString("city")              ?: "",
+                latitude          = resolvedLat,    // ← FIXED
+                longitude         = resolvedLng,    // ← FIXED
                 pricePerNight     = doc.getDouble("pricePerNight")     ?: 0.0,
                 pricePerMonth     = doc.getDouble("pricePerMonth"),
                 pricePerWeek      = doc.getDouble("pricePerWeek"),
@@ -93,7 +148,10 @@ class FirebaseDataManager @Inject constructor(
                 createdAt         = doc.getTimestamp("createdAt"),
                 updatedAt         = doc.getTimestamp("updatedAt")
             )
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            Log.e("HAVEN_PROP", "parseProperty FAIL ${doc.id}: ${e.localizedMessage}")
+            null
+        }
     }
 
     private fun parseReview(doc: com.google.firebase.firestore.DocumentSnapshot): Review? {
@@ -131,9 +189,8 @@ class FirebaseDataManager @Inject constructor(
 
     private fun parseRentalPackage(doc: com.google.firebase.firestore.DocumentSnapshot): RentalPackage? {
         return try {
-            val statusStr  = doc.getString("status")       ?: "ACTIVE"
-            val status     = try { PackageStatus.valueOf(statusStr)   } catch (e: Exception) { PackageStatus.ACTIVE }
-
+            val statusStr   = doc.getString("status")       ?: "ACTIVE"
+            val status      = try { PackageStatus.valueOf(statusStr)    } catch (e: Exception) { PackageStatus.ACTIVE }
             val durationStr = doc.getString("durationType") ?: "FLEXIBLE"
             val duration    = try { PackageDuration.valueOf(durationStr) } catch (e: Exception) { PackageDuration.FLEXIBLE }
 
@@ -170,7 +227,9 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── User ─────────────────────────────────────────────────────────────────
+    // =========================================================================
+    // USER
+    // =========================================================================
 
     suspend fun saveUser(user: User): Resource<Unit> {
         return try {
@@ -215,7 +274,9 @@ class FirebaseDataManager @Inject constructor(
         } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to delete user") }
     }
 
-    // ── Property ─────────────────────────────────────────────────────────────
+    // =========================================================================
+    // PROPERTY
+    // =========================================================================
 
     suspend fun addProperty(property: Property): Resource<String> {
         return try {
@@ -228,16 +289,20 @@ class FirebaseDataManager @Inject constructor(
     suspend fun getAllProperties(): Resource<List<Property>> {
         return try {
             val snapshot = propertiesCollection.get().await()
-            Resource.Success(snapshot.documents.mapNotNull { parseProperty(it) }
-                .sortedByDescending { it.createdAt?.seconds ?: 0L })
+            Resource.Success(
+                snapshot.documents.mapNotNull { parseProperty(it) }
+                    .sortedByDescending { it.createdAt?.seconds ?: 0L }
+            )
         } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch properties") }
     }
 
     suspend fun getPropertiesByOwner(ownerId: String): Resource<List<Property>> {
         return try {
             val snapshot = propertiesCollection.whereEqualTo("ownerId", ownerId).get().await()
-            Resource.Success(snapshot.documents.mapNotNull { parseProperty(it) }
-                .sortedByDescending { it.createdAt?.seconds ?: 0L })
+            Resource.Success(
+                snapshot.documents.mapNotNull { parseProperty(it) }
+                    .sortedByDescending { it.createdAt?.seconds ?: 0L }
+            )
         } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch owner properties") }
     }
 
@@ -270,10 +335,7 @@ class FirebaseDataManager @Inject constructor(
                 .get().await()
             val results = snapshot.documents
                 .mapNotNull { parseProperty(it) }
-                .filter { property ->
-                    property.title.lowercase().contains(q) ||
-                            property.city.lowercase().contains(q)
-                }
+                .filter { it.title.lowercase().contains(q) || it.city.lowercase().contains(q) }
                 .sortedBy { it.title }
             Log.d("HAVEN_SEARCH", "searchProperties[$query]: ${results.size} results")
             Resource.Success(results)
@@ -283,7 +345,9 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── Favourites ────────────────────────────────────────────────────────────
+    // =========================================================================
+    // FAVOURITES
+    // =========================================================================
 
     suspend fun addFavourite(userId: String, propertyId: String): Resource<Unit> {
         return try {
@@ -357,10 +421,9 @@ class FirebaseDataManager @Inject constructor(
         } catch (e: Exception) { false }
     }
 
-    // ── Booking ───────────────────────────────────────────────────────────────
-    // ✅ KEY FIX: Saari booking functions ab parseBooking() use karti hain
-    // parseBooking() manually set karta hai bookingId = doc.id agar blank ho
-    // Isse manual documents (booking_001) aur auto documents dono fetch honge
+    // =========================================================================
+    // BOOKING
+    // =========================================================================
 
     suspend fun createBooking(booking: Booking): Resource<String> {
         return try {
@@ -377,8 +440,7 @@ class FirebaseDataManager @Inject constructor(
     suspend fun getBookingById(bookingId: String): Resource<Booking> {
         return try {
             val snapshot = bookingsCollection.document(bookingId).get().await()
-            val booking  = parseBooking(snapshot)
-                ?: return Resource.Error("Booking not found")
+            val booking  = parseBooking(snapshot) ?: return Resource.Error("Booking not found")
             Log.d("HAVEN_BOOKING", "getBookingById: $bookingId found")
             Resource.Success(booking)
         } catch (e: Exception) {
@@ -387,8 +449,6 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ✅ FIX: toObjects() ki bajaye parseBooking() use karo
-    // toObjects() @DocumentId set nahi karta manual documents mein
     suspend fun getAllBookings(): Resource<List<Booking>> {
         return try {
             val snapshot = bookingsCollection.get().await()
@@ -403,13 +463,11 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ✅ FIX: tenantId se query — parseBooking() se bookingId bhi sahi milega
     suspend fun getBookingsByTenantId(tenantId: String): List<Booking> {
         return try {
             val snapshot = bookingsCollection
                 .whereEqualTo("tenantId", tenantId)
-                .get()
-                .await()
+                .get().await()
             val bookings = snapshot.documents
                 .mapNotNull { parseBooking(it) }
                 .sortedByDescending { it.createdAt?.seconds ?: 0L }
@@ -421,13 +479,11 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ✅ FIX: landlordId se query — parseBooking() se bookingId bhi sahi milega
     suspend fun getBookingsByLandlordId(landlordId: String): List<Booking> {
         return try {
             val snapshot = bookingsCollection
                 .whereEqualTo("landlordId", landlordId)
-                .get()
-                .await()
+                .get().await()
             val bookings = snapshot.documents
                 .mapNotNull { parseBooking(it) }
                 .sortedByDescending { it.createdAt?.seconds ?: 0L }
@@ -450,7 +506,9 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── Notifications ─────────────────────────────────────────────────────────
+    // =========================================================================
+    // NOTIFICATIONS
+    // =========================================================================
 
     suspend fun sendNotification(notificationData: Map<String, Any>): Resource<Unit> {
         return try {
@@ -461,7 +519,9 @@ class FirebaseDataManager @Inject constructor(
         } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to send notification") }
     }
 
-    // ── Review ────────────────────────────────────────────────────────────────
+    // =========================================================================
+    // REVIEW
+    // =========================================================================
 
     suspend fun addReview(review: Review): Resource<String> {
         return try {
@@ -502,11 +562,9 @@ class FirebaseDataManager @Inject constructor(
             val snapshot = reviewsCollection
                 .whereEqualTo("propertyId", propertyId)
                 .get().await()
-
             val reviews = snapshot.documents
                 .mapNotNull { parseReview(it) }
                 .sortedByDescending { it.createdAt }
-
             Log.d("HAVEN_REVIEW", "getReviewsByProperty[$propertyId]: ${reviews.size} reviews")
             Resource.Success(reviews)
         } catch (e: Exception) {
@@ -522,17 +580,14 @@ class FirebaseDataManager @Inject constructor(
                 .orderBy("createdAt", Query.Direction.DESCENDING)
                 .limit(100)
                 .get().await()
-
             val reviews = snapshot.documents.mapNotNull { parseReview(it) }
             Log.d("HAVEN_REVIEW", "getAllReviews: ${reviews.size} reviews fetched")
             Resource.Success(reviews)
         } catch (e: Exception) {
             Log.e("HAVEN_REVIEW", "getAllReviews FAIL: ${e.localizedMessage}")
             try {
-                val fallbackSnapshot = reviewsCollection
-                    .whereEqualTo("isVisible", true)
-                    .get().await()
-                val reviews = fallbackSnapshot.documents
+                val fallback = reviewsCollection.whereEqualTo("isVisible", true).get().await()
+                val reviews  = fallback.documents
                     .mapNotNull { parseReview(it) }
                     .sortedByDescending { it.createdAt?.seconds ?: 0L }
                 Log.d("HAVEN_REVIEW", "getAllReviews fallback: ${reviews.size} reviews")
@@ -544,14 +599,15 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
-    // ── Rental Packages ───────────────────────────────────────────────────────
+    // =========================================================================
+    // RENTAL PACKAGES
+    // =========================================================================
 
     suspend fun getActiveRentalPackages(): Resource<List<RentalPackage>> {
         return try {
             val snapshot = rentalPackagesCollection
                 .whereEqualTo("status", PackageStatus.ACTIVE.name)
-                .get()
-                .await()
+                .get().await()
             val packages = snapshot.documents.mapNotNull { parseRentalPackage(it) }
             Log.d("HAVEN_PKG", "getActiveRentalPackages: ${packages.size} ACTIVE packages fetched")
             Resource.Success(packages)
@@ -566,8 +622,7 @@ class FirebaseDataManager @Inject constructor(
             val snapshot = rentalPackagesCollection
                 .whereEqualTo("propertyId", propertyId)
                 .whereEqualTo("status", PackageStatus.ACTIVE.name)
-                .get()
-                .await()
+                .get().await()
             val packages = snapshot.documents.mapNotNull { parseRentalPackage(it) }
             Log.d("HAVEN_PKG", "getPackagesByProperty[$propertyId]: ${packages.size} ACTIVE packages")
             Resource.Success(packages)
@@ -581,8 +636,7 @@ class FirebaseDataManager @Inject constructor(
         return try {
             val snapshot = rentalPackagesCollection
                 .whereEqualTo("landlordId", landlordId)
-                .get()
-                .await()
+                .get().await()
             val packages = snapshot.documents.mapNotNull { parseRentalPackage(it) }
             Log.d("HAVEN_PKG", "getPackagesByLandlord[$landlordId]: ${packages.size} packages")
             Resource.Success(packages)
@@ -642,23 +696,18 @@ class FirebaseDataManager @Inject constructor(
     suspend fun incrementPackageBookedSlots(packageId: String): Resource<Unit> {
         return try {
             val docRef = rentalPackagesCollection.document(packageId)
-            val doc = docRef.get().await()
-            val pkg = parseRentalPackage(doc) ?: return Resource.Error("Package not found")
+            val doc    = docRef.get().await()
+            val pkg    = parseRentalPackage(doc) ?: return Resource.Error("Package not found")
 
             val newBookedSlots = pkg.bookedSlots + 1
-            val newStatus = if (pkg.totalSlots != null && newBookedSlots >= pkg.totalSlots) {
-                PackageStatus.SOLD_OUT.name
-            } else {
-                pkg.status.name
-            }
+            val newStatus = if (pkg.totalSlots != null && newBookedSlots >= pkg.totalSlots)
+                PackageStatus.SOLD_OUT.name else pkg.status.name
 
-            docRef.update(
-                mapOf(
-                    "bookedSlots" to newBookedSlots,
-                    "status"      to newStatus,
-                    "updatedAt"   to FieldValue.serverTimestamp()
-                )
-            ).await()
+            docRef.update(mapOf(
+                "bookedSlots" to newBookedSlots,
+                "status"      to newStatus,
+                "updatedAt"   to FieldValue.serverTimestamp()
+            )).await()
 
             Log.d("HAVEN_PKG", "incrementBookedSlots: $packageId bookedSlots=$newBookedSlots status=$newStatus")
             Resource.Success(Unit)
@@ -668,36 +717,3 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -22,11 +22,10 @@ class BookingRepository @Inject constructor(
     private val firestore             : FirebaseFirestore,
     private val notificationRepository: NotificationRepository
 ) {
-    // ✅ FIXED: Sirf ek "bookings" collection — space wali hatdi
-    private val bookingsCol = firestore.collection("bookings")
-    private val usersCol = firestore.collection("users")
+    private val bookingsCol      = firestore.collection("bookings")
+    private val usersCol         = firestore.collection("users")
     private val notificationsCol = firestore.collection("notifications")
-    private val propertiesCol = firestore.collection("properties")
+    private val propertiesCol    = firestore.collection("properties")
 
     // ── Helper: safe parse ────────────────────────────────────────────────────
     private fun parseBookingSafe(doc: com.google.firebase.firestore.DocumentSnapshot): Booking? {
@@ -40,13 +39,46 @@ class BookingRepository @Inject constructor(
         }
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // ✅ NEW: isPropertyBooked
+    // Check karta hai koi property abhi CONFIRMED ya PENDING booking mein hai ya nahi.
+    // PropertyDetailScreen aur PropertyCard dono isko use kar sakte hain.
+    //
+    // Logic:
+    //   - Firestore mein "bookings" collection query karo jahan propertyId match ho
+    //   - Sirf CONFIRMED aur PENDING statuses count karti hain
+    //     (CANCELLED aur COMPLETED ignore hoti hain — property dobara available hoti hai)
+    //   - Agar koi aisi booking mili → true return karo
+    //   - Exception pe false return karo (silent fail, UI stuck nahi hoga)
+    // ══════════════════════════════════════════════════════════════════════════
+    suspend fun isPropertyBooked(propertyId: String): Boolean {
+        if (propertyId.isBlank()) return false
+        return try {
+            val snap = bookingsCol
+                .whereEqualTo("propertyId", propertyId)
+                .whereIn("status", listOf(
+                    BookingStatus.CONFIRMED.name,
+                    BookingStatus.PENDING.name
+                ))
+                .get()
+                .await()
+
+            val booked = !snap.isEmpty
+            Log.d("BOOKING_REPO", "isPropertyBooked('$propertyId') = $booked (${snap.size()} active bookings)")
+            booked
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "isPropertyBooked error: ${e.localizedMessage}")
+            false
+        }
+    }
+
     // ── CREATE ────────────────────────────────────────────────────────────────
     suspend fun createBooking(booking: Booking): Resource<String> {
         Log.d("BOOKING_REPO", "createBooking START tenantId='${booking.tenantId}'")
 
         val resolvedTenantName = resolveTenantName(booking)
         val pendingBooking = booking.copy(
-            status = BookingStatus.PENDING.name,
+            status     = BookingStatus.PENDING.name,
             tenantName = resolvedTenantName
         )
 
@@ -54,10 +86,10 @@ class BookingRepository @Inject constructor(
         Log.d("BOOKING_REPO", "createBooking result = $result")
 
         if (result is Resource.Success) {
-            val bookingId = result.data ?: ""
+            val bookingId          = result.data ?: ""
             val resolvedLandlordId = resolveLandlordId(booking)
-            val finalBooking = pendingBooking.copy(
-                bookingId = bookingId,
+            val finalBooking       = pendingBooking.copy(
+                bookingId  = bookingId,
                 landlordId = resolvedLandlordId
             )
             sendBookingNotificationToLandlord(finalBooking)
@@ -89,26 +121,22 @@ class BookingRepository @Inject constructor(
 
     suspend fun getTenantBookings(tenantId: String): List<Booking> {
         Log.d("BOOKING_REPO", "getTenantBookings START — tenantId='$tenantId'")
-
         if (tenantId.isBlank()) {
             Log.e("BOOKING_REPO", "tenantId BLANK — aborting")
             return emptyList()
         }
-
         return try {
             val snap = bookingsCol
                 .whereEqualTo("tenantId", tenantId)
                 .get().await()
 
             Log.d("BOOKING_REPO", "snap size = ${snap.documents.size}")
-
             val all = snap.documents
                 .mapNotNull { parseBookingSafe(it) }
                 .sortedByDescending { it.createdAt?.seconds ?: 0L }
 
             Log.d("BOOKING_REPO", "getTenantBookings result: ${all.size} bookings")
             all
-
         } catch (e: Exception) {
             Log.e("BOOKING_REPO", "getTenantBookings EXCEPTION: ${e.localizedMessage}")
             emptyList()
@@ -117,26 +145,22 @@ class BookingRepository @Inject constructor(
 
     suspend fun getLandlordBookings(landlordId: String): List<Booking> {
         Log.d("BOOKING_REPO", "getLandlordBookings START — landlordId='$landlordId'")
-
         if (landlordId.isBlank()) {
             Log.e("BOOKING_REPO", "landlordId BLANK — aborting")
             return emptyList()
         }
-
         return try {
             val snap = bookingsCol
                 .whereEqualTo("landlordId", landlordId)
                 .get().await()
 
             Log.d("BOOKING_REPO", "snap size = ${snap.documents.size}")
-
             val all = snap.documents
                 .mapNotNull { parseBookingSafe(it) }
                 .sortedByDescending { it.createdAt?.seconds ?: 0L }
 
             Log.d("BOOKING_REPO", "getLandlordBookings result: ${all.size} bookings")
             all
-
         } catch (e: Exception) {
             Log.e("BOOKING_REPO", "getLandlordBookings EXCEPTION: ${e.localizedMessage}")
             emptyList()
@@ -149,11 +173,9 @@ class BookingRepository @Inject constructor(
         newStatus: BookingStatus
     ): Resource<Unit> {
         Log.d("BOOKING_REPO", "updateBookingStatus: '$bookingId' → '${newStatus.name}'")
-
         return try {
             bookingsCol.document(bookingId).update("status", newStatus.name).await()
 
-            // Notification bhejo
             try {
                 val bookingResource = getBookingById(bookingId)
                 if (bookingResource is Resource.Success) {
@@ -161,18 +183,16 @@ class BookingRepository @Inject constructor(
                     when (newStatus) {
                         BookingStatus.CONFIRMED ->
                             notificationRepository.sendBookingConfirmedToTenant(
-                                tenantId = booking.tenantId,
-                                bookingId = bookingId,
+                                tenantId      = booking.tenantId,
+                                bookingId     = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
-
                         BookingStatus.CANCELLED ->
                             notificationRepository.sendBookingCancelledToTenant(
-                                tenantId = booking.tenantId,
-                                bookingId = bookingId,
+                                tenantId      = booking.tenantId,
+                                bookingId     = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
-
                         else -> {}
                     }
                 }
@@ -189,15 +209,15 @@ class BookingRepository @Inject constructor(
 
     // ── PAYMENT UPDATE ────────────────────────────────────────────────────────
     suspend fun updatePaymentStatusOnBooking(
-        bookingId: String,
+        bookingId    : String,
         paymentStatus: String,
-        paymentId: String
+        paymentId    : String
     ) {
         Log.d("BOOKING_REPO", "updatePaymentStatusOnBooking: '$bookingId'")
         val updateMap = mapOf(
             "paymentStatus" to paymentStatus,
-            "paymentId" to paymentId,
-            "updatedAt" to FieldValue.serverTimestamp()
+            "paymentId"     to paymentId,
+            "updatedAt"     to FieldValue.serverTimestamp()
         )
         try {
             bookingsCol.document(bookingId).update(updateMap).await()
@@ -215,7 +235,7 @@ class BookingRepository @Inject constructor(
     // ── CANCEL ────────────────────────────────────────────────────────────────
     suspend fun cancelBooking(bookingId: String): Resource<Unit> {
         val updateMap = mapOf(
-            "status" to BookingStatus.CANCELLED.name,
+            "status"      to BookingStatus.CANCELLED.name,
             "cancelledAt" to FieldValue.serverTimestamp()
         )
         return try {
@@ -239,9 +259,7 @@ class BookingRepository @Inject constructor(
                 ?: userDoc.getString("name")
                 ?: userDoc.getString("displayName")
                 ?: ""
-        } catch (e: Exception) {
-            ""
-        }
+        } catch (e: Exception) { "" }
     }
 
     private suspend fun resolveLandlordId(booking: Booking): String {
@@ -253,19 +271,17 @@ class BookingRepository @Inject constructor(
                 ?: propDoc.getString("ownerId")
                 ?: propDoc.getString("userId")
                 ?: ""
-        } catch (e: Exception) {
-            ""
-        }
+        } catch (e: Exception) { "" }
     }
 
     private suspend fun sendBookingNotificationToLandlord(booking: Booking) {
         try {
             if (booking.landlordId.isBlank()) return
             notificationRepository.sendBookingRequestToLandlord(
-                landlordId = booking.landlordId,
-                bookingId = booking.bookingId,
+                landlordId    = booking.landlordId,
+                bookingId     = booking.bookingId,
                 propertyTitle = booking.propertyTitle.ifBlank { "Property" },
-                tenantName = booking.tenantName.ifBlank { "Tenant" }
+                tenantName    = booking.tenantName.ifBlank { "Tenant" }
             )
         } catch (e: Exception) {
             Log.e("BOOKING_REPO", "landlord notification error: ${e.localizedMessage}")
@@ -281,15 +297,15 @@ class BookingRepository @Inject constructor(
 
             if (adminQuery.isEmpty) {
                 val notifData = mapOf(
-                    "recipientId" to "admin",
-                    "targetRole" to "admin",
-                    "title" to "New Booking Request",
-                    "body" to "${booking.tenantName.ifBlank { "A tenant" }} ne \"${booking.propertyTitle.ifBlank { "a property" }}\" book kiya.",
-                    "type" to NotificationType.BOOKING_REQUESTED.name,
-                    "referenceId" to booking.bookingId,
-                    "isRead" to false,
-                    "isActive" to true,
-                    "createdAt" to Timestamp.now()
+                    "recipientId"  to "admin",
+                    "targetRole"   to "admin",
+                    "title"        to "New Booking Request",
+                    "body"         to "${booking.tenantName.ifBlank { "A tenant" }} ne \"${booking.propertyTitle.ifBlank { "a property" }}\" book kiya.",
+                    "type"         to NotificationType.BOOKING_REQUESTED.name,
+                    "referenceId"  to booking.bookingId,
+                    "isRead"       to false,
+                    "isActive"     to true,
+                    "createdAt"    to Timestamp.now()
                 )
                 notificationsCol.add(notifData).await()
                 return
@@ -297,10 +313,10 @@ class BookingRepository @Inject constructor(
 
             adminQuery.documents.forEach { adminDoc ->
                 notificationRepository.sendBookingNotificationToAdmin(
-                    adminId = adminDoc.id,
-                    bookingId = booking.bookingId,
+                    adminId       = adminDoc.id,
+                    bookingId     = booking.bookingId,
                     propertyTitle = booking.propertyTitle.ifBlank { "Property" },
-                    tenantName = booking.tenantName.ifBlank { "Tenant" }
+                    tenantName    = booking.tenantName.ifBlank { "Tenant" }
                 )
             }
         } catch (e: Exception) {

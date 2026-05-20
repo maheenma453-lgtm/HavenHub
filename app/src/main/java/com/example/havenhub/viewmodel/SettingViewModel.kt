@@ -38,39 +38,85 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun loadSettings() {
-        val userId = authRepository.currentUser?.uid ?: return
+        val userId = authRepository.currentUser?.uid
+
+        if (userId.isNullOrBlank()) {
+            _uiState.update {
+                it.copy(
+                    isLoading    = false,
+                    errorMessage = "User not signed in. Please sign in and try again."
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
             try {
                 val prefsResult    = settingsRepository.getUserPreferences(userId)
                 val settingsResult = settingsRepository.getAppSettings()
+
+                val loadedPrefs = when (prefsResult) {
+                    is Resource.Success -> prefsResult.data ?: UserPreferences(userId = userId)
+                    else                -> UserPreferences(userId = userId)
+                }
+
+                val isNewUser = loadedPrefs.updatedAt == null
+                if (isNewUser) {
+                    settingsRepository.saveUserPreferences(loadedPrefs)
+                }
+
                 _uiState.update {
                     it.copy(
                         isLoading       = false,
-                        userPreferences = if (prefsResult    is Resource.Success) prefsResult.data    else null,
-                        appSettings     = if (settingsResult is Resource.Success) settingsResult.data else null,
-                        errorMessage    = if (prefsResult    is Resource.Error)   prefsResult.message
-                        else if (settingsResult is Resource.Error) settingsResult.message
-                        else null
+                        userPreferences = loadedPrefs,
+                        appSettings     = if (settingsResult is Resource.Success)
+                            settingsResult.data else null,
+                        errorMessage    = when {
+                            prefsResult    is Resource.Error -> prefsResult.message
+                            settingsResult is Resource.Error -> settingsResult.message
+                            else                             -> null
+                        }
                     )
                 }
+
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load settings")
+                    it.copy(
+                        isLoading       = false,
+                        userPreferences = UserPreferences(userId = userId),
+                        errorMessage    = e.message ?: "Failed to load settings"
+                    )
                 }
             }
         }
     }
 
+    // ✅ FIXED: loadSettings() removed from success path
     fun savePreferences(preferences: UserPreferences) {
+        if (preferences.userId.isBlank()) {
+            _uiState.update {
+                it.copy(errorMessage = "Cannot save: user ID is missing.")
+            }
+            return
+        }
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            // Optimistic update — UI changes instantly
+            _uiState.update {
+                it.copy(userPreferences = preferences, errorMessage = null)
+            }
+
             when (val result = settingsRepository.saveUserPreferences(preferences)) {
-                is Resource.Success -> _uiState.update {
-                    it.copy(isLoading = false, userPreferences = preferences, actionSuccess = true)
+                is Resource.Success -> {
+                    // ✅ Do NOT call loadSettings() here — it overwrites optimistic state
+                    _uiState.update { it.copy(actionSuccess = true) }
                 }
-                is Resource.Error -> _uiState.update {
-                    it.copy(isLoading = false, errorMessage = result.message)
+                is Resource.Error -> {
+                    // Revert only on failure
+                    _uiState.update { it.copy(errorMessage = result.message) }
+                    loadSettings()
                 }
                 Resource.Loading -> Unit
             }
@@ -78,37 +124,46 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleDarkMode(enabled: Boolean) {
-        val userId = authRepository.currentUser?.uid ?: return
-        viewModelScope.launch {
-            // STEP 1: SharedPreferences mein save karo (local, instant)
-            settingsRepository.setDarkMode(enabled)
+        val userId = authRepository.currentUser?.uid
+        if (userId.isNullOrBlank()) {
+            _uiState.update { it.copy(errorMessage = "User not signed in.") }
+            return
+        }
 
-            // STEP 2: MainActivity ka StateFlow update karo
-            // Yahi asal fix hai — theme tabhi change hogi jab yeh line chalegi
-            // Pehle yeh line nahi thi isliye toggle kaam nahi karta tha
+        viewModelScope.launch {
+            settingsRepository.setDarkMode(enabled)
             MainActivity.darkModeFlow.value = enabled
 
-            // STEP 3: Firestore mein bhi save karo (cross-device sync)
             val fields = mapOf("isDarkMode" to enabled)
             when (val result = settingsRepository.updateUserPreferences(userId, fields)) {
                 is Resource.Success -> _uiState.update {
-                    it.copy(userPreferences = it.userPreferences?.copy(isDarkMode = enabled))
+                    it.copy(
+                        userPreferences = it.userPreferences?.copy(isDarkMode = enabled)
+                    )
                 }
-                is Resource.Error -> _uiState.update {
-                    it.copy(errorMessage = result.message)
-                }
-                Resource.Loading -> Unit
+                is Resource.Error -> _uiState.update { it.copy(errorMessage = result.message) }
+                Resource.Loading  -> Unit
             }
         }
     }
 
     fun toggleNotifications(enabled: Boolean) {
-        val userId = authRepository.currentUser?.uid ?: return
+        val userId = authRepository.currentUser?.uid
+        if (userId.isNullOrBlank()) {
+            _uiState.update { it.copy(errorMessage = "User not signed in.") }
+            return
+        }
+
         viewModelScope.launch {
             settingsRepository.setNotificationsEnabled(enabled)
+
             val current = _uiState.value.userPreferences ?: return@launch
             val updated = if (enabled) current.withDefaultNotifications()
-            else current.withAllNotificationsDisabled()
+            else         current.withAllNotificationsDisabled()
+
+            // Optimistic update
+            _uiState.update { it.copy(userPreferences = updated) }
+
             val fields = mapOf(
                 "notifyBookingUpdates" to updated.notifyBookingUpdates,
                 "notifyMessages"       to updated.notifyMessages,
@@ -116,33 +171,51 @@ class SettingsViewModel @Inject constructor(
                 "notifyPromotions"     to updated.notifyPromotions,
                 "notifyAdminAlerts"    to updated.notifyAdminAlerts
             )
+
             when (val result = settingsRepository.updateUserPreferences(userId, fields)) {
-                is Resource.Success -> _uiState.update { it.copy(userPreferences = updated) }
-                is Resource.Error   -> _uiState.update { it.copy(errorMessage = result.message) }
-                Resource.Loading    -> Unit
+                is Resource.Success -> Unit
+                is Resource.Error   -> {
+                    loadSettings()
+                    _uiState.update { it.copy(errorMessage = result.message) }
+                }
+                Resource.Loading -> Unit
             }
         }
     }
 
     fun updateNotificationChannel(channel: String, enabled: Boolean) {
-        val userId = authRepository.currentUser?.uid ?: return
+        val userId = authRepository.currentUser?.uid
+        if (userId.isNullOrBlank()) {
+            _uiState.update { it.copy(errorMessage = "User not signed in.") }
+            return
+        }
+
         viewModelScope.launch {
+            // Optimistic update first
+            val current = _uiState.value.userPreferences ?: return@launch
+            val updated = when (channel) {
+                "notifyBookingUpdates" -> current.copy(notifyBookingUpdates = enabled)
+                "notifyMessages"       -> current.copy(notifyMessages       = enabled)
+                "notifyPayments"       -> current.copy(notifyPayments       = enabled)
+                "notifyPromotions"     -> current.copy(notifyPromotions     = enabled)
+                "notifyAdminAlerts"    -> current.copy(notifyAdminAlerts    = enabled)
+                else                   -> current
+            }
+            _uiState.update { it.copy(userPreferences = updated) }
+
             val fields = mapOf(channel to enabled)
             when (val result = settingsRepository.updateUserPreferences(userId, fields)) {
-                is Resource.Success -> {
-                    val current = _uiState.value.userPreferences ?: return@launch
-                    val updated = when (channel) {
-                        "notifyBookingUpdates" -> current.copy(notifyBookingUpdates = enabled)
-                        "notifyMessages"       -> current.copy(notifyMessages       = enabled)
-                        "notifyPayments"       -> current.copy(notifyPayments       = enabled)
-                        "notifyPromotions"     -> current.copy(notifyPromotions     = enabled)
-                        "notifyAdminAlerts"    -> current.copy(notifyAdminAlerts    = enabled)
-                        else -> current
+                is Resource.Success -> Unit
+                is Resource.Error   -> {
+                    // Revert on failure
+                    _uiState.update {
+                        it.copy(
+                            userPreferences = current,
+                            errorMessage    = result.message
+                        )
                     }
-                    _uiState.update { it.copy(userPreferences = updated) }
                 }
-                is Resource.Error -> _uiState.update { it.copy(errorMessage = result.message) }
-                Resource.Loading  -> Unit
+                Resource.Loading -> Unit
             }
         }
     }

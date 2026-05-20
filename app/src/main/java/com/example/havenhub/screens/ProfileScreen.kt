@@ -384,30 +384,9 @@ fun ProfileScreen(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-
             // ══════════════════════════════════════════════════════════
-            // EDIT PROFILE BUTTON
+            // EDIT PROFILE BUTTON — REMOVED
             // ══════════════════════════════════════════════════════════
-            OutlinedButton(
-                onClick  = { navController.navigate(Screen.EditProfile.route) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = horizontalPadding)
-                    .height(50.dp),
-                shape    = RoundedCornerShape(12.dp),
-                colors   = ButtonDefaults.outlinedButtonColors(contentColor = NavyPrimary),
-                border   = androidx.compose.foundation.BorderStroke(1.5.dp, GoldPrimary)
-            ) {
-                Icon(Icons.Default.Edit, null, modifier = Modifier.size(17.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Edit Profile",
-                    fontWeight    = FontWeight.SemiBold,
-                    fontSize      = 15.sp,
-                    letterSpacing = 0.3.sp
-                )
-            }
 
             Spacer(Modifier.height(12.dp))
 
