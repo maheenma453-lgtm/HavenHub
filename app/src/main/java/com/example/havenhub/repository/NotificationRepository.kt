@@ -20,9 +20,13 @@ class NotificationRepository @Inject constructor(
 
     private val col = firestore.collection("notifications")
 
+    // ── OBSERVE (Real-time Flow) ───────────────────────────────────────────────
+    // Listens to live notification updates for a given user via Firestore snapshot listener.
     fun observeNotifications(userId: String): Flow<List<Notification>> =
         realtimeListener.listenToNotifications(userId)
 
+    // ── FETCH ─────────────────────────────────────────────────────────────────
+    // One-time fetch of all notifications for a user, ordered newest first.
     suspend fun getUserNotifications(userId: String): Resource<List<Notification>> {
         return try {
             val snapshot = col
@@ -36,6 +40,8 @@ class NotificationRepository @Inject constructor(
         }
     }
 
+    // ── MARK AS READ ──────────────────────────────────────────────────────────
+    // Marks a single notification as read by its ID.
     suspend fun markAsRead(notificationId: String): Resource<Unit> {
         return try {
             col.document(notificationId).update("isRead", true).await()
@@ -45,6 +51,8 @@ class NotificationRepository @Inject constructor(
         }
     }
 
+    // ── MARK ALL AS READ ──────────────────────────────────────────────────────
+    // Batch-updates all unread notifications for a user to isRead = true.
     suspend fun markAllAsRead(userId: String): Resource<Unit> {
         return try {
             val unread = col
@@ -60,6 +68,8 @@ class NotificationRepository @Inject constructor(
         }
     }
 
+    // ── DELETE ────────────────────────────────────────────────────────────────
+    // Permanently deletes a single notification document from Firestore.
     suspend fun deleteNotification(notificationId: String): Resource<Unit> {
         return try {
             col.document(notificationId).delete().await()
@@ -69,10 +79,14 @@ class NotificationRepository @Inject constructor(
         }
     }
 
-    // ── CORE SENDER ───────────────────────────────────────────────────────────
-    // createdAt = Timestamp.now() — always set manually.
-    // @ServerTimestamp removed from Notification.kt — it conflicted and caused
-    // null values in Firestore, breaking orderBy("createdAt").
+    // ══════════════════════════════════════════════════════════════════════════
+    // CORE SENDER
+    //
+    // All public send* functions below delegate to this single method.
+    // createdAt is set manually with Timestamp.now() — @ServerTimestamp is
+    // intentionally NOT used because it caused null values in Firestore,
+    // which broke orderBy("createdAt") queries.
+    // ══════════════════════════════════════════════════════════════════════════
     suspend fun sendNotification(
         recipientId : String,
         type        : NotificationType,
@@ -104,8 +118,13 @@ class NotificationRepository @Inject constructor(
         }
     }
 
-    // ── PROPERTY ──────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    // PROPERTY NOTIFICATIONS
+    // Sent to landlords when admin approves/rejects their property,
+    // and to admin when a new property is submitted for review.
+    // ══════════════════════════════════════════════════════════════════════════
 
+    // Notifies the property owner that their listing was approved.
     suspend fun sendPropertyApprovedNotification(
         ownerId      : String,
         propertyId   : String,
@@ -124,6 +143,7 @@ class NotificationRepository @Inject constructor(
         targetRole  = "landlord"
     )
 
+    // Notifies the property owner that their listing was rejected, with optional reason.
     suspend fun sendPropertyRejectedNotification(
         ownerId      : String,
         propertyId   : String,
@@ -142,6 +162,7 @@ class NotificationRepository @Inject constructor(
         targetRole  = "landlord"
     )
 
+    // Alerts admin that a new property has been submitted and needs review.
     suspend fun sendNewPropertyPendingNotification(
         adminId      : String,
         propertyId   : String,
@@ -156,8 +177,13 @@ class NotificationRepository @Inject constructor(
         targetRole  = "admin"
     )
 
-    // ── BOOKING ───────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    // BOOKING NOTIFICATIONS
+    // Cover the full booking lifecycle:
+    //   REQUESTED → CONFIRMED → COMPLETED / CANCELLED
+    // ══════════════════════════════════════════════════════════════════════════
 
+    // Tells the landlord that a tenant has sent a new booking request.
     suspend fun sendBookingRequestToLandlord(
         landlordId   : String,
         bookingId    : String,
@@ -172,6 +198,7 @@ class NotificationRepository @Inject constructor(
         targetRole  = "landlord"
     )
 
+    // Sends admin a copy of every new booking for monitoring purposes.
     suspend fun sendBookingNotificationToAdmin(
         adminId      : String,
         bookingId    : String,
@@ -186,6 +213,7 @@ class NotificationRepository @Inject constructor(
         targetRole  = "admin"
     )
 
+    // Tells the tenant their booking has been confirmed by the landlord.
     suspend fun sendBookingConfirmedToTenant(
         tenantId     : String,
         bookingId    : String,
@@ -199,6 +227,7 @@ class NotificationRepository @Inject constructor(
         targetRole  = "tenant"
     )
 
+    // Tells the tenant their booking has been cancelled.
     suspend fun sendBookingCancelledToTenant(
         tenantId     : String,
         bookingId    : String,
@@ -212,8 +241,30 @@ class NotificationRepository @Inject constructor(
         targetRole  = "tenant"
     )
 
-    // ── USER VERIFICATION ─────────────────────────────────────────────────────
+    // ── FIX: This function was missing — caused the 2 build errors ────────────
+    // Called when a booking's checkOutDate passes (auto-complete) OR when
+    // the landlord/admin manually marks a booking as COMPLETED.
+    // Prompts the tenant to leave a review for the property.
+    suspend fun sendBookingCompletedToTenant(
+        tenantId     : String,
+        bookingId    : String,
+        propertyTitle: String
+    ): Resource<Unit> = sendNotification(
+        recipientId = tenantId,
+        type        = NotificationType.BOOKING_COMPLETED,
+        title       = "Stay Completed 🏠",
+        body        = "Your stay at \"$propertyTitle\" is complete. We'd love to hear your feedback — please leave a review!",
+        referenceId = bookingId,
+        targetRole  = "tenant"
+    )
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // USER VERIFICATION NOTIFICATIONS
+    // Sent when a user submits verification documents, and when admin
+    // approves or rejects the verification request.
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // Alerts admin that a new user has submitted a verification request.
     suspend fun sendNewUserPendingToAdmin(
         adminId : String,
         userId  : String,
@@ -227,6 +278,7 @@ class NotificationRepository @Inject constructor(
         targetRole  = "admin"
     )
 
+    // Tells the user their account has been successfully verified.
     suspend fun sendUserVerifiedNotification(
         userId  : String,
         userName: String
@@ -238,6 +290,7 @@ class NotificationRepository @Inject constructor(
         targetRole  = "all"
     )
 
+    // Tells the user their verification was rejected, with optional reason.
     suspend fun sendUserRejectedNotification(
         userId : String,
         reason : String = ""
@@ -252,8 +305,13 @@ class NotificationRepository @Inject constructor(
         targetRole  = "all"
     )
 
-    // ── MESSAGES ──────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    // MESSAGE NOTIFICATIONS
+    // Sent to notify a user that they have received a new chat message.
+    // recipientRole can be "tenant", "landlord", or "admin".
+    // ══════════════════════════════════════════════════════════════════════════
 
+    // Notifies the recipient that a new message has arrived in a conversation.
     suspend fun sendNewMessageNotification(
         recipientId    : String,
         senderName     : String,

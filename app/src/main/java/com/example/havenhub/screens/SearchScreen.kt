@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.havenhub.R
 import com.example.havenhub.data.Property
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.utils.getPropertyImage
@@ -48,13 +52,10 @@ fun SearchScreen(
     val focusManager    = LocalFocusManager.current
     val isSearching     = uiState.searchQuery.isNotEmpty()
 
-    // ── Keyboard auto-focus on first composition ──────────────────────────────
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
 
-    // ✅ NEW: Screen pe focus aane par fresh search taake latest
-    //         approved/rejected properties reflect hon
     LaunchedEffect(Unit) {
         viewModel.refreshSearch()
     }
@@ -91,6 +92,40 @@ fun SearchScreen(
                             fontWeight = FontWeight.Bold,
                             modifier   = Modifier.padding(start = 8.dp)
                         )
+
+                        if (uiState.hasActiveFilter) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = tertiary.copy(alpha = 0.9f)
+                            ) {
+                                Row(
+                                    modifier          = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.FilterAlt, null,
+                                        tint     = onPrimary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "Filtered",
+                                        color    = onPrimary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Default.Close, null,
+                                        tint     = onPrimary,
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .clickable { viewModel.clearFilters() }
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Surface(
@@ -126,7 +161,8 @@ fun SearchScreen(
                                 } else {
                                     Icon(
                                         Icons.Default.Tune, null,
-                                        tint     = tertiary,
+                                        tint     = if (uiState.hasActiveFilter) tertiary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.clickable {
                                             navController.navigate(Screen.Filter.route)
                                         }
@@ -166,7 +202,56 @@ fun SearchScreen(
             }
 
             when {
-                uiState.searchQuery.isEmpty() -> {
+                (isSearching || uiState.hasActiveFilter) && uiState.searchResults.isNotEmpty() -> {
+                    LazyColumn(
+                        modifier       = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
+                    ) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "${uiState.searchResults.size} properties found",
+                                    fontSize   = 13.sp,
+                                    color      = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                if (uiState.hasActiveFilter) {
+                                    Text(
+                                        "Clear Filters",
+                                        fontSize   = 13.sp,
+                                        color      = tertiary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier   = Modifier.clickable { viewModel.clearFilters() }
+                                    )
+                                }
+                            }
+                        }
+                        items(uiState.searchResults) { property ->
+                            ModernSearchCard(property) {
+                                viewModel.addToHistory(uiState.searchQuery)
+                                navController.navigate(
+                                    Screen.PropertyDetail.createRoute(property.propertyId)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                (isSearching || uiState.hasActiveFilter) && !uiState.isLoading -> {
+                    EmptySearchUI(
+                        query         = uiState.searchQuery,
+                        hasFilter     = uiState.hasActiveFilter,
+                        onClearFilter = { viewModel.clearFilters() }
+                    )
+                }
+
+                !isSearching && !uiState.hasActiveFilter -> {
                     Column(
                         modifier = Modifier
                             .padding(28.dp)
@@ -283,31 +368,28 @@ fun SearchScreen(
                         }
                     }
                 }
-
-                uiState.searchResults.isNotEmpty() -> {
-                    LazyColumn(
-                        modifier       = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
-                    ) {
-                        items(uiState.searchResults) { property ->
-                            ModernSearchCard(property) {
-                                viewModel.addToHistory(uiState.searchQuery)
-                                navController.navigate(
-                                    Screen.PropertyDetail.createRoute(property.propertyId)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                else -> { EmptySearchUI(uiState.searchQuery) }
             }
         }
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ✅ FIXED: ModernSearchCard
+//
+// PURANA CODE (broken):
+//   Image(painter = painterResource(id = getPropertyImage(property.propertyId)), ...)
+//   → Sirf local drawables load karta tha (prop_001 .. prop_012)
+//   → Auto-ID wali properties ka koi drawable nahi → HavenHub logo dikhta tha
+//
+// NAYA CODE (fixed):
+//   Priority 1: property.imageUrls.first() → ImgBB URL (AsyncImage se load)
+//   Priority 2: property.drawableImageName → drawable fallback
+//   Priority 3: property.propertyId       → getPropertyImage() fallback
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun ModernSearchCard(property: Property, onClick: () -> Unit) {
+    val context = LocalContext.current
+
     Card(
         modifier  = Modifier
             .fillMaxWidth()
@@ -320,14 +402,50 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painter            = painterResource(id = getPropertyImage(property.propertyId)),
-                contentDescription = null,
-                modifier           = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(18.dp)),
-                contentScale = ContentScale.Crop
-            )
+
+            // ── Image Logic ──────────────────────────────────────────────────
+            // Priority 1: ImgBB URL (app-added / auto-ID properties)
+            if (property.imageUrls.isNotEmpty()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(property.imageUrls.first())
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier           = Modifier
+                        .size(100.dp)
+                        .clip(RoundedCornerShape(18.dp)),
+                    contentScale  = ContentScale.Crop,
+                    // Jab tak URL load ho, drawable fallback dikhao
+                    placeholder   = painterResource(
+                        id = getPropertyImage(
+                            property.drawableImageName.ifBlank { property.propertyId }
+                        )
+                    ),
+                    // URL fail ho jaye tab bhi drawable fallback
+                    error         = painterResource(
+                        id = getPropertyImage(
+                            property.drawableImageName.ifBlank { property.propertyId }
+                        )
+                    )
+                )
+            } else {
+                // Priority 2 & 3: drawableImageName ya propertyId se drawable
+                androidx.compose.foundation.Image(
+                    painter            = painterResource(
+                        id = getPropertyImage(
+                            property.drawableImageName.ifBlank { property.propertyId }
+                        )
+                    ),
+                    contentDescription = null,
+                    modifier           = Modifier
+                        .size(100.dp)
+                        .clip(RoundedCornerShape(18.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            // ── End Image Logic ──────────────────────────────────────────────
+
             Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
                 Text(
                     property.title,
@@ -362,22 +480,53 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
 }
 
 @Composable
-fun EmptySearchUI(query: String) {
+fun EmptySearchUI(
+    query        : String,
+    hasFilter    : Boolean   = false,
+    onClearFilter: () -> Unit = {}
+) {
+    val tertiary = MaterialTheme.colorScheme.tertiary
+
     Column(
         modifier = Modifier.fillMaxSize().padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            Icons.Default.Search, null,
-            modifier = Modifier.size(60.dp),
+            Icons.Default.SearchOff, null,
+            modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(20.dp))
         Text(
-            "No results for \"$query\"",
+            text = if (query.isNotEmpty()) "No results for \"$query\""
+            else "No properties match your filters",
             fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
             color = MaterialTheme.colorScheme.onBackground
         )
+        if (hasFilter) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Try different filters or clear them",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+            OutlinedButton(
+                onClick = onClearFilter,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, tertiary)
+            ) {
+                Icon(
+                    Icons.Default.FilterAltOff,
+                    null,
+                    tint = tertiary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Clear Filters", color = tertiary, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }

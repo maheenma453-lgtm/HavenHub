@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PeopleOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -44,7 +45,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.havenhub.ui.theme.GoldAccent
 import com.example.havenhub.ui.theme.PrimaryNavy
 
-// ── Admin Bottom Navbar — Navy background, Gold active ───────────────────────
+// ── Admin Bottom Navbar ───────────────────────────────────────────────────────
 @Composable
 fun AdminBottomNavBar(navController: NavController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -116,7 +117,6 @@ data class BottomNavItem(
 )
 
 // ── Tenant Nav Items ──────────────────────────────────────────────────────────
-// ✦ CHANGED: "Search" tab hata diya, "Reviews" tab add kiya
 val tenantNavItems = listOf(
     BottomNavItem(Screen.Home.route,          "Home",      Icons.Filled.Home,                 Icons.Outlined.Home),
     BottomNavItem(Screen.MyBookings.route,    "Bookings",  Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
@@ -126,17 +126,19 @@ val tenantNavItems = listOf(
 )
 
 // ── Landlord Nav Items ────────────────────────────────────────────────────────
+// ✦ CHANGED: Profile tab hata diya, Tenants tab add kiya
+//   Profile ab upar header mein bell ke saath show hoga
 val landlordNavItems = listOf(
-    BottomNavItem(Screen.Home.route,          "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
-    BottomNavItem(Screen.MyProperties.route,  "Properties", Icons.Filled.Home,                 Icons.Outlined.Home),
-    BottomNavItem(Screen.MyBookings.route,    "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
-    BottomNavItem(Screen.MessageList.route,   "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
-    BottomNavItem(Screen.Profile.route,       "Profile",    Icons.Filled.Person,               Icons.Outlined.Person)
+    BottomNavItem(Screen.Home.route,         "Home",       Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.MyProperties.route, "Properties", Icons.Filled.Home,                 Icons.Outlined.Home),
+    BottomNavItem(Screen.MyBookings.route,   "Bookings",   Icons.Filled.CalendarMonth,        Icons.Outlined.CalendarMonth),
+    BottomNavItem(Screen.MessageList.route,  "Messages",   Icons.AutoMirrored.Filled.Message, Icons.AutoMirrored.Outlined.Message),
+    BottomNavItem(Screen.Tenants.route,      "Tenants",    Icons.Filled.People,               Icons.Filled.PeopleOutline)  // ✦ NEW
 )
 
 val bottomNavItems = tenantNavItems
 
-// ── User Bottom Navbar — Navy background, Gold active ────────────────────────
+// ── User Bottom Navbar ────────────────────────────────────────────────────────
 @Composable
 fun BottomNavBar(
     navController     : NavController,
@@ -219,3 +221,26 @@ fun BottomNavBar(
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

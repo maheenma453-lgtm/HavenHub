@@ -2,6 +2,7 @@ package com.example.havenhub.screens
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -30,6 +31,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -49,7 +52,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.cos
 import kotlin.math.sin
 
-// ── Brand Colors (Light Theme) ────────────────────────────────────────────────
+// ── Light Mode Colors ─────────────────────────────────────────────────────────
 private val NavyBlue   = Color(0xFF1B2A4A)
 private val NavyMid    = Color(0xFF243658)
 private val NavyLight  = Color(0xFF2E4270)
@@ -60,22 +63,22 @@ private val GreenOk    = Color(0xFF27AE60)
 private val RedErr     = Color(0xFFE74C3C)
 private val OrangeWarn = Color(0xFFE67E22)
 
-// ── Dark Theme Color Tokens ───────────────────────────────────────────────────
-private val D_PageBg    = Color(0xFF060D1A)    // darkest navy background
-private val D_CardBg    = Color(0xFF112038)    // card surface
-private val D_NavyBlue  = Color(0xFF0D1B3E)    // header/drawer bg
-private val D_NavyMid   = Color(0xFF122040)    // secondary surfaces
-private val D_Gold      = Color(0xFFD4AF37)    // primary gold accent
-private val D_GoldDark  = Color(0xFFB8962E)    // darker gold
-private val D_TextPri   = Color(0xFFF0F4FF)    // primary text
-private val D_TextSec   = Color(0xFF8899BB)    // secondary/muted text
-private val D_Border    = Color(0xFF1E2E50)    // subtle borders
-private val D_GreenOk   = Color(0xFF3DCC7A)    // success green
-private val D_RedErr    = Color(0xFFE74C3C)    // error red (same)
-private val D_Orange    = Color(0xFFFFB347)    // warning orange
-private val D_DividerC  = Color(0xFF1A2B45)    // divider color
+// ── Dark Mode Colors ──────────────────────────────────────────────────────────
+private val D_PageBg   = Color(0xFF060D1A)
+private val D_CardBg   = Color(0xFF112038)
+private val D_NavyBlue = Color(0xFF0D1B3E)
+private val D_NavyMid  = Color(0xFF122040)
+private val D_Gold     = Color(0xFFD4AF37)
+private val D_GoldDark = Color(0xFFB8962E)
+private val D_TextPri  = Color(0xFFF0F4FF)
+private val D_TextSec  = Color(0xFF8899BB)
+private val D_Border   = Color(0xFF1E2E50)
+private val D_GreenOk  = Color(0xFF3DCC7A)
+private val D_RedErr   = Color(0xFFE74C3C)
+private val D_Orange   = Color(0xFFFFB347)
+private val D_DividerC = Color(0xFF1A2B45)
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 private fun notifIcon(type: String): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED.name,
     NotificationType.BOOKING_CONFIRMED.name,
@@ -134,7 +137,250 @@ private fun bookingStatusColor(status: String): Color = when (status) {
 private fun bookingStatusLabel(status: String): String =
     status.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
 
-// ─── Main Screen ───────────────────────────────────────────────────────────────
+// ── PREMIUM LOGOUT DIALOG ─────────────────────────────────────────────────────
+@Composable
+fun PremiumLogoutDialog(
+    isDark    : Boolean,
+    onConfirm : () -> Unit,
+    onDismiss : () -> Unit
+) {
+    val navyBg1 = if (isDark) D_NavyBlue else NavyBlue
+    val navyBg2 = if (isDark) D_NavyMid  else NavyMid
+    val goldC   = if (isDark) D_Gold     else Gold
+    val goldDkC = if (isDark) D_GoldDark else GoldDark
+    val textPri = if (isDark) D_TextPri  else NavyBlue
+    val textSec = if (isDark) D_TextSec  else Color(0xFF6B7280)
+    val redC    = if (isDark) D_RedErr   else RedErr
+
+    // Pulse animation for icon
+    val infiniteTransition = rememberInfiniteTransition(label = "logoutPulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue  = 1f,
+        targetValue   = 1.10f,
+        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOutSine), RepeatMode.Reverse),
+        label         = "pulse"
+    )
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue  = 0.15f,
+        targetValue   = 0.35f,
+        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOutSine), RepeatMode.Reverse),
+        label         = "glow"
+    )
+
+    // ── FIX: Dialog ke bahar dark scrim + fillMaxSize box ────────────────────
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties       = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress      = true,
+            dismissOnClickOutside   = true
+        )
+    ) {
+        // Scrim — poori screen cover karta hai
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.65f))
+                .clickable(
+                    indication            = null,
+                    interactionSource     = remember { MutableInteractionSource() }
+                ) { onDismiss() },
+            contentAlignment = Alignment.Center
+        ) {
+            // Dialog card — clicks consume karo taa ke scrim dismiss na ho
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .clickable(
+                        indication        = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { /* consume — card ke andar click se dismiss nahi */ }
+            ) {
+                // Card background + content
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    if (isDark) Color(0xFF0D1B3E) else Color(0xFFFAFBFF),
+                                    if (isDark) Color(0xFF060D1A) else Color(0xFFF0F4FF)
+                                )
+                            )
+                        )
+                        .shadow(24.dp, RoundedCornerShape(28.dp))
+                ) {
+                    // Gold accent top bar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color.Transparent, goldC, goldDkC, goldC, Color.Transparent)
+                                )
+                            )
+                    )
+
+                    Column(
+                        modifier            = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 32.dp, start = 24.dp, end = 24.dp, bottom = 28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // ── Animated icon with glow rings ──
+                        Box(
+                            modifier         = Modifier.size(88.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size((88 * pulseScale).dp)
+                                    .clip(CircleShape)
+                                    .background(redC.copy(alpha = glowAlpha * 0.5f))
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(redC.copy(alpha = 0.18f), redC.copy(alpha = 0.06f))
+                                        )
+                                    )
+                                    .border(1.5.dp, redC.copy(alpha = 0.25f), CircleShape)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(Brush.linearGradient(listOf(navyBg1, navyBg2)))
+                                    .border(
+                                        BorderStroke(
+                                            1.5.dp,
+                                            Brush.linearGradient(listOf(goldC.copy(0.6f), redC.copy(0.5f)))
+                                        ),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector        = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = null,
+                                    tint               = redC,
+                                    modifier           = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Text(
+                            text          = "Sign Out?",
+                            fontSize      = 22.sp,
+                            fontWeight    = FontWeight.ExtraBold,
+                            color         = textPri,
+                            letterSpacing = 0.3.sp
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .width(48.dp)
+                                .height(2.dp)
+                                .clip(CircleShape)
+                                .background(Brush.horizontalGradient(listOf(goldC, goldDkC)))
+                        )
+
+                        Spacer(Modifier.height(14.dp))
+
+                        Text(
+                            text       = "You're about to sign out of\nHavenHub Admin Panel.",
+                            fontSize   = 13.sp,
+                            color      = textSec,
+                            textAlign  = TextAlign.Center,
+                            lineHeight = 19.sp
+                        )
+
+                        Spacer(Modifier.height(28.dp))
+
+                        // Yes, Sign Out button
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xFFD63031), Color(0xFFE74C3C))
+                                    )
+                                )
+                                .clickable { onConfirm() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment     = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector        = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = null,
+                                    tint               = Color.White,
+                                    modifier           = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text          = "Yes, Sign Out",
+                                    color         = Color.White,
+                                    fontWeight    = FontWeight.Bold,
+                                    fontSize      = 15.sp,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // Stay Logged In button
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (isDark) navyBg1.copy(alpha = 0.5f)
+                                    else        Color(0xFFF8F9FF)
+                                )
+                                .border(
+                                    BorderStroke(
+                                        1.5.dp,
+                                        Brush.horizontalGradient(
+                                            listOf(goldC.copy(0.7f), goldDkC.copy(0.5f))
+                                        )
+                                    ),
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .clickable { onDismiss() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text       = "Stay Logged In",
+                                color      = if (isDark) goldC else navyBg1,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize   = 15.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── MAIN SCREEN ───────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
@@ -142,10 +388,8 @@ fun AdminDashboardScreen(
     viewModel     : DashboardViewModel = hiltViewModel(),
     authViewModel : AuthViewModel      = hiltViewModel()
 ) {
-    // ── Dark theme detection ──────────────────────────────────────────────────
     val isDark = isSystemInDarkTheme()
 
-    // ── Theme-aware color aliases ─────────────────────────────────────────────
     val pageBg    = if (isDark) D_PageBg   else PageBg
     val cardBg    = if (isDark) D_CardBg   else Color.White
     val headerBg1 = if (isDark) D_NavyBlue else NavyBlue
@@ -162,67 +406,50 @@ fun AdminDashboardScreen(
     val authState by authViewModel.uiState.collectAsState()
     val stats      = uiState.stats
 
-    val adminName     = authState.currentUser?.displayName?.ifBlank { "Admin" } ?: "Admin"
+    // ── Role resolution — priority: Firestore (loadAdminProfile) > AuthState ──
+    // Default: empty string (loading) — KABHI "super_admin" default nahi
+    val resolvedRole: String = when {
+        !uiState.adminUserRole.isNullOrBlank() -> uiState.adminUserRole!!.trim().lowercase()
+        !authState.userRole.isNullOrBlank()    -> authState.userRole!!.trim().lowercase()
+        else                                   -> ""   // loading — kuch display mat karo
+    }
+
+    val roleLabel: String = when (resolvedRole) {
+        "sub_admin"              -> "Sub Admin"
+        "super_admin", "admin"   -> "Super Admin"
+        ""                       -> ""     // loading state — blank
+        else                     -> resolvedRole
+            .replace("_", " ")
+            .split(" ")
+            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+    }
+
+    val adminName = uiState.adminUserName
+        ?.ifBlank { authState.currentUser?.displayName?.ifBlank { "Admin" } ?: "Admin" }
+        ?: authState.currentUser?.displayName?.ifBlank { "Admin" }
+        ?: "Admin"
+
     val adminInitial  = adminName.firstOrNull()?.uppercaseChar()?.toString() ?: "A"
-    val adminPhotoUrl = authState.currentUser?.photoUrl?.toString()
+    val adminPhotoUrl = uiState.adminPhotoUrl
+        ?.ifBlank { authState.currentUser?.photoUrl?.toString() }
+        ?: authState.currentUser?.photoUrl?.toString()
 
     val drawerState      = rememberDrawerState(DrawerValue.Closed)
     val scope            = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    // ── Logout Dialog ──────────────────────────────────────────────────────────
+    // Logout Dialog
     if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            containerColor   = cardBg,                          // dark: dark card, light: white
-            shape            = RoundedCornerShape(20.dp),
-            icon = {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(redC.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Logout, null, tint = redC, modifier = Modifier.size(26.dp))
+        PremiumLogoutDialog(
+            isDark    = isDark,
+            onConfirm = {
+                showLogoutDialog = false
+                authViewModel.signOut()
+                navController.navigate(Screen.SignIn.route) {
+                    popUpTo(0) { inclusive = true }
                 }
             },
-            title = {
-                Text(
-                    "Logout?",
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 18.sp,
-                    color      = textPri
-                )
-            },
-            text = {
-                Text(
-                    "Are you sure you want to logout from HavenHub Admin?",
-                    color     = textSec,
-                    fontSize  = 14.sp,
-                    textAlign = TextAlign.Center
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showLogoutDialog = false
-                        authViewModel.signOut()
-                        navController.navigate(Screen.SignIn.route) { popUpTo(0) { inclusive = true } }
-                    },
-                    colors   = ButtonDefaults.buttonColors(containerColor = redC),
-                    shape    = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Yes, Logout", color = Color.White, fontWeight = FontWeight.SemiBold) }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick  = { showLogoutDialog = false },
-                    shape    = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    border   = BorderStroke(1.5.dp, goldC)
-                ) { Text("Cancel", color = textPri, fontWeight = FontWeight.Medium) }
-            }
+            onDismiss = { showLogoutDialog = false }
         )
     }
 
@@ -235,17 +462,18 @@ fun AdminDashboardScreen(
                 adminInitial  = adminInitial,
                 adminPhotoUrl = adminPhotoUrl,
                 unreadCount   = uiState.unreadNotifCount,
+                roleLabel     = roleLabel,
                 onClose       = { scope.launch { drawerState.close() } },
                 onLogoutClick = {
                     scope.launch { drawerState.close() }
                     showLogoutDialog = true
                 },
-                isDark        = isDark                          // pass dark flag to drawer
+                isDark = isDark
             )
         }
     ) {
         Scaffold(
-            containerColor = pageBg,                            // dark: deep navy, light: off-white
+            containerColor = pageBg,
             topBar = {
                 Box(
                     modifier = Modifier
@@ -269,12 +497,12 @@ fun AdminDashboardScreen(
                             fontSize   = 20.sp,
                             modifier   = Modifier.weight(1f)
                         )
-                        // Notification bell with badge
                         BadgedBox(badge = {
                             if (uiState.unreadNotifCount > 0) {
                                 Badge(containerColor = goldC) {
                                     Text(
-                                        if (uiState.unreadNotifCount > 99) "99+" else "${uiState.unreadNotifCount}",
+                                        if (uiState.unreadNotifCount > 99) "99+"
+                                        else "${uiState.unreadNotifCount}",
                                         fontSize   = 9.sp,
                                         color      = if (isDark) D_NavyBlue else NavyBlue,
                                         fontWeight = FontWeight.ExtraBold
@@ -283,43 +511,23 @@ fun AdminDashboardScreen(
                             }
                         }) {
                             IconButton(onClick = {
-                                navController.navigate(Screen.Notifications.route) { launchSingleTop = true }
+                                navController.navigate(Screen.Notifications.route) {
+                                    launchSingleTop = true
+                                }
                             }) {
                                 Icon(Icons.Default.Notifications, null, tint = Color.White)
                             }
                         }
-                        Spacer(Modifier.width(4.dp))
-                        // Avatar circle
-                        Box(
-                            modifier = Modifier
-                                .padding(end = 8.dp)
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .border(2.dp, goldC, CircleShape)
-                                .background(headerBg1)
-                                .clickable {
-                                    navController.navigate(Screen.Profile.route) { launchSingleTop = true }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (!adminPhotoUrl.isNullOrBlank()) {
-                                AsyncImage(
-                                    model              = adminPhotoUrl,
-                                    contentDescription = null,
-                                    modifier           = Modifier.fillMaxSize().clip(CircleShape),
-                                    contentScale       = ContentScale.Crop
-                                )
-                            } else {
-                                Text(adminInitial, color = goldC, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                            }
-                        }
                     }
-                    // Gold shimmer accent line at bottom of top bar
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(2.dp)
-                            .background(Brush.horizontalGradient(listOf(Color.Transparent, goldC, Color.Transparent)))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color.Transparent, goldC, Color.Transparent)
+                                )
+                            )
                             .align(Alignment.BottomCenter)
                     )
                 }
@@ -334,14 +542,19 @@ fun AdminDashboardScreen(
             }
 
             LazyColumn(
-                modifier       = Modifier.fillMaxSize().padding(padding),
+                modifier       = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
                 contentPadding = PaddingValues(bottom = 40.dp)
             ) {
+                item {
+                    HeroBanner(
+                        adminName = adminName,
+                        roleLabel = roleLabel,
+                        isDark    = isDark
+                    )
+                }
 
-                // ── Hero Banner ───────────────────────────────────────────────
-                item { HeroBanner(adminName = adminName, isDark = isDark) }
-
-                // ── Stats Grid ────────────────────────────────────────────────
                 item {
                     Spacer(Modifier.height(22.dp))
                     DashSectionHeader(
@@ -413,7 +626,6 @@ fun AdminDashboardScreen(
                     }
                 }
 
-                // ── Quick Actions ─────────────────────────────────────────────
                 item {
                     Spacer(Modifier.height(24.dp))
                     DashSectionHeader(
@@ -455,7 +667,6 @@ fun AdminDashboardScreen(
                     }
                 }
 
-                // ── Charts ────────────────────────────────────────────────────
                 item {
                     Spacer(Modifier.height(24.dp))
                     DashSectionHeader(
@@ -467,7 +678,9 @@ fun AdminDashboardScreen(
                     UsersOverviewChart(
                         points   = uiState.userChartPoints,
                         isDark   = isDark,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     )
                 }
                 item {
@@ -481,7 +694,9 @@ fun AdminDashboardScreen(
                     RevenueOverviewChart(
                         points   = uiState.revenueChartPoints,
                         isDark   = isDark,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     )
                 }
                 item {
@@ -496,34 +711,44 @@ fun AdminDashboardScreen(
                         slices   = uiState.propertyStatusSlices,
                         total    = stats.totalProperties,
                         isDark   = isDark,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     )
                 }
 
-                // ── Recent Activity ───────────────────────────────────────────
                 item {
                     Spacer(Modifier.height(24.dp))
                     Row(
-                        modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         DashSectionHeader("Recent Activity", isDark = isDark)
                         TextButton(onClick = {
-                            navController.navigate(Screen.Notifications.route) { launchSingleTop = true }
+                            navController.navigate(Screen.Notifications.route) {
+                                launchSingleTop = true
+                            }
                         }) {
-                            Text("View All", color = goldC, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "View All",
+                                color      = goldC,
+                                fontSize   = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
                             .shadow(
                                 4.dp,
                                 RoundedCornerShape(18.dp),
-                                ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
+                                ambientColor = if (isDark) Color.Black.copy(0.4f)
+                                else NavyBlue.copy(0.08f)
                             )
                     ) {
                         Card(
@@ -532,7 +757,6 @@ fun AdminDashboardScreen(
                             colors    = CardDefaults.cardColors(containerColor = cardBg),
                             elevation = CardDefaults.cardElevation(0.dp)
                         ) {
-                            // Top accent gradient bar
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -570,28 +794,36 @@ fun AdminDashboardScreen(
                     }
                 }
 
-                // ── Recent Bookings ───────────────────────────────────────────
                 item {
                     Spacer(Modifier.height(24.dp))
                     Row(
-                        modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         DashSectionHeader("Recent Bookings", isDark = isDark)
-                        TextButton(onClick = { navController.navigate(Screen.ManageBookings.route) }) {
-                            Text("View All", color = goldC, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        TextButton(onClick = {
+                            navController.navigate(Screen.ManageBookings.route)
+                        }) {
+                            Text(
+                                "View All",
+                                color      = goldC,
+                                fontSize   = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
                             .shadow(
                                 4.dp,
                                 RoundedCornerShape(18.dp),
-                                ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
+                                ambientColor = if (isDark) Color.Black.copy(0.4f)
+                                else NavyBlue.copy(0.08f)
                             )
                     ) {
                         Card(
@@ -600,7 +832,6 @@ fun AdminDashboardScreen(
                             colors    = CardDefaults.cardColors(containerColor = cardBg),
                             elevation = CardDefaults.cardElevation(0.dp)
                         ) {
-                            // Top accent gradient bar
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -622,13 +853,12 @@ fun AdminDashboardScreen(
                                 )
                             } else {
                                 Column {
-                                    // Table header row
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .background(
                                                 if (isDark) D_NavyBlue.copy(alpha = 0.6f)
-                                                else NavyBlue.copy(alpha = 0.04f)
+                                                else        NavyBlue.copy(alpha = 0.04f)
                                             )
                                             .padding(horizontal = 14.dp, vertical = 10.dp)
                                     ) {
@@ -658,9 +888,7 @@ fun AdminDashboardScreen(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PREMIUM ACTIVITY ROW — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── ACTIVITY ROW ──────────────────────────────────────────────────────────────
 @Composable
 fun PremiumActivityRow(notification: Notification, isDark: Boolean = false) {
     val icon     = notifIcon(notification.type)
@@ -678,7 +906,6 @@ fun PremiumActivityRow(notification: Notification, isDark: Boolean = false) {
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Icon circle — navy background with colored icon
         Box(
             modifier         = Modifier.size(40.dp).clip(CircleShape).background(circleBg),
             contentAlignment = Alignment.Center
@@ -704,7 +931,6 @@ fun PremiumActivityRow(notification: Notification, isDark: Boolean = false) {
                 )
             }
         }
-        // Time badge
         Surface(color = badgeBg, shape = RoundedCornerShape(20.dp)) {
             Text(
                 timeAgo(notification.createdAt),
@@ -717,28 +943,24 @@ fun PremiumActivityRow(notification: Notification, isDark: Boolean = false) {
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PREMIUM BOOKING ROW — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── BOOKING ROW ───────────────────────────────────────────────────────────────
 @Composable
 fun PremiumBookingRow(booking: Booking, isDark: Boolean = false) {
     val statusColor = bookingStatusColor(booking.status)
     val statusLabel = bookingStatusLabel(booking.status)
-    val goldC       = if (isDark) D_Gold    else Gold
+    val goldC       = if (isDark) D_Gold     else Gold
     val goldDkC     = if (isDark) D_GoldDark else GoldDark
-    val textPri     = if (isDark) D_TextPri else NavyBlue
-    val textSec     = if (isDark) D_TextSec else NavyBlue.copy(alpha = 0.55f)
+    val textPri     = if (isDark) D_TextPri  else NavyBlue
+    val textSec     = if (isDark) D_TextSec  else NavyBlue.copy(alpha = 0.55f)
     val avatarBg    = if (isDark) D_NavyBlue else NavyBlue
 
     Row(
-        modifier          = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
+        modifier          = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Guest column with avatar
-        Row(
-            modifier          = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier         = Modifier.size(28.dp).clip(CircleShape).background(avatarBg),
                 contentAlignment = Alignment.Center
@@ -760,8 +982,6 @@ fun PremiumBookingRow(booking: Booking, isDark: Boolean = false) {
                 overflow   = TextOverflow.Ellipsis
             )
         }
-
-        // Property name column
         Text(
             booking.propertyTitle.ifBlank { "Property" },
             modifier = Modifier.weight(1.2f),
@@ -770,8 +990,6 @@ fun PremiumBookingRow(booking: Booking, isDark: Boolean = false) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-
-        // Amount column
         Text(
             "PKR ${"%.0f".format(booking.totalAmount)}",
             modifier   = Modifier.weight(0.9f),
@@ -781,8 +999,6 @@ fun PremiumBookingRow(booking: Booking, isDark: Boolean = false) {
             maxLines   = 1,
             overflow   = TextOverflow.Ellipsis
         )
-
-        // Status badge column
         Surface(
             color    = statusColor.copy(alpha = 0.10f),
             shape    = RoundedCornerShape(20.dp),
@@ -792,26 +1008,30 @@ fun PremiumBookingRow(booking: Booking, isDark: Boolean = false) {
         ) {
             Text(
                 statusLabel,
-                fontSize   = 10.sp,
-                color      = statusColor,
-                fontWeight = FontWeight.Bold,
-                textAlign  = TextAlign.Center,
-                maxLines   = 1,
-                overflow   = TextOverflow.Ellipsis,
-                modifier   = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp)
+                fontSize      = 10.sp,
+                color         = statusColor,
+                fontWeight    = FontWeight.Bold,
+                textAlign     = TextAlign.Center,
+                maxLines      = 1,
+                overflow      = TextOverflow.Ellipsis,
+                modifier      = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp)
             )
         }
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// HERO BANNER — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── HERO BANNER ───────────────────────────────────────────────────────────────
 @Composable
-fun HeroBanner(adminName: String = "Admin", isDark: Boolean = false) {
-    val bg1  = if (isDark) D_NavyBlue else NavyBlue
-    val bg2  = if (isDark) D_NavyMid  else NavyMid
-    val goldC = if (isDark) D_Gold    else Gold
+fun HeroBanner(
+    adminName : String  = "Admin",
+    roleLabel : String  = "Super Admin",
+    isDark    : Boolean = false
+) {
+    val bg1   = if (isDark) D_NavyBlue else NavyBlue
+    val bg2   = if (isDark) D_NavyMid  else NavyMid
+    val goldC = if (isDark) D_Gold     else Gold
 
     Box(
         modifier = Modifier
@@ -819,15 +1039,20 @@ fun HeroBanner(adminName: String = "Admin", isDark: Boolean = false) {
             .background(Brush.horizontalGradient(listOf(bg1, bg2)))
             .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
-        // Decorative circles — gold tinted
         Box(
-            modifier = Modifier.size(100.dp).align(Alignment.TopEnd)
-                .offset(x = 30.dp, y = (-20).dp).clip(CircleShape)
+            modifier = Modifier
+                .size(100.dp)
+                .align(Alignment.TopEnd)
+                .offset(x = 30.dp, y = (-20).dp)
+                .clip(CircleShape)
                 .background(goldC.copy(alpha = if (isDark) 0.12f else 0.08f))
         )
         Box(
-            modifier = Modifier.size(60.dp).align(Alignment.BottomEnd)
-                .offset(x = 15.dp, y = 20.dp).clip(CircleShape)
+            modifier = Modifier
+                .size(60.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 15.dp, y = 20.dp)
+                .clip(CircleShape)
                 .background(goldC.copy(alpha = if (isDark) 0.18f else 0.12f))
         )
         Column {
@@ -844,25 +1069,35 @@ fun HeroBanner(adminName: String = "Admin", isDark: Boolean = false) {
                 color    = Color.White.copy(alpha = 0.70f)
             )
             Spacer(Modifier.height(14.dp))
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, goldC.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                    .background(Color.White.copy(alpha = if (isDark) 0.06f else 0.08f))
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(Icons.Default.AdminPanelSettings, null, tint = goldC, modifier = Modifier.size(14.dp))
-                Text("Super Admin  •  Platform Overview", fontSize = 11.sp, color = Color.White.copy(alpha = 0.9f))
+            // Role badge — sirf tab dikhao jab role available ho
+            if (roleLabel.isNotBlank()) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .border(1.dp, goldC.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = if (isDark) 0.06f else 0.08f))
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.AdminPanelSettings,
+                        null,
+                        tint     = goldC,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        "$roleLabel  •  Platform Overview",
+                        fontSize = 11.sp,
+                        color    = Color.White.copy(alpha = 0.9f)
+                    )
+                }
             }
         }
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// STAT CARD — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── STAT CARD ─────────────────────────────────────────────────────────────────
 @Composable
 fun ModernStatCard(
     icon    : ImageVector,
@@ -871,8 +1106,8 @@ fun ModernStatCard(
     change  : String,
     positive: Boolean,
     gradient: List<Color>,
-    isDark  : Boolean    = false,
-    modifier: Modifier   = Modifier
+    isDark  : Boolean  = false,
+    modifier: Modifier = Modifier
 ) {
     val cardBg  = if (isDark) D_CardBg  else Color.White
     val textPri = if (isDark) D_TextPri else NavyBlue
@@ -882,8 +1117,7 @@ fun ModernStatCard(
 
     Box(
         modifier = modifier.shadow(
-            elevation    = 4.dp,
-            shape        = RoundedCornerShape(18.dp),
+            4.dp, RoundedCornerShape(18.dp),
             ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f),
             spotColor    = if (isDark) Color.Black.copy(0.5f) else NavyBlue.copy(0.10f)
         )
@@ -894,13 +1128,13 @@ fun ModernStatCard(
             colors    = CardDefaults.cardColors(containerColor = cardBg),
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
-            // Top gradient accent bar
             Box(
-                modifier = Modifier.fillMaxWidth().height(3.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
                     .background(Brush.horizontalGradient(gradient))
             )
             Column(modifier = Modifier.padding(14.dp)) {
-                // Icon circle with gradient background
                 Box(
                     modifier         = Modifier.size(42.dp).clip(CircleShape)
                         .background(Brush.linearGradient(gradient)),
@@ -939,25 +1173,26 @@ fun ModernStatCard(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PENDING HIGHLIGHT CARD — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── PENDING CARD ──────────────────────────────────────────────────────────────
 @Composable
-fun PendingHighlightCard(pendingCount: Int, isDark: Boolean = false, onClick: () -> Unit) {
-    val goldC      = if (isDark) D_Gold    else Gold
+fun PendingHighlightCard(
+    pendingCount: Int,
+    isDark      : Boolean = false,
+    onClick     : () -> Unit
+) {
+    val goldC      = if (isDark) D_Gold     else Gold
     val goldDkC    = if (isDark) D_GoldDark else GoldDark
-    val greenC     = if (isDark) D_GreenOk else GreenOk
-    val textPri    = if (isDark) D_TextPri else NavyBlue
-    val textSec    = if (isDark) D_TextSec else NavyBlue.copy(alpha = 0.45f)
+    val greenC     = if (isDark) D_GreenOk  else GreenOk
+    val textSec    = if (isDark) D_TextSec  else NavyBlue.copy(alpha = 0.45f)
     val navyBg     = if (isDark) D_NavyBlue else NavyBlue
-    // Card backgrounds differ by state
-    val cardBgPend = if (isDark) Color(0xFF1A1608) else Color(0xFFFFFBF0) // pending: dark amber tint
-    val cardBgOk   = if (isDark) Color(0xFF0A1A14) else Color(0xFFF0FBF4) // ok: dark green tint
+    val cardBgPend = if (isDark) Color(0xFF1A1608) else Color(0xFFFFFBF0)
+    val cardBgOk   = if (isDark) Color(0xFF0A1A14) else Color(0xFFF0FBF4)
 
     Box(
-        modifier = Modifier.fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(16.dp),
-                ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f))
+        modifier = Modifier.fillMaxWidth().shadow(
+            4.dp, RoundedCornerShape(16.dp),
+            ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
+        )
     ) {
         Card(
             modifier  = Modifier.fillMaxWidth().clickable { onClick() },
@@ -967,7 +1202,6 @@ fun PendingHighlightCard(pendingCount: Int, isDark: Boolean = false, onClick: ()
             ),
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
-            // Top accent bar
             Box(
                 modifier = Modifier.fillMaxWidth().height(3.dp).background(
                     if (pendingCount > 0)
@@ -977,7 +1211,9 @@ fun PendingHighlightCard(pendingCount: Int, isDark: Boolean = false, onClick: ()
                 )
             )
             Row(
-                modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -986,13 +1222,15 @@ fun PendingHighlightCard(pendingCount: Int, isDark: Boolean = false, onClick: ()
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
-                        modifier = Modifier.size(42.dp).clip(CircleShape).background(
-                            if (pendingCount > 0) navyBg else greenC.copy(alpha = 0.15f)
-                        ),
+                        modifier = Modifier.size(42.dp).clip(CircleShape)
+                            .background(
+                                if (pendingCount > 0) navyBg else greenC.copy(alpha = 0.15f)
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            if (pendingCount > 0) Icons.Default.PendingActions else Icons.Default.CheckCircle,
+                            if (pendingCount > 0) Icons.Default.PendingActions
+                            else Icons.Default.CheckCircle,
                             null,
                             tint     = if (pendingCount > 0) goldC else greenC,
                             modifier = Modifier.size(20.dp)
@@ -1006,43 +1244,47 @@ fun PendingHighlightCard(pendingCount: Int, isDark: Boolean = false, onClick: ()
                             color      = if (pendingCount > 0) goldDkC else greenC
                         )
                         Text(
-                            if (pendingCount > 0) "Tap to review & take action" else "All bookings handled",
+                            if (pendingCount > 0) "Tap to review & take action"
+                            else "All bookings handled",
                             fontSize = 11.sp,
                             color    = textSec
                         )
                     }
                 }
                 Box(
-                    modifier = Modifier.size(28.dp).clip(CircleShape).background(goldC.copy(alpha = 0.12f)),
+                    modifier = Modifier.size(28.dp).clip(CircleShape)
+                        .background(goldC.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.ChevronRight, null, tint = goldC, modifier = Modifier.size(18.dp))
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        null,
+                        tint     = goldC,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// QUICK ACTION CARD — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── QUICK ACTION CARD ─────────────────────────────────────────────────────────
 @Composable
 fun QuickActionCard(
     icon    : ImageVector,
     label   : String,
-    isDark  : Boolean    = false,
-    modifier: Modifier   = Modifier,
+    isDark  : Boolean  = false,
+    modifier: Modifier = Modifier,
     onClick : () -> Unit
 ) {
-    val cardBg  = if (isDark) D_CardBg  else Color.White
+    val cardBg  = if (isDark) D_CardBg   else Color.White
     val iconBg  = if (isDark) D_NavyBlue else NavyBlue
-    val goldC   = if (isDark) D_Gold    else Gold
-    val textPri = if (isDark) D_TextPri else NavyBlue
+    val goldC   = if (isDark) D_Gold     else Gold
+    val textPri = if (isDark) D_TextPri  else NavyBlue
 
     Box(
         modifier = modifier.shadow(
-            elevation    = 3.dp,
-            shape        = RoundedCornerShape(14.dp),
+            3.dp, RoundedCornerShape(14.dp),
             ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.06f)
         )
     ) {
@@ -1053,7 +1295,9 @@ fun QuickActionCard(
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
             Row(
-                modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 13.dp),
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 13.dp),
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -1076,9 +1320,7 @@ fun QuickActionCard(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// DRAWER — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── DRAWER ────────────────────────────────────────────────────────────────────
 @Composable
 fun AdminDrawerContent(
     navController : NavController,
@@ -1086,22 +1328,27 @@ fun AdminDrawerContent(
     adminInitial  : String,
     adminPhotoUrl : String?,
     unreadCount   : Int     = 0,
+    roleLabel     : String  = "Super Admin",
     onClose       : () -> Unit,
     onLogoutClick : () -> Unit,
     isDark        : Boolean = false
 ) {
-    // Theme-aware drawer colors
-    val drawerBg    = if (isDark) D_NavyBlue  else Color.White
-    val headerBg1   = if (isDark) D_NavyBlue  else NavyBlue
-    val headerBg2   = if (isDark) D_NavyMid   else NavyMid
-    val goldC       = if (isDark) D_Gold      else Gold
-    val textPri     = if (isDark) D_TextPri   else NavyBlue
-    val textSec     = if (isDark) D_TextSec   else NavyBlue.copy(alpha = 0.65f)
-    val selectedBg  = if (isDark) D_NavyMid   else NavyBlue.copy(alpha = 0.08f)
-    val greenC      = if (isDark) D_GreenOk   else GreenOk
-    val redC        = if (isDark) D_RedErr    else RedErr
+    val drawerBg   = if (isDark) D_NavyBlue else Color.White
+    val headerBg1  = if (isDark) D_NavyBlue else NavyBlue
+    val headerBg2  = if (isDark) D_NavyMid  else NavyMid
+    val goldC      = if (isDark) D_Gold     else Gold
+    val textPri    = if (isDark) D_TextPri  else NavyBlue
+    val textSec    = if (isDark) D_TextSec  else NavyBlue.copy(alpha = 0.65f)
+    val selectedBg = if (isDark) D_NavyMid  else NavyBlue.copy(alpha = 0.08f)
+    val greenC     = if (isDark) D_GreenOk  else GreenOk
+    val redC       = if (isDark) D_RedErr   else RedErr
 
-    data class DrawerItem(val icon: ImageVector, val label: String, val route: String, val badge: Int = 0)
+    data class DrawerItem(
+        val icon : ImageVector,
+        val label: String,
+        val route: String,
+        val badge: Int = 0
+    )
 
     val drawerItems = listOf(
         DrawerItem(Icons.Default.Dashboard,      "Dashboard",         Screen.AdminDashboard.route),
@@ -1118,58 +1365,101 @@ fun AdminDrawerContent(
 
     val currentRoute = navController.currentBackStackEntry?.destination?.route
 
-    ModalDrawerSheet(
-        drawerContainerColor = drawerBg,            // dark: dark navy, light: white
-        modifier             = Modifier.width(290.dp)
-    ) {
-        // Drawer header
+    ModalDrawerSheet(drawerContainerColor = drawerBg, modifier = Modifier.width(290.dp)) {
+
         Box(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(headerBg1, headerBg2)))
                 .padding(20.dp)
         ) {
-            // Decorative gold circle
             Box(
-                modifier = Modifier.size(70.dp).align(Alignment.TopEnd)
-                    .offset(x = 20.dp, y = (-15).dp).clip(CircleShape)
+                modifier = Modifier
+                    .size(70.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 20.dp, y = (-15).dp)
+                    .clip(CircleShape)
                     .background(goldC.copy(alpha = 0.15f))
             )
             Column {
-                Box(
-                    modifier         = Modifier.size(62.dp).clip(CircleShape)
-                        .border(2.5.dp, goldC, CircleShape).background(headerBg1),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!adminPhotoUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model              = adminPhotoUrl,
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    Box(
+                        modifier = Modifier
+                            .size(62.dp)
+                            .clip(CircleShape)
+                            .border(2.5.dp, goldC, CircleShape)
+                            .background(headerBg1)
+                            .clickable {
+                                navController.navigate(Screen.EditProfile.route) {
+                                    launchSingleTop = true
+                                }
+                                onClose()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!adminPhotoUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model              = adminPhotoUrl,
+                                contentDescription = null,
+                                modifier           = Modifier.fillMaxSize().clip(CircleShape),
+                                contentScale       = ContentScale.Crop
+                            )
+                        } else {
+                            Text(
+                                adminInitial,
+                                color      = goldC,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize   = 26.sp
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier.size(18.dp).clip(CircleShape).background(goldC),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
                             contentDescription = null,
-                            modifier           = Modifier.fillMaxSize().clip(CircleShape),
-                            contentScale       = ContentScale.Crop
+                            tint     = if (isDark) D_NavyBlue else NavyBlue,
+                            modifier = Modifier.size(10.dp)
                         )
-                    } else {
-                        Text(adminInitial, color = goldC, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp)
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(adminName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(Modifier.height(3.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
                     Box(Modifier.size(7.dp).clip(CircleShape).background(greenC))
-                    Text("Super Admin  •  Online", color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp)
+                    // Role label — blank nahi hoga agar loaded hai
+                    val displayRole = roleLabel.ifBlank { "Loading..." }
+                    Text(
+                        "$displayRole  •  Online",
+                        color    = Color.White.copy(alpha = 0.75f),
+                        fontSize = 12.sp
+                    )
                 }
             }
         }
 
-        // Gold shimmer line separator
         Box(
-            modifier = Modifier.fillMaxWidth().height(2.dp)
-                .background(Brush.horizontalGradient(
-                    listOf(Color.Transparent, goldC.copy(alpha = 0.6f), Color.Transparent)
-                ))
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color.Transparent, goldC.copy(alpha = 0.6f), Color.Transparent)
+                    )
+                )
         )
 
-        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+        ) {
             Spacer(Modifier.height(6.dp))
             drawerItems.forEach { item ->
                 val isSelected = currentRoute == item.route
@@ -1188,7 +1478,8 @@ fun AdminDrawerContent(
                             }
                         }) {
                             Icon(
-                                item.icon, null,
+                                item.icon,
+                                null,
                                 tint     = if (isSelected) goldC else textSec,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -1224,18 +1515,25 @@ fun AdminDrawerContent(
             color    = goldC.copy(alpha = 0.2f),
             modifier = Modifier.padding(horizontal = 12.dp)
         )
-        // Logout item
+
         NavigationDrawerItem(
             icon = {
                 Box(
-                    modifier = Modifier.size(32.dp).clip(CircleShape)
+                    modifier         = Modifier.size(32.dp).clip(CircleShape)
                         .background(redC.copy(alpha = 0.10f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Logout, null, tint = redC, modifier = Modifier.size(16.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.Logout,
+                        null,
+                        tint     = redC,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             },
-            label    = { Text("Logout", color = redC, fontWeight = FontWeight.Bold, fontSize = 14.sp) },
+            label    = {
+                Text("Logout", color = redC, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            },
             selected = false,
             onClick  = onLogoutClick,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
@@ -1246,34 +1544,40 @@ fun AdminDrawerContent(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// USERS OVERVIEW CHART — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── CHARTS ────────────────────────────────────────────────────────────────────
 @Composable
-fun UsersOverviewChart(points: List<UserChartPoint>, isDark: Boolean = false, modifier: Modifier = Modifier) {
+fun UsersOverviewChart(
+    points  : List<UserChartPoint>,
+    isDark  : Boolean  = false,
+    modifier: Modifier = Modifier
+) {
     val animProgress by animateFloatAsState(
         targetValue   = if (points.isNotEmpty()) 1f else 0f,
-        animationSpec = tween(900, easing = EaseOutCubic), label = "userChart"
+        animationSpec = tween(900, easing = EaseOutCubic),
+        label         = "userChart"
     )
-    val cardBg  = if (isDark) D_CardBg  else Color.White
-    val goldC   = if (isDark) D_Gold    else Gold
+    val cardBg  = if (isDark) D_CardBg   else Color.White
+    val goldC   = if (isDark) D_Gold     else Gold
     val navyC   = if (isDark) D_NavyBlue else NavyBlue
-    val textPri = if (isDark) D_TextPri else NavyBlue
-    val textSec = if (isDark) D_TextSec else NavyBlue.copy(alpha = 0.5f)
+    val textPri = if (isDark) D_TextPri  else NavyBlue
+    val textSec = if (isDark) D_TextSec  else NavyBlue.copy(alpha = 0.5f)
 
-    Box(modifier = modifier.shadow(
-        4.dp, RoundedCornerShape(18.dp),
-        ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
-    )) {
+    Box(
+        modifier = modifier.shadow(
+            4.dp, RoundedCornerShape(18.dp),
+            ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
+        )
+    ) {
         Card(
             modifier  = Modifier.fillMaxWidth(),
             shape     = RoundedCornerShape(18.dp),
             colors    = CardDefaults.cardColors(containerColor = cardBg),
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
-            // Top accent bar
-            Box(modifier = Modifier.fillMaxWidth().height(3.dp)
-                .background(Brush.horizontalGradient(listOf(navyC, goldC))))
+            Box(
+                modifier = Modifier.fillMaxWidth().height(3.dp)
+                    .background(Brush.horizontalGradient(listOf(navyC, goldC)))
+            )
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
@@ -1281,7 +1585,12 @@ fun UsersOverviewChart(points: List<UserChartPoint>, isDark: Boolean = false, mo
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("${points.sumOf { it.newUsers }} new", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = textPri)
+                        Text(
+                            "${points.sumOf { it.newUsers }} new",
+                            fontSize   = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color      = textPri
+                        )
                         Text("users this week", fontSize = 11.sp, color = textSec)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1299,9 +1608,18 @@ fun UsersOverviewChart(points: List<UserChartPoint>, isDark: Boolean = false, mo
                         drawUsersLineChart(points, animProgress)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         points.forEach { pt ->
-                            Text(pt.label, fontSize = 10.sp, color = textSec, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                            Text(
+                                pt.label,
+                                fontSize  = 10.sp,
+                                color     = textSec,
+                                modifier  = Modifier.weight(1f),
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 }
@@ -1316,14 +1634,18 @@ private fun DrawScope.drawUsersLineChart(points: List<UserChartPoint>, progress:
     val w = size.width; val h = size.height
     val stepX = w / (points.size - 1).coerceAtLeast(1).toFloat()
     val padTop = 8.dp.toPx(); val padBot = 4.dp.toPx(); val drawH = h - padTop - padBot
-    for (i in 0..3) drawLine(Color(0xFFEEEEEE), Offset(0f, padTop + drawH * i / 3f), Offset(w, padTop + drawH * i / 3f), 1.dp.toPx())
+    for (i in 0..3)
+        drawLine(Color(0xFFEEEEEE), Offset(0f, padTop + drawH * i / 3f), Offset(w, padTop + drawH * i / 3f), 1.dp.toPx())
     fun xOf(i: Int) = i * stepX
     fun yOf(v: Int) = padTop + drawH * (1f - v.toFloat() / maxVal)
     val newPath = Path(); val newFill = Path()
     points.forEachIndexed { i, pt ->
         val x = xOf(i); val y = yOf(pt.newUsers)
         if (i == 0) { newPath.moveTo(x, y); newFill.moveTo(x, h); newFill.lineTo(x, y) }
-        else { val px = xOf(i-1); val py = yOf(points[i-1].newUsers); val cx = px + (x-px)/2f; newPath.cubicTo(cx, py, cx, y, x, y); newFill.cubicTo(cx, py, cx, y, x, y) }
+        else {
+            val px = xOf(i-1); val py = yOf(points[i-1].newUsers); val cx = px + (x-px)/2f
+            newPath.cubicTo(cx, py, cx, y, x, y); newFill.cubicTo(cx, py, cx, y, x, y)
+        }
     }
     newFill.lineTo(xOf(points.lastIndex), h); newFill.close()
     clipRect(right = w * progress) {
@@ -1334,7 +1656,10 @@ private fun DrawScope.drawUsersLineChart(points: List<UserChartPoint>, progress:
     points.forEachIndexed { i, pt ->
         val x = xOf(i); val y = yOf(pt.activeUsers)
         if (i == 0) activePath.moveTo(x, y)
-        else { val px = xOf(i-1); val py = yOf(points[i-1].activeUsers); val cx = px + (x-px)/2f; activePath.cubicTo(cx, py, cx, y, x, y) }
+        else {
+            val px = xOf(i-1); val py = yOf(points[i-1].activeUsers); val cx = px + (x-px)/2f
+            activePath.cubicTo(cx, py, cx, y, x, y)
+        }
     }
     clipRect(right = w * progress) {
         drawPath(activePath, color = Color(0xFFC9A84C), style = Stroke(
@@ -1349,33 +1674,39 @@ private fun DrawScope.drawUsersLineChart(points: List<UserChartPoint>, progress:
     drawCircle(Color.White, 2.5.dp.toPx(), Offset(xOf(lastIdx), yOf(points[lastIdx].activeUsers)))
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// REVENUE OVERVIEW CHART — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
 @Composable
-fun RevenueOverviewChart(points: List<RevenueChartPoint>, isDark: Boolean = false, modifier: Modifier = Modifier) {
+fun RevenueOverviewChart(
+    points  : List<RevenueChartPoint>,
+    isDark  : Boolean  = false,
+    modifier: Modifier = Modifier
+) {
     val animProgress by animateFloatAsState(
         targetValue   = if (points.isNotEmpty()) 1f else 0f,
-        animationSpec = tween(900, easing = EaseOutCubic), label = "revenueChart"
+        animationSpec = tween(900, easing = EaseOutCubic),
+        label         = "revenueChart"
     )
-    val cardBg  = if (isDark) D_CardBg  else Color.White
-    val goldC   = if (isDark) D_Gold    else Gold
+    val cardBg  = if (isDark) D_CardBg   else Color.White
+    val goldC   = if (isDark) D_Gold     else Gold
     val navyC   = if (isDark) D_NavyBlue else NavyBlue
-    val textPri = if (isDark) D_TextPri else NavyBlue
-    val textSec = if (isDark) D_TextSec else NavyBlue.copy(alpha = 0.5f)
+    val textPri = if (isDark) D_TextPri  else NavyBlue
+    val textSec = if (isDark) D_TextSec  else NavyBlue.copy(alpha = 0.5f)
 
-    Box(modifier = modifier.shadow(
-        4.dp, RoundedCornerShape(18.dp),
-        ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
-    )) {
+    Box(
+        modifier = modifier.shadow(
+            4.dp, RoundedCornerShape(18.dp),
+            ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
+        )
+    ) {
         Card(
             modifier  = Modifier.fillMaxWidth(),
             shape     = RoundedCornerShape(18.dp),
             colors    = CardDefaults.cardColors(containerColor = cardBg),
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
-            Box(modifier = Modifier.fillMaxWidth().height(3.dp)
-                .background(Brush.horizontalGradient(listOf(navyC, goldC))))
+            Box(
+                modifier = Modifier.fillMaxWidth().height(3.dp)
+                    .background(Brush.horizontalGradient(listOf(navyC, goldC)))
+            )
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
@@ -1383,7 +1714,12 @@ fun RevenueOverviewChart(points: List<RevenueChartPoint>, isDark: Boolean = fals
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("PKR ${"%.0f".format(points.sumOf { it.revenue })}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = textPri)
+                        Text(
+                            "PKR ${"%.0f".format(points.sumOf { it.revenue })}",
+                            fontSize   = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color      = textPri
+                        )
                         Text("this week", fontSize = 11.sp, color = textSec)
                     }
                     LegendDot(goldC, "Revenue", isDark = isDark)
@@ -1398,9 +1734,18 @@ fun RevenueOverviewChart(points: List<RevenueChartPoint>, isDark: Boolean = fals
                         drawRevenueLineChart(points, animProgress)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         points.forEach { pt ->
-                            Text(pt.label, fontSize = 10.sp, color = textSec, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                            Text(
+                                pt.label,
+                                fontSize  = 10.sp,
+                                color     = textSec,
+                                modifier  = Modifier.weight(1f),
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 }
@@ -1415,14 +1760,18 @@ private fun DrawScope.drawRevenueLineChart(points: List<RevenueChartPoint>, prog
     val w = size.width; val h = size.height
     val stepX = w / (points.size - 1).coerceAtLeast(1).toFloat()
     val padTop = 8.dp.toPx(); val padBot = 4.dp.toPx(); val drawH = h - padTop - padBot
-    for (i in 0..3) drawLine(Color(0xFFEEEEEE), Offset(0f, padTop + drawH * i / 3f), Offset(w, padTop + drawH * i / 3f), 1.dp.toPx())
+    for (i in 0..3)
+        drawLine(Color(0xFFEEEEEE), Offset(0f, padTop + drawH * i / 3f), Offset(w, padTop + drawH * i / 3f), 1.dp.toPx())
     fun xOf(i: Int) = i * stepX
     fun yOf(v: Double) = (padTop + drawH * (1.0 - v / maxVal)).toFloat()
     val linePath = Path(); val fillPath = Path()
     points.forEachIndexed { i, pt ->
         val x = xOf(i); val y = yOf(pt.revenue)
         if (i == 0) { linePath.moveTo(x, y); fillPath.moveTo(x, h); fillPath.lineTo(x, y) }
-        else { val px = xOf(i-1); val py = yOf(points[i-1].revenue); val cx = px + (x-px)/2f; linePath.cubicTo(cx, py, cx, y, x, y); fillPath.cubicTo(cx, py, cx, y, x, y) }
+        else {
+            val px = xOf(i-1); val py = yOf(points[i-1].revenue); val cx = px + (x-px)/2f
+            linePath.cubicTo(cx, py, cx, y, x, y); fillPath.cubicTo(cx, py, cx, y, x, y)
+        }
     }
     fillPath.lineTo(xOf(points.lastIndex), h); fillPath.close()
     clipRect(right = w * progress) {
@@ -1434,9 +1783,6 @@ private fun DrawScope.drawRevenueLineChart(points: List<RevenueChartPoint>, prog
     drawCircle(Color.White, 2.5.dp.toPx(), Offset(xOf(lastIdx), yOf(points[lastIdx].revenue)))
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PROPERTY STATUS CHART — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun PropertyStatusChart(
     slices  : List<PropertyStatusSlice>,
@@ -1446,26 +1792,31 @@ fun PropertyStatusChart(
 ) {
     val animProgress by animateFloatAsState(
         targetValue   = if (slices.isNotEmpty()) 1f else 0f,
-        animationSpec = tween(1000, easing = EaseOutCubic), label = "donutChart"
+        animationSpec = tween(1000, easing = EaseOutCubic),
+        label         = "donutChart"
     )
-    val cardBg  = if (isDark) D_CardBg  else Color.White
-    val goldC   = if (isDark) D_Gold    else Gold
+    val cardBg  = if (isDark) D_CardBg   else Color.White
+    val goldC   = if (isDark) D_Gold     else Gold
     val navyC   = if (isDark) D_NavyBlue else NavyBlue
-    val textPri = if (isDark) D_TextPri else NavyBlue
-    val textSec = if (isDark) D_TextSec else NavyBlue.copy(alpha = 0.5f)
+    val textPri = if (isDark) D_TextPri  else NavyBlue
+    val textSec = if (isDark) D_TextSec  else NavyBlue.copy(alpha = 0.5f)
 
-    Box(modifier = modifier.shadow(
-        4.dp, RoundedCornerShape(18.dp),
-        ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
-    )) {
+    Box(
+        modifier = modifier.shadow(
+            4.dp, RoundedCornerShape(18.dp),
+            ambientColor = if (isDark) Color.Black.copy(0.4f) else NavyBlue.copy(0.08f)
+        )
+    ) {
         Card(
             modifier  = Modifier.fillMaxWidth(),
             shape     = RoundedCornerShape(18.dp),
             colors    = CardDefaults.cardColors(containerColor = cardBg),
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
-            Box(modifier = Modifier.fillMaxWidth().height(3.dp)
-                .background(Brush.horizontalGradient(listOf(navyC, goldC))))
+            Box(
+                modifier = Modifier.fillMaxWidth().height(3.dp)
+                    .background(Brush.horizontalGradient(listOf(navyC, goldC)))
+            )
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
@@ -1477,7 +1828,12 @@ fun PropertyStatusChart(
                             drawDonutChart(slices, animProgress)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("$total", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = textPri)
+                            Text(
+                                "$total",
+                                fontSize   = 24.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color      = textPri
+                            )
                             Text("Total", fontSize = 11.sp, color = textSec)
                         }
                     }
@@ -1494,8 +1850,17 @@ fun PropertyStatusChart(
                             ) {
                                 Box(Modifier.size(10.dp).clip(CircleShape).background(sliceColor))
                                 Column {
-                                    Text(slice.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = textPri)
-                                    Text("${slice.count} (${"%.1f".format(pct)}%)", fontSize = 11.sp, color = textSec)
+                                    Text(
+                                        slice.label,
+                                        fontSize   = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color      = textPri
+                                    )
+                                    Text(
+                                        "${slice.count} (${"%.1f".format(pct)}%)",
+                                        fontSize = 11.sp,
+                                        color    = textSec
+                                    )
                                 }
                             }
                         }
@@ -1508,9 +1873,9 @@ fun PropertyStatusChart(
 
 private fun DrawScope.drawDonutChart(slices: List<PropertyStatusSlice>, progress: Float) {
     if (slices.isEmpty()) return
-    val total = slices.sumOf { it.count }.coerceAtLeast(1)
-    val stroke = 24.dp.toPx(); val padding = stroke / 2f + 4.dp.toPx()
-    val diameter = size.minDimension - padding * 2
+    val total      = slices.sumOf { it.count }.coerceAtLeast(1)
+    val stroke     = 24.dp.toPx(); val padding = stroke / 2f + 4.dp.toPx()
+    val diameter   = size.minDimension - padding * 2
     var startAngle = -90f
     slices.forEach { slice ->
         val sweep = (slice.count.toFloat() / total) * 360f * progress - 3f
@@ -1527,9 +1892,7 @@ private fun DrawScope.drawDonutChart(slices: List<PropertyStatusSlice>, progress
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// SMALL HELPERS — dark theme aware
-// ══════════════════════════════════════════════════════════════════════════════
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 @Composable
 private fun LegendDot(color: Color, label: String, isDark: Boolean = false) {
     val textSec = if (isDark) D_TextSec else NavyBlue.copy(alpha = 0.5f)
@@ -1544,7 +1907,7 @@ private fun LegendDot(color: Color, label: String, isDark: Boolean = false) {
 
 @Composable
 fun DashboardEmptyBox(icon: ImageVector, text: String, isDark: Boolean = false) {
-    val goldC   = if (isDark) D_Gold   else Gold
+    val goldC   = if (isDark) D_Gold    else Gold
     val textSec = if (isDark) D_TextSec else NavyBlue.copy(alpha = 0.3f)
     Column(
         modifier            = Modifier.fillMaxWidth().padding(32.dp),
@@ -1558,18 +1921,17 @@ fun DashboardEmptyBox(icon: ImageVector, text: String, isDark: Boolean = false) 
 
 @Composable
 fun DashSectionHeader(text: String, modifier: Modifier = Modifier, isDark: Boolean = false) {
-    val goldC   = if (isDark) D_Gold    else Gold
+    val goldC   = if (isDark) D_Gold     else Gold
     val goldDkC = if (isDark) D_GoldDark else GoldDark
-    val textPri = if (isDark) D_TextPri else NavyBlue
-
+    val textPri = if (isDark) D_TextPri  else NavyBlue
     Row(
         modifier              = modifier,
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Gold vertical accent bar
         Box(
-            modifier = Modifier.size(width = 4.dp, height = 20.dp)
+            modifier = Modifier
+                .size(width = 4.dp, height = 20.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(Brush.verticalGradient(listOf(goldC, goldDkC)))
         )
@@ -1583,13 +1945,19 @@ fun DashSectionHeader(text: String, modifier: Modifier = Modifier, isDark: Boole
     }
 }
 
-// Backward-compatible aliases — no logic changed
 @Composable
-fun PremiumSectionTitle(text: String, modifier: Modifier = Modifier) = DashSectionHeader(text, modifier)
+fun PremiumSectionTitle(text: String, modifier: Modifier = Modifier) =
+    DashSectionHeader(text, modifier)
 
 @Composable
 fun TableHeaderCell(text: String, modifier: Modifier = Modifier) {
-    Text(text, modifier = modifier, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NavyBlue.copy(0.6f))
+    Text(
+        text,
+        modifier   = modifier,
+        fontSize   = 11.sp,
+        fontWeight = FontWeight.Bold,
+        color      = NavyBlue.copy(0.6f)
+    )
 }
 
 @Composable
@@ -1597,3 +1965,10 @@ fun RealActivityRow(notification: Notification) = PremiumActivityRow(notificatio
 
 @Composable
 fun RealBookingRow(booking: Booking) = PremiumBookingRow(booking)
+
+
+
+
+
+
+

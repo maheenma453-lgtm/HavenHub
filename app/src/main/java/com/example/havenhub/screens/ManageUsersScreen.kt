@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.example.havenhub.data.AdminPermissions
 import com.example.havenhub.data.User
 import com.example.havenhub.viewmodel.ManagementViewModel
 
@@ -33,8 +36,6 @@ private val RedErr  = Color(0xFFE74C3C)
 
 private const val SUPER_ADMIN_EMAIL = "admin@havenhub.com"
 
-// ✅ Role ko lowercase trim karke normalize karo
-// Firebase mein "TENANT", "tenant", "Tenant" — sab handle hoga
 private fun normalizeRole(role: String?): String {
     if (role.isNullOrBlank()) return "user"
     return role.trim().lowercase()
@@ -49,17 +50,13 @@ private fun roleDisplayName(role: String?): String {
     }
 }
 
-private fun getUserRole(user: User): String {
-    return roleDisplayName(user.role)
-}
+private fun getUserRole(user: User): String = roleDisplayName(user.role)
 
-// ✅ FIX: Stable unique key banao har user ke liye
-// Pehle hashCode() use ho raha tha jo recomposition pe change hota tha → LazyColumn crash
 private fun stableUserKey(user: User, index: Int): String {
     return when {
-        user.userId.isNotBlank()  -> "uid_${user.userId}"
-        user.email.isNotBlank()   -> "email_${user.email}"
-        else                      -> "idx_$index"  // index-based fallback — stable per session
+        user.userId.isNotBlank() -> "uid_${user.userId}"
+        user.email.isNotBlank()  -> "email_${user.email}"
+        else                     -> "idx_$index"
     }
 }
 
@@ -81,26 +78,176 @@ fun ManageUsersScreen(
     val onSurface        = MaterialTheme.colorScheme.onSurface
     val background       = MaterialTheme.colorScheme.background
 
-    // ✅ FIX: Users ki list index ke saath zip karo taake stable key mil sake
     val indexedUsers = remember(uiState.users) {
         uiState.users.mapIndexed { index, user -> Pair(index, user) }
     }
 
-    // ✅ FIX: Filter stable indexedUsers se karo
     val filteredIndexedUsers = remember(indexedUsers, searchQuery, selectedRole) {
         indexedUsers.filter { (_, user) ->
-            val name  = user.fullName.orEmpty()
-            val email = user.email.orEmpty()
-
             val matchesSearch = searchQuery.isBlank() ||
-                    name.contains(searchQuery, ignoreCase = true) ||
-                    email.contains(searchQuery, ignoreCase = true)
-
+                    user.fullName.contains(searchQuery, ignoreCase = true) ||
+                    user.email.contains(searchQuery, ignoreCase = true)
             val matchesRole = selectedRole == "All" ||
                     normalizeRole(user.role) == selectedRole.lowercase()
-
             matchesSearch && matchesRole
         }
+    }
+
+    var showPermissionDialog by remember { mutableStateOf(false) }
+    var targetUser           by remember { mutableStateOf<User?>(null) }
+
+    var permManageUsers      by remember { mutableStateOf(false) }
+    var permVerifyUsers      by remember { mutableStateOf(false) }
+    var permVerifyProperties by remember { mutableStateOf(false) }
+    var permManageProperties by remember { mutableStateOf(false) }
+    var permManageBookings   by remember { mutableStateOf(false) }
+    var permViewReports      by remember { mutableStateOf(false) }
+
+    var showRemoveAdminDialog by remember { mutableStateOf(false) }
+    var removeAdminTarget     by remember { mutableStateOf<User?>(null) }
+
+    if (showPermissionDialog && targetUser != null) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            containerColor   = surface,
+            shape            = RoundedCornerShape(20.dp),
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.AdminPanelSettings, null, tint = primary, modifier = Modifier.size(26.dp))
+                }
+            },
+            title = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Grant Admin Access",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 17.sp,
+                        color      = onSurface
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        targetUser!!.fullName.ifBlank { targetUser!!.email },
+                        fontSize = 13.sp,
+                        color    = onSurface.copy(alpha = 0.55f)
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier            = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        "Select permissions for this sub-admin:",
+                        fontSize = 13.sp,
+                        color    = onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    PermissionToggleRow("Manage Users (ban only)", permManageUsers, primary) { permManageUsers = it }
+                    PermissionToggleRow("Verify Users",            permVerifyUsers, primary) { permVerifyUsers = it }
+                    PermissionToggleRow("Verify Properties",       permVerifyProperties, primary) { permVerifyProperties = it }
+                    PermissionToggleRow("Manage Properties",       permManageProperties, primary) { permManageProperties = it }
+                    PermissionToggleRow("Manage Bookings",         permManageBookings, primary) { permManageBookings = it }
+                    PermissionToggleRow("View Reports",            permViewReports, primary) { permViewReports = it }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        targetUser?.let { user ->
+                            viewModel.makeSubAdmin(
+                                userId = user.userId,
+                                permissions = AdminPermissions(
+                                    canManageUsers      = permManageUsers,
+                                    canVerifyUsers      = permVerifyUsers,
+                                    canVerifyProperties = permVerifyProperties,
+                                    canManageProperties = permManageProperties,
+                                    canManageBookings   = permManageBookings,
+                                    canViewReports      = permViewReports
+                                )
+                            )
+                        }
+                        showPermissionDialog = false
+                    },
+                    colors   = ButtonDefaults.buttonColors(containerColor = primary),
+                    shape    = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Grant Access", color = onPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick  = { showPermissionDialog = false },
+                    shape    = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancel", color = onSurface.copy(alpha = 0.7f))
+                }
+            }
+        )
+    }
+
+    if (showRemoveAdminDialog && removeAdminTarget != null) {
+        AlertDialog(
+            onDismissRequest = { showRemoveAdminDialog = false },
+            containerColor   = surface,
+            shape            = RoundedCornerShape(20.dp),
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(RedErr.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.PersonRemove, null, tint = RedErr, modifier = Modifier.size(26.dp))
+                }
+            },
+            title = {
+                Text(
+                    "Revoke Admin Access?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 17.sp,
+                    color      = onSurface
+                )
+            },
+            text = {
+                Text(
+                    "\"${removeAdminTarget!!.fullName.ifBlank { removeAdminTarget!!.email }}\" will lose all admin permissions and be restored to their previous role.",
+                    fontSize = 14.sp,
+                    color    = onSurface.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        removeAdminTarget?.let { viewModel.removeSubAdmin(it.userId) }
+                        showRemoveAdminDialog = false
+                    },
+                    colors   = ButtonDefaults.buttonColors(containerColor = RedErr),
+                    shape    = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Yes, Revoke Access", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick  = { showRemoveAdminDialog = false },
+                    shape    = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancel", color = onSurface.copy(alpha = 0.7f))
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -186,9 +333,6 @@ fun ManageUsersScreen(
                         )
                     )
 
-                    // ✅ FIX: FilterChip mein border parameter bilkul nahi dena
-                    // compose-bom 2024.x mein FilterChipDefaults.filterChipBorder()
-                    // ka signature change ho gaya — click par INSTANT CRASH deta tha
                     val roles = listOf("All", "Tenant", "Landlord", "Admin")
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(roles) { role ->
@@ -209,7 +353,6 @@ fun ManageUsersScreen(
                                     containerColor         = onPrimary.copy(alpha = 0.12f),
                                     labelColor             = onPrimary
                                 )
-                                // ❌ border = ... — mat dena — crash karega
                             )
                         }
                     }
@@ -262,10 +405,8 @@ fun ManageUsersScreen(
                                 modifier = Modifier.size(48.dp)
                             )
                             Text(
-                                if (searchQuery.isBlank())
-                                    "No \"$selectedRole\" users found"
-                                else
-                                    "No users match your search",
+                                if (searchQuery.isBlank()) "No \"$selectedRole\" users found"
+                                else "No users match your search",
                                 color    = onSurface.copy(alpha = 0.5f),
                                 fontSize = 14.sp
                             )
@@ -319,13 +460,13 @@ fun ManageUsersScreen(
                             }
                         }
 
-                        // ✅ FIX: key = stableUserKey() — hashCode() ki jagah stable string key
-                        // hashCode() recomposition par change hota tha → LazyColumn item mismatch → CRASH
                         items(
                             items = filteredIndexedUsers,
                             key   = { (index, user) -> stableUserKey(user, index) }
                         ) { (index, user) ->
                             val isSuperAdmin = user.email.equals(SUPER_ADMIN_EMAIL, ignoreCase = true)
+                            val isSubAdmin   = user.isAdmin && !isSuperAdmin
+
                             MUPremiumUserCard(
                                 fullName     = user.fullName.ifBlank { "Unknown User" },
                                 email        = user.email.ifBlank { "No email" },
@@ -333,6 +474,10 @@ fun ManageUsersScreen(
                                 isVerified   = user.isVerified,
                                 isBanned     = user.isBanned,
                                 isSuperAdmin = isSuperAdmin,
+                                isSubAdmin   = isSubAdmin,
+                                canGrantAdmin = uiState.isSuperAdmin && !isSuperAdmin,
+                                // ← KEY FIX: sirf Super Admin delete kar sakta hai
+                                canDelete    = uiState.isSuperAdmin,
                                 primary      = primary,
                                 tertiary     = tertiary,
                                 surface      = surface,
@@ -342,6 +487,23 @@ fun ManageUsersScreen(
                                 },
                                 onUnban      = {
                                     if (user.userId.isNotBlank()) viewModel.unbanUser(user.userId)
+                                },
+                                onDelete     = {
+                                    if (user.userId.isNotBlank()) viewModel.deleteUser(user.userId)
+                                },
+                                onMakeAdmin  = {
+                                    targetUser           = user
+                                    permManageUsers      = false
+                                    permVerifyUsers      = false
+                                    permVerifyProperties = false
+                                    permManageProperties = false
+                                    permManageBookings   = false
+                                    permViewReports      = false
+                                    showPermissionDialog = true
+                                },
+                                onRemoveAdmin = {
+                                    removeAdminTarget     = user
+                                    showRemoveAdminDialog = true
                                 }
                             )
                         }
@@ -353,19 +515,56 @@ fun ManageUsersScreen(
 }
 
 @Composable
+private fun PermissionToggleRow(
+    label          : String,
+    checked        : Boolean,
+    primary        : Color,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier              = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            label,
+            fontSize  = 13.sp,
+            color     = MaterialTheme.colorScheme.onSurface,
+            modifier  = Modifier.weight(1f)
+        )
+        Switch(
+            checked         = checked,
+            onCheckedChange = onCheckedChange,
+            colors          = SwitchDefaults.colors(
+                checkedThumbColor  = Color.White,
+                checkedTrackColor  = primary
+            )
+        )
+    }
+}
+
+@Composable
 private fun MUPremiumUserCard(
-    fullName    : String,
-    email       : String,
-    role        : String,
-    isVerified  : Boolean,
-    isBanned    : Boolean,
-    isSuperAdmin: Boolean,
-    primary     : Color,
-    tertiary    : Color,
-    surface     : Color,
-    onSurface   : Color,
-    onBan       : () -> Unit,
-    onUnban     : () -> Unit
+    fullName     : String,
+    email        : String,
+    role         : String,
+    isVerified   : Boolean,
+    isBanned     : Boolean,
+    isSuperAdmin : Boolean,
+    isSubAdmin   : Boolean,
+    canGrantAdmin: Boolean,
+    canDelete    : Boolean,   // ← naya parameter: sirf Super Admin ko true milega
+    primary      : Color,
+    tertiary     : Color,
+    surface      : Color,
+    onSurface    : Color,
+    onBan        : () -> Unit,
+    onUnban      : () -> Unit,
+    onDelete     : () -> Unit,
+    onMakeAdmin  : () -> Unit,
+    onRemoveAdmin: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -466,6 +665,21 @@ private fun MUPremiumUserCard(
                             )
                         }
                     }
+                    if (isSubAdmin) {
+                        Surface(
+                            color    = Color(0xFF6A1B9A).copy(alpha = 0.12f),
+                            shape    = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(1.dp, Color(0xFF6A1B9A).copy(0.35f), RoundedCornerShape(20.dp))
+                        ) {
+                            Text(
+                                "Sub-Admin",
+                                fontSize   = 9.sp,
+                                color      = Color(0xFF6A1B9A),
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier   = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(2.dp))
@@ -504,12 +718,7 @@ private fun MUPremiumUserCard(
                             verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .clip(CircleShape)
-                                    .background(verColor)
-                            )
+                            Box(Modifier.size(5.dp).clip(CircleShape).background(verColor))
                             Text(
                                 if (isVerified) "Verified" else "Unverified",
                                 fontSize   = 11.sp,
@@ -558,47 +767,76 @@ private fun MUPremiumUserCard(
                         onDismissRequest = { menuExpanded = false },
                         modifier         = Modifier
                             .background(surface)
-                            .width(160.dp)
+                            .width(180.dp)
                     ) {
+                        // Ban / Unban — sub-admin bhi kar sakta hai
                         if (isBanned) {
                             DropdownMenuItem(
                                 leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(GreenOk)
-                                    )
+                                    Box(Modifier.size(8.dp).clip(CircleShape).background(GreenOk))
                                 },
                                 text    = {
-                                    Text(
-                                        "Unban User",
-                                        color      = GreenOk,
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize   = 14.sp
-                                    )
+                                    Text("Unban User", color = GreenOk, fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                 },
                                 onClick = { menuExpanded = false; onUnban() }
                             )
                         } else {
                             DropdownMenuItem(
                                 leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(RedErr)
-                                    )
+                                    Box(Modifier.size(8.dp).clip(CircleShape).background(RedErr))
                                 },
                                 text    = {
-                                    Text(
-                                        "Ban User",
-                                        color      = RedErr,
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize   = 14.sp
-                                    )
+                                    Text("Ban User", color = RedErr, fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                 },
                                 onClick = { menuExpanded = false; onBan() }
+                            )
+                        }
+
+                        // Make Admin / Remove Admin — sirf Super Admin
+                        if (canGrantAdmin) {
+                            HorizontalDivider(
+                                modifier  = Modifier.padding(vertical = 4.dp),
+                                thickness = 0.5.dp,
+                                color     = onSurface.copy(alpha = 0.10f)
+                            )
+                            if (isSubAdmin) {
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(Icons.Default.PersonRemove, null, tint = RedErr, modifier = Modifier.size(18.dp))
+                                    },
+                                    text    = {
+                                        Text("Remove Admin", color = RedErr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    },
+                                    onClick = { menuExpanded = false; onRemoveAdmin() }
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(Icons.Default.AdminPanelSettings, null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(18.dp))
+                                    },
+                                    text    = {
+                                        Text("Make Admin", color = Color(0xFF6A1B9A), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    },
+                                    onClick = { menuExpanded = false; onMakeAdmin() }
+                                )
+                            }
+                        }
+
+                        // Delete — sirf Super Admin
+                        if (canDelete) {
+                            HorizontalDivider(
+                                modifier  = Modifier.padding(vertical = 4.dp),
+                                thickness = 0.5.dp,
+                                color     = RedErr.copy(alpha = 0.2f)
+                            )
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(Icons.Default.DeleteForever, null, tint = RedErr, modifier = Modifier.size(18.dp))
+                                },
+                                text    = {
+                                    Text("Delete User", color = RedErr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                },
+                                onClick = { menuExpanded = false; onDelete() }
                             )
                         }
                     }
@@ -609,12 +847,3 @@ private fun MUPremiumUserCard(
         }
     }
 }
-
-
-
-
-
-
-
-
-

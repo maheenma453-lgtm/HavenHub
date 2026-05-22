@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -31,15 +32,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.havenhub.R
 
-// ✅ FIX: local `var favorited` hataya — ab isFavorited directly use hota hai
-// Pehle bug: `var favorited by remember { mutableStateOf(isFavorited) }` sirf
-// pehli baar ki value yaad rakhta tha. Jab HomeViewModel se isFavorited change
-// hota tha, card update nahi hota tha aur Firestore mein save bhi nahi hota tha.
-// Ab: state sirf ViewModel mein hai, card sirf display karta hai.
 @Composable
 fun PropertyCard(
     imageUrl        : String,
@@ -48,11 +45,12 @@ fun PropertyCard(
     pricePerNight   : String,
     rating          : Float,
     reviewCount     : Int,
-    isFavorited     : Boolean   = false,   // ← ViewModel se aata hai, local state nahi
+    isFavorited     : Boolean   = false,
     isVerified      : Boolean   = false,
+    isPremium       : Boolean   = false,
     propertyType    : String    = "",
     onClick         : () -> Unit,
-    onFavoriteToggle: () -> Unit = {},     // ← sirf toggle signal, Boolean nahi
+    onFavoriteToggle: () -> Unit = {},
     modifier        : Modifier  = Modifier
 ) {
     val context = LocalContext.current
@@ -81,9 +79,8 @@ fun PropertyCard(
                     modifier           = Modifier.fillMaxWidth().height(200.dp)
                 )
 
-                // ✅ Heart button — ViewModel state use karta hai, local state nahi
                 IconButton(
-                    onClick  = { onFavoriteToggle() },   // ← viewModel.toggleFavourite() yahan call hoga
+                    onClick  = { onFavoriteToggle() },
                     modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
                 ) {
                     Icon(
@@ -93,11 +90,48 @@ fun PropertyCard(
                     )
                 }
 
+                // Premium badge — top start, above Verified
+                if (isPremium) {
+                    Surface(
+                        color    = Color(0xFFD4AF37),
+                        shape    = MaterialTheme.shapes.small,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = 8.dp, top = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier          = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector        = Icons.Default.WorkspacePremium,
+                                contentDescription = null,
+                                tint               = Color(0xFF1A2744),
+                                modifier           = Modifier.size(12.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text       = "Premium",
+                                style      = MaterialTheme.typography.labelSmall,
+                                color      = Color(0xFF1A2744),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize   = 10.sp
+                            )
+                        }
+                    }
+                }
+
+                // Verified badge — shown below Premium if both active
                 if (isVerified) {
                     Surface(
                         color    = MaterialTheme.colorScheme.primaryContainer,
                         shape    = MaterialTheme.shapes.small,
-                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(
+                                start = 8.dp,
+                                top   = if (isPremium) 38.dp else 8.dp
+                            )
                     ) {
                         Text(
                             text       = "✓ Verified",
@@ -129,60 +163,64 @@ fun PropertyCard(
                 modifier            = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(text = title, style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text       = title,
+                    style      = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines   = 1,
+                    overflow   = TextOverflow.Ellipsis
+                )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocationOn, null,
-                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                    Icon(
+                        Icons.Default.LocationOn, null,
+                        tint     = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
                     Spacer(Modifier.width(2.dp))
-                    Text(text = location, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        text     = location,
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Spacer(Modifier.height(2.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(),
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically) {
-                    Text(text = "$pricePerNight / night",
-                        style = MaterialTheme.typography.bodyMedium,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text       = "$pricePerNight / night",
+                        style      = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary)
+                        color      = MaterialTheme.colorScheme.primary
+                    )
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null,
-                            tint = Color(0xFFFFC107), modifier = Modifier.size(14.dp))
+                        Icon(
+                            Icons.Default.Star, null,
+                            tint     = Color(0xFFFFC107),
+                            modifier = Modifier.size(14.dp)
+                        )
                         Spacer(Modifier.width(2.dp))
-                        Text(text = String.format("%.1f", rating),
-                            style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                        Text(text = " ($reviewCount)",
+                        Text(
+                            text       = String.format("%.1f", rating),
+                            style      = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text  = " ($reviewCount)",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

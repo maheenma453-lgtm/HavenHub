@@ -15,16 +15,18 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SearchUiState(
-    val isLoading     : Boolean          = false,
-    val searchQuery   : String           = "",
-    val searchResults : List<Property>   = emptyList(),
-    val errorMessage  : String?          = null,
-    val minPrice      : Double?          = null,
-    val maxPrice      : Double?          = null,
-    val selectedCity  : String?          = null,
-    val propertyType  : PropertyType?    = null,
-    val minBedrooms   : Int?             = null,
-    val recentSearches: List<String>     = emptyList()
+    val isLoading      : Boolean        = false,
+    val searchQuery    : String         = "",
+    val searchResults  : List<Property> = emptyList(),
+    val errorMessage   : String?        = null,
+    val minPrice       : Double?        = null,
+    val maxPrice       : Double?        = null,
+    val selectedCity   : String?        = null,
+    val propertyType   : PropertyType?  = null,
+    val minBedrooms    : Int?           = null,
+    val recentSearches : List<String>   = emptyList(),
+    // ✅ NEW: track whether any filter is currently active
+    val hasActiveFilter: Boolean        = false
 )
 
 @HiltViewModel
@@ -34,7 +36,7 @@ class SearchViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val sharedPrefs = context.getSharedPreferences("haven_hub_prefs", Context.MODE_PRIVATE)
-    private val _uiState    = MutableStateFlow(SearchUiState())
+    private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
@@ -98,14 +100,10 @@ class SearchViewModel @Inject constructor(
         _uiState.update { it.copy(recentSearches = emptyList()) }
     }
 
-    // ✅ FIX: performSearch() ab propertyRepository.getAllProperties() call karta hai
-    // jo PropertyRepository.fetchApproved() → direct Firestore APPROVED query se jaata hai.
-    // Screen pe wapas aane par refreshSearch() call karo fresh data ke liye.
     fun performSearch() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            // getAllProperties() → fetchApproved() → direct Firestore .whereEqualTo("status","APPROVED")
             val result = propertyRepository.getAllProperties()
 
             when (result) {
@@ -113,26 +111,56 @@ class SearchViewModel @Inject constructor(
                     val currentState = _uiState.value
                     var filteredList = result.data
 
+                    // Text search filter
                     if (currentState.searchQuery.isNotBlank()) {
                         val q = currentState.searchQuery.lowercase().trim()
                         filteredList = filteredList.filter {
-                            it.title.lowercase().contains(q)   ||
-                                    it.city.lowercase().contains(q)    ||
+                            it.title.lowercase().contains(q) ||
+                                    it.city.lowercase().contains(q) ||
                                     it.address.lowercase().contains(q)
                         }
                     }
 
-                    currentState.minPrice?.let    { min  -> filteredList = filteredList.filter { it.pricePerNight >= min } }
-                    currentState.maxPrice?.let    { max  -> filteredList = filteredList.filter { it.pricePerNight <= max } }
-                    currentState.selectedCity?.let{ city -> filteredList = filteredList.filter { it.city.equals(city, ignoreCase = true) } }
-                    currentState.propertyType?.let{ type -> filteredList = filteredList.filter { it.propertyType == type.toString() } }
-                    currentState.minBedrooms?.let { min  -> filteredList = filteredList.filter { it.bedrooms >= min } }
+                    // Price filters
+                    currentState.minPrice?.let { min ->
+                        filteredList = filteredList.filter { it.pricePerNight >= min }
+                    }
+                    currentState.maxPrice?.let { max ->
+                        filteredList = filteredList.filter { it.pricePerNight <= max }
+                    }
 
-                    _uiState.update { it.copy(isLoading = false, searchResults = filteredList) }
+                    // City filter
+                    currentState.selectedCity?.let { city ->
+                        filteredList = filteredList.filter {
+                            it.city.equals(city, ignoreCase = true)
+                        }
+                    }
+
+                    // ✅ BUG FIX: type.toString() → "PropertyType.HOUSE" deta tha
+                    // Firestore mein "HOUSE" store hai, isliye .name use karo
+                    currentState.propertyType?.let { type ->
+                        filteredList = filteredList.filter {
+                            it.propertyType.equals(type.name, ignoreCase = true)
+                        }
+                    }
+
+                    // Bedrooms filter
+                    currentState.minBedrooms?.let { min ->
+                        filteredList = filteredList.filter { it.bedrooms >= min }
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            searchResults = filteredList
+                        )
+                    }
                 }
+
                 is Resource.Error -> {
                     _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
                 }
+
                 is Resource.Loading -> {
                     _uiState.update { it.copy(isLoading = true) }
                 }
@@ -140,27 +168,32 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    // ✅ NEW: SearchScreen ke LaunchedEffect(Unit) mein call karo
-    // Ye ensure karta hai ke search screen pe wapas aane par fresh APPROVED
-    // properties load hon. (Koi naya property approve hua to dikhega)
     fun refreshSearch() {
         performSearch()
     }
 
     fun applyFilters(
-        minPrice : Double?,
-        maxPrice : Double?,
-        city     : String?,
-        type     : PropertyType?,
-        bedrooms : Int?
+        minPrice: Double?,
+        maxPrice: Double?,
+        city: String?,
+        type: PropertyType?,
+        bedrooms: Int?
     ) {
+        // ✅ hasActiveFilter: track karo ke koi filter laga hai ya nahi
+        val anyFilterActive = (minPrice != null && minPrice > 0) ||
+                (maxPrice != null && maxPrice < 500000) ||
+                city != null ||
+                type != null ||
+                bedrooms != null
+
         _uiState.update {
             it.copy(
-                minPrice     = minPrice,
-                maxPrice     = maxPrice,
+                minPrice = minPrice,
+                maxPrice = maxPrice,
                 selectedCity = city,
                 propertyType = type,
-                minBedrooms  = bedrooms
+                minBedrooms = bedrooms,
+                hasActiveFilter = anyFilterActive
             )
         }
         performSearch()
@@ -169,11 +202,12 @@ class SearchViewModel @Inject constructor(
     fun clearFilters() {
         _uiState.update {
             it.copy(
-                minPrice     = null,
-                maxPrice     = null,
+                minPrice = null,
+                maxPrice = null,
                 selectedCity = null,
                 propertyType = null,
-                minBedrooms  = null
+                minBedrooms = null,
+                hasActiveFilter = false
             )
         }
         performSearch()

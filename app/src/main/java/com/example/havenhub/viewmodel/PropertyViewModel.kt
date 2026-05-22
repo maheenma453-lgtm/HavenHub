@@ -39,7 +39,7 @@ class PropertyViewModel @Inject constructor(
     private val propertyRepository : PropertyRepository,
     private val authRepository     : AuthRepository,
     private val bookingRepository  : BookingRepository,
-    private val firestore          : FirebaseFirestore   // ✅ NEW inject
+    private val firestore          : FirebaseFirestore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PropertyUiState())
@@ -57,10 +57,10 @@ class PropertyViewModel @Inject constructor(
                     val property = result.data
                     _uiState.update { it.copy(isLoading = false, propertyDetail = property) }
 
-                    // ✅ FIX: Agar ownerName empty hai toh Firestore users collection se fetch karo
-                    // Yeh auto-added properties ka issue fix karta hai jahan displayName null tha
-                    if (property != null && property.ownerName.isBlank() && property.ownerId.isNotBlank()) {
-                        fetchAndPatchOwnerName(property)
+                    if (property != null) {
+                        if (property.ownerName.isBlank() && property.ownerId.isNotBlank()) {
+                            fetchAndPatchOwnerName(property)
+                        }
                     }
                 }
 
@@ -73,9 +73,6 @@ class PropertyViewModel @Inject constructor(
         }
     }
 
-    // ✅ NEW: Firestore users collection se owner ka naam fetch karo
-    // aur propertyDetail mein patch karo (Firestore document update nahi hoga,
-    // sirf in-memory UI state update hoga)
     private fun fetchAndPatchOwnerName(property: Property) {
         viewModelScope.launch {
             try {
@@ -85,28 +82,25 @@ class PropertyViewModel @Inject constructor(
                     .get()
                     .await()
 
-                // Firestore users collection mein naam in fields mein se koi bhi ho sakta hai
-                val name = doc.getString("fullName")
-                    ?: doc.getString("name")
-                    ?: doc.getString("displayName")
-                    ?: doc.getString("firstName")?.let { first ->
-                        val last = doc.getString("lastName") ?: ""
-                        "$first $last".trim()
-                    }
-                    ?: ""
+                val name = (
+                        doc.getString("fullName")
+                            ?: doc.getString("name")
+                            ?: doc.getString("displayName")
+                            ?: doc.getString("firstName")?.let { first ->
+                                val last = doc.getString("lastName") ?: ""
+                                "$first $last".trim()
+                            }
+                            ?: ""
+                        ).ifBlank { "" }
 
                 if (name.isNotBlank()) {
-                    // Sirf UI state mein patch karo — Firestore document nahi badlega
                     _uiState.update { state ->
                         state.copy(
                             propertyDetail = state.propertyDetail?.copy(ownerName = name)
                         )
                     }
                 }
-            } catch (e: Exception) {
-                // Silently ignore — naam na milna critical error nahi hai
-                // UI mein "Property Owner" fallback dikhega
-            }
+            } catch (_: Exception) { }
         }
     }
 
@@ -116,7 +110,7 @@ class PropertyViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             when (val result = propertyRepository.getMyProperties(userId)) {
                 is Resource.Success -> _uiState.update {
-                    it.copy(isLoading = false, myProperties = result.data ?: emptyList())
+                    it.copy(isLoading = false, myProperties = result.data)
                 }
 
                 is Resource.Error -> _uiState.update {
@@ -146,16 +140,34 @@ class PropertyViewModel @Inject constructor(
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // SECTION 1B — BOOKING STATUS CHECK
+    // SECTION 1B — BOOKING STATUS CHECK (DATE-AWARE)
+    //
+    // Flow:
+    //   1. checkPropertyBookingStatus() → LaunchedEffect se call hota hai
+    //   2. markExpiredBookingsCompleted() silently run hota hai background mein
+    //      → Expired bookings COMPLETED mark ho jaati hain Firestore mein
+    //   3. isPropertyBooked() fresh Firestore query karta hai
+    //      → Expired bookings ab CONFIRMED/PENDING/CHECKED_IN mein nahi milein gi
+    //      → Agar koi active booking nahi → "Available" dikhega
     // ══════════════════════════════════════════════════════════════════════════
 
     fun checkPropertyBookingStatus(propertyId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isCheckingBooking = true) }
+
+            // Step 1: Expired bookings auto-complete karo (silent)
+            try {
+                bookingRepository.markExpiredBookingsCompleted()
+            } catch (_: Exception) {
+                // Non-critical — status check continue karega
+            }
+
+            // Step 2: Active booking check karo
             val booked = bookingRepository.isPropertyBooked(propertyId)
+
             _uiState.update {
                 it.copy(
-                    isCheckingBooking = false,
+                    isCheckingBooking         = false,
                     isPropertyCurrentlyBooked = booked
                 )
             }
@@ -189,27 +201,28 @@ class PropertyViewModel @Inject constructor(
     // ══════════════════════════════════════════════════════════════════════════
 
     fun addProperty(
-        title: String,
-        description: String,
-        pricePerNight: Double,
-        address: String,
-        city: String,
-        propertyType: PropertyType,
-        bedrooms: Int,
-        bathrooms: Int,
-        areaSqFt: Double? = null,
-        amenities: List<String>,
-        images: List<Uri>,
-        pt1DocumentUri: Uri? = null,
-        petsAllowed: Boolean = false,
-        smokingAllowed: Boolean = false,
-        partiesAllowed: Boolean = false,
-        checkInTime: String = "14:00",
-        checkOutTime: String = "11:00",
-        maxGuests: Int = 2,
-        pricePerWeek: Double? = null,
-        pricePerMonth: Double? = null,
-        status: String = PropertyStatus.PENDING.name
+        title          : String,
+        description    : String,
+        pricePerNight  : Double,
+        address        : String,
+        city           : String,
+        propertyType   : PropertyType,
+        bedrooms       : Int,
+        bathrooms      : Int,
+        areaSqFt       : Double?   = null,
+        amenities      : List<String>,
+        images         : List<Uri>,
+        pt1DocumentUri : Uri?      = null,
+        petsAllowed    : Boolean   = false,
+        smokingAllowed : Boolean   = false,
+        partiesAllowed : Boolean   = false,
+        checkInTime    : String    = "14:00",
+        checkOutTime   : String    = "11:00",
+        maxGuests      : Int       = 2,
+        pricePerWeek   : Double?   = null,
+        pricePerMonth  : Double?   = null,
+        isPremium      : Boolean   = false,
+        status         : String    = PropertyStatus.PENDING.name
     ) {
         viewModelScope.launch {
             val currentUser = authRepository.currentUser ?: return@launch
@@ -220,13 +233,7 @@ class PropertyViewModel @Inject constructor(
             val resolvedLat = resolveCityLatitude(city)
             val resolvedLng = resolveCityLongitude(city)
 
-            // ✅ FIX: ownerName ke liye sirf displayName pe rely nahi karo
-            // Pehle displayName try karo, agar null/blank hai toh Firestore se fetch karo
-            val ownerNameFromAuth = currentUser.displayName?.trim() ?: ""
-            val ownerName = if (ownerNameFromAuth.isNotBlank()) {
-                ownerNameFromAuth
-            } else {
-                // Firestore se naam fetch karo
+            val ownerName: String = (currentUser.displayName?.trim() ?: "").ifBlank {
                 try {
                     val doc = firestore.collection("users").document(currentUser.uid).get().await()
                     doc.getString("fullName")
@@ -237,35 +244,36 @@ class PropertyViewModel @Inject constructor(
                             "$first $last".trim()
                         }
                         ?: ""
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     ""
                 }
             }
 
             val property = Property(
-                ownerId = currentUser.uid,
-                ownerName = ownerName,          // ✅ Fixed naam yahan store hoga
-                title = title,
-                description = description,
-                pricePerNight = pricePerNight,
-                pricePerWeek = pricePerWeek,
-                pricePerMonth = pricePerMonth,
-                address = address,
-                city = city,
-                latitude = resolvedLat,
-                longitude = resolvedLng,
-                propertyType = propertyType.toString(),
-                bedrooms = bedrooms,
-                bathrooms = bathrooms,
-                maxGuests = maxGuests,
-                areaSqFt = areaSqFt,
-                amenities = amenities,
-                petsAllowed = petsAllowed,
+                ownerId        = currentUser.uid,
+                ownerName      = ownerName,
+                title          = title,
+                description    = description,
+                pricePerNight  = pricePerNight,
+                pricePerWeek   = pricePerWeek,
+                pricePerMonth  = pricePerMonth,
+                address        = address,
+                city           = city,
+                latitude       = resolvedLat,
+                longitude      = resolvedLng,
+                propertyType   = propertyType.toString(),
+                bedrooms       = bedrooms,
+                bathrooms      = bathrooms,
+                maxGuests      = maxGuests,
+                areaSqFt       = areaSqFt,
+                amenities      = amenities,
+                petsAllowed    = petsAllowed,
                 smokingAllowed = smokingAllowed,
                 partiesAllowed = partiesAllowed,
-                checkInTime = checkInTime,
-                checkOutTime = checkOutTime,
-                status = status
+                checkInTime    = checkInTime,
+                checkOutTime   = checkOutTime,
+                premium        = isPremium,   // Property.kt mein field "premium" hai
+                status         = status
             )
 
             val result = propertyRepository.addProperty(property, images, pt1DocumentUri)
@@ -286,28 +294,29 @@ class PropertyViewModel @Inject constructor(
             val lat = resolveCityLatitude(property.city)
             val lng = resolveCityLongitude(property.city)
 
-            val fields = mutableMapOf<String, Any>(
-                "title" to property.title,
-                "description" to property.description,
-                "pricePerNight" to property.pricePerNight,
-                "address" to property.address,
-                "city" to property.city,
-                "latitude" to lat,
-                "longitude" to lng,
-                "propertyType" to property.propertyType,
-                "bedrooms" to property.bedrooms,
-                "bathrooms" to property.bathrooms,
-                "amenities" to property.amenities,
-                "petsAllowed" to property.petsAllowed,
+            val fields = mutableMapOf(
+                "title"          to property.title,
+                "description"    to property.description,
+                "pricePerNight"  to property.pricePerNight,
+                "address"        to property.address,
+                "city"           to property.city,
+                "latitude"       to lat,
+                "longitude"      to lng,
+                "propertyType"   to property.propertyType,
+                "bedrooms"       to property.bedrooms,
+                "bathrooms"      to property.bathrooms,
+                "amenities"      to property.amenities,
+                "petsAllowed"    to property.petsAllowed,
                 "smokingAllowed" to property.smokingAllowed,
                 "partiesAllowed" to property.partiesAllowed,
-                "checkInTime" to property.checkInTime,
-                "checkOutTime" to property.checkOutTime,
-                "updatedAt" to System.currentTimeMillis()
+                "checkInTime"    to property.checkInTime,
+                "checkOutTime"   to property.checkOutTime,
+                "isPremium"      to property.premium,   // Firestore key "isPremium"
+                "updatedAt"      to System.currentTimeMillis()
             )
 
-            property.areaSqFt?.let { fields["areaSqFt"] = it }
-            property.pricePerWeek?.let { fields["pricePerWeek"] = it }
+            property.areaSqFt?.let      { fields["areaSqFt"]     = it }
+            property.pricePerWeek?.let  { fields["pricePerWeek"] = it }
             property.pricePerMonth?.let { fields["pricePerMonth"] = it }
 
             val result = propertyRepository.updateProperty(property.propertyId, fields)
@@ -338,6 +347,7 @@ class PropertyViewModel @Inject constructor(
     // SECTION 6: ADMIN ACTIONS
     // ══════════════════════════════════════════════════════════════════════════
 
+    @Suppress("unused")
     fun approveProperty(propertyId: String, adminNote: String = "") {
         viewModelScope.launch {
             _uiState.update {
@@ -348,6 +358,7 @@ class PropertyViewModel @Inject constructor(
         }
     }
 
+    @Suppress("unused")
     fun rejectProperty(propertyId: String, adminNote: String) {
         viewModelScope.launch {
             _uiState.update {
@@ -372,14 +383,15 @@ class PropertyViewModel @Inject constructor(
         }
     }
 
+    @Suppress("unused")
     fun loadPackagesByProperty(propertyId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             when (val result = propertyRepository.getPackagesByProperty(propertyId)) {
                 is Resource.Success -> _uiState.update {
                     it.copy(
-                        isLoading = false,
-                        rentalPackages = result.data ?: emptyList()
+                        isLoading      = false,
+                        rentalPackages = result.data
                     )
                 }
 
@@ -392,6 +404,7 @@ class PropertyViewModel @Inject constructor(
         }
     }
 
+    @Suppress("unused")
     fun deleteRentalPackage(packageId: String) {
         viewModelScope.launch {
             _uiState.update {

@@ -32,6 +32,7 @@ import com.example.havenhub.viewmodel.BookingViewModel
 import com.example.havenhub.viewmodel.PropertyViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.platform.LocalLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +79,7 @@ fun BookingScreen(
     // Double-tap guard — booking ek baar hi create hogi
     var isSubmitting by remember { mutableStateOf(false) }
 
-    val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    val dateFormatter = SimpleDateFormat("dd MMM yyyy", LocalLocale.current.platformLocale)
 
     val totalAmount = remember(nights, selectedDuration, property) {
         when (selectedDuration) {
@@ -197,15 +198,6 @@ fun BookingScreen(
                     )
                 }
 
-                // ════════════════════════════════════════════════════════════
-                // ✅ FIX: Property "already booked" check
-                //
-                // Problem: Pehle sirf APPROVED check tha. Agar property ka
-                // status "BOOKED" ho gaya (kisi ne already book kar liya)
-                // toh tenant phir bhi booking screen khol sakta tha.
-                //
-                // Fix: status == "BOOKED" alag friendly message dikhao.
-                // ════════════════════════════════════════════════════════════
                 property.status.equals(PropertyStatus.APPROVED.name, ignoreCase = true).not()
                         && property.status.equals("BOOKED", ignoreCase = true) -> {
                     BookingBlockedCard(
@@ -373,6 +365,8 @@ fun BookingScreen(
                                 color      = textPrimary
                             )
                             Spacer(modifier = Modifier.height(16.dp))
+
+                            // ── Nights counter (no max restriction) ──────────
                             CounterRow(
                                 label       = "Number of Nights",
                                 count       = nights,
@@ -380,19 +374,37 @@ fun BookingScreen(
                                 onIncrement = { nights++ },
                                 isDark      = isDark
                             )
+
                             Spacer(modifier = Modifier.height(16.dp))
+
+                            // ── Guests counter — RESTRICTED to maxGuests ─────
+                            // ✦ FIX: guests > maxGuests hone par "+" button
+                            //         disable + grey ho jata hai aur warning
+                            //         text red ho jata hai.
+                            val atGuestMax = guests >= property.maxGuests
+
                             CounterRow(
                                 label       = "Number of Guests",
                                 count       = guests,
                                 onDecrement = { if (guests > 1) guests-- },
-                                onIncrement = { if (guests < property.maxGuests) guests++ },
-                                isDark      = isDark
+                                onIncrement = {
+                                    if (guests < property.maxGuests) guests++
+                                },
+                                isDark      = isDark,
+                                atMax       = atGuestMax
                             )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Max guests info text — red jab limit pe ho
                             Text(
-                                "Max ${property.maxGuests} guests allowed",
-                                fontSize = 12.sp,
-                                color    = hintColor,
-                                modifier = Modifier.padding(top = 8.dp)
+                                text = if (atGuestMax)
+                                    "⚠️ Maximum limit reached! (${property.maxGuests} guests allowed)"
+                                else
+                                    "Max ${property.maxGuests} guests allowed",
+                                fontSize   = 12.sp,
+                                color      = if (atGuestMax) Color(0xFFB71C1C) else hintColor,
+                                fontWeight = if (atGuestMax) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     }
@@ -469,7 +481,6 @@ fun BookingScreen(
 
                     Button(
                         onClick = {
-                            // Double tap guard
                             if (isSubmitting) return@Button
                             isSubmitting = true
 
@@ -547,8 +558,6 @@ fun BookingScreen(
 
 // ════════════════════════════════════════════════════════════════════════════
 // BOOKING BLOCKED CARD
-// Shown when booking is not possible — not approved, or already booked.
-// isBooked = true shows a house icon + different wording.
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -569,11 +578,10 @@ private fun BookingBlockedCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                // House icon for booked, warning for unapproved
-                imageVector = if (isBooked) Icons.Default.Home else Icons.Default.Warning,
+                imageVector        = if (isBooked) Icons.Default.Home else Icons.Default.Warning,
                 contentDescription = null,
-                tint        = textColor,
-                modifier    = Modifier.size(24.dp)
+                tint               = textColor,
+                modifier           = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
@@ -588,7 +596,9 @@ private fun BookingBlockedCard(
 
 // ════════════════════════════════════════════════════════════════════════════
 // COUNTER ROW
-// Reusable decrement / label / increment row for nights and guest counts.
+// ✦ UPDATED: atMax parameter added
+//   - Jab atMax = true → "+" button grey + disabled ho jata hai
+//   - Nights ke liye atMax = false (default) — koi restriction nahi
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -597,7 +607,8 @@ private fun CounterRow(
     count      : Int,
     onDecrement: () -> Unit,
     onIncrement: () -> Unit,
-    isDark     : Boolean
+    isDark     : Boolean,
+    atMax      : Boolean = false   // ✦ NEW
 ) {
     val textColor    = if (isDark) DarkTextPrimary else Color(0xFF0D1B3E)
     val minusBg      = if (isDark) DarkBgElevated  else Color(0xFFE0E6ED)
@@ -611,6 +622,8 @@ private fun CounterRow(
     ) {
         Text(label, fontSize = 14.sp, color = textColor)
         Row(verticalAlignment = Alignment.CenterVertically) {
+
+            // ── Decrement button ─────────────────────────────────────────────
             IconButton(
                 onClick  = onDecrement,
                 modifier = Modifier
@@ -625,6 +638,8 @@ private fun CounterRow(
                     modifier           = Modifier.size(18.dp)
                 )
             }
+
+            // ── Count display ────────────────────────────────────────────────
             Text(
                 text       = "$count",
                 fontSize   = 17.sp,
@@ -632,18 +647,23 @@ private fun CounterRow(
                 modifier   = Modifier.padding(horizontal = 18.dp),
                 color      = textColor
             )
+
+            // ── Increment button — disabled + grey jab atMax = true ──────────
             IconButton(
                 onClick  = onIncrement,
+                enabled  = !atMax,
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(plusBg)
+                    .background(
+                        if (atMax) Color(0xFFBDC3C7) else plusBg
+                    )
             ) {
                 Icon(
                     Icons.Default.Add,
                     contentDescription = null,
-                    tint               = plusIconTint,
-                    modifier           = Modifier.size(18.dp)
+                    tint    = if (atMax) Color.White.copy(alpha = 0.5f) else plusIconTint,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -652,7 +672,6 @@ private fun CounterRow(
 
 // ════════════════════════════════════════════════════════════════════════════
 // PRICE ROW
-// Label + value pair inside the dark price breakdown card.
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable

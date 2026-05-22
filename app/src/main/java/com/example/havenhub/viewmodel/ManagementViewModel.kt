@@ -2,6 +2,7 @@ package com.example.havenhub.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.havenhub.data.AdminPermissions
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.Property
@@ -9,6 +10,7 @@ import com.example.havenhub.data.User
 import com.example.havenhub.repository.AdminRepository
 import com.example.havenhub.utils.Resource
 import com.example.havenhub.utils.getPropertyImage
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
@@ -22,6 +24,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
+private const val SUPER_ADMIN_EMAIL = "admin@havenhub.com"
+
 data class ManagementUiState(
     val isLoading          : Boolean         = false,
     val users              : List<User>       = emptyList(),
@@ -30,7 +34,8 @@ data class ManagementUiState(
     val bookingDrawableMap : Map<String, Int> = emptyMap(),
     val actionSuccess      : Boolean          = false,
     val errorMessage       : String?          = null,
-    val successMessage     : String?          = null
+    val successMessage     : String?          = null,
+    val isSuperAdmin       : Boolean          = false
 )
 
 @HiltViewModel
@@ -39,13 +44,23 @@ class ManagementViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val firestore     = FirebaseFirestore.getInstance()
+    private val auth          = FirebaseAuth.getInstance()
     private val usersCol      = firestore.collection("users")
     private val propertiesCol = firestore.collection("properties")
 
     private val _uiState = MutableStateFlow(ManagementUiState())
     val uiState: StateFlow<ManagementUiState> = _uiState.asStateFlow()
 
-    init { loadAllData() }
+    init {
+        checkSuperAdminStatus()
+        loadAllData()
+    }
+
+    private fun checkSuperAdminStatus() {
+        val currentEmail = auth.currentUser?.email ?: ""
+        val isSuperAdmin = currentEmail.equals(SUPER_ADMIN_EMAIL, ignoreCase = true)
+        _uiState.update { it.copy(isSuperAdmin = isSuperAdmin) }
+    }
 
     fun loadAllData() {
         viewModelScope.launch {
@@ -71,15 +86,9 @@ class ManagementViewModel @Inject constructor(
                                             ?: doc.getString("userType")
                                             ?: "tenant"
                                         user.copy(role = fetchedRole)
-                                    } catch (e: Exception) {
-                                        user
-                                    }
-                                } else {
-                                    user
-                                }
+                                    } catch (e: Exception) { user }
+                                } else { user }
                             }
-                            // ✅ FIX: Duplicate userId wale users hata do
-                            // Logcat mein same userId baar baar aa raha tha → LazyColumn crash
                             .distinctBy { it.userId.ifBlank { it.email } }
                     }
                     else -> emptyList()
@@ -91,9 +100,7 @@ class ManagementViewModel @Inject constructor(
                 }
 
                 val (enrichedBookings, drawableMap) = when (bookingsResult) {
-                    is Resource.Success -> enrichBookingsWithMissingData(
-                        bookingsResult.data ?: emptyList()
-                    )
+                    is Resource.Success -> enrichBookingsWithMissingData(bookingsResult.data ?: emptyList())
                     else -> Pair(emptyList(), emptyMap())
                 }
 
@@ -107,13 +114,9 @@ class ManagementViewModel @Inject constructor(
                         errorMessage       = null
                     )
                 }
-
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(
-                        isLoading    = false,
-                        errorMessage = "Unexpected error: ${e.localizedMessage}"
-                    )
+                    it.copy(isLoading = false, errorMessage = "Unexpected error: ${e.localizedMessage}")
                 }
             }
         }
@@ -135,32 +138,20 @@ class ManagementViewModel @Inject constructor(
                                             ?: doc.getString("userType")
                                             ?: "tenant"
                                         user.copy(role = fetchedRole)
-                                    } catch (e: Exception) {
-                                        user
-                                    }
-                                } else {
-                                    user
-                                }
+                                    } catch (e: Exception) { user }
+                                } else { user }
                             }
-                            // ✅ FIX: Yahan bhi duplicate remove karo
                             .distinctBy { it.userId.ifBlank { it.email } }
-
                         _uiState.update { it.copy(users = safeUsers, isLoading = false) }
                     }
                     is Resource.Error -> _uiState.update {
-                        it.copy(
-                            errorMessage = result.message ?: "Failed to load users",
-                            isLoading    = false
-                        )
+                        it.copy(errorMessage = result.message ?: "Failed to load users", isLoading = false)
                     }
                     is Resource.Loading -> Unit
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(
-                        errorMessage = "Unexpected error: ${e.localizedMessage}",
-                        isLoading    = false
-                    )
+                    it.copy(errorMessage = "Unexpected error: ${e.localizedMessage}", isLoading = false)
                 }
             }
         }
@@ -172,25 +163,16 @@ class ManagementViewModel @Inject constructor(
             try {
                 when (val result = adminRepository.getAllProperties()) {
                     is Resource.Success -> _uiState.update {
-                        it.copy(
-                            properties = result.data ?: emptyList(),
-                            isLoading  = false
-                        )
+                        it.copy(properties = result.data ?: emptyList(), isLoading = false)
                     }
                     is Resource.Error -> _uiState.update {
-                        it.copy(
-                            errorMessage = result.message ?: "Failed to load properties",
-                            isLoading    = false
-                        )
+                        it.copy(errorMessage = result.message ?: "Failed to load properties", isLoading = false)
                     }
                     is Resource.Loading -> Unit
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(
-                        errorMessage = "Unexpected error: ${e.localizedMessage}",
-                        isLoading    = false
-                    )
+                    it.copy(errorMessage = "Unexpected error: ${e.localizedMessage}", isLoading = false)
                 }
             }
         }
@@ -206,27 +188,17 @@ class ManagementViewModel @Inject constructor(
                             result.data ?: emptyList()
                         )
                         _uiState.update {
-                            it.copy(
-                                bookings           = enrichedBookings,
-                                bookingDrawableMap = drawableMap,
-                                isLoading          = false
-                            )
+                            it.copy(bookings = enrichedBookings, bookingDrawableMap = drawableMap, isLoading = false)
                         }
                     }
                     is Resource.Error -> _uiState.update {
-                        it.copy(
-                            errorMessage = result.message ?: "Failed to load bookings",
-                            isLoading    = false
-                        )
+                        it.copy(errorMessage = result.message ?: "Failed to load bookings", isLoading = false)
                     }
                     is Resource.Loading -> Unit
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(
-                        errorMessage = "Unexpected error: ${e.localizedMessage}",
-                        isLoading    = false
-                    )
+                    it.copy(errorMessage = "Unexpected error: ${e.localizedMessage}", isLoading = false)
                 }
             }
         }
@@ -235,7 +207,6 @@ class ManagementViewModel @Inject constructor(
     private suspend fun enrichBookingsWithMissingData(
         bookings: List<Booking>
     ): Pair<List<Booking>, Map<String, Int>> {
-
         val drawableMap = mutableMapOf<String, Int>()
         if (bookings.isEmpty()) return Pair(emptyList(), drawableMap)
 
@@ -243,7 +214,6 @@ class ManagementViewModel @Inject constructor(
             bookings.map { booking ->
                 async {
                     var enriched = booking
-
                     try {
                         if (enriched.tenantId.isNotBlank()) {
                             val userDoc     = usersCol.document(enriched.tenantId).get().await()
@@ -251,9 +221,7 @@ class ManagementViewModel @Inject constructor(
                                 ?: userDoc.getString("name")
                                 ?: userDoc.getString("displayName")
                                 ?: ""
-                            if (fetchedName.isNotBlank()) {
-                                enriched = enriched.copy(tenantName = fetchedName)
-                            }
+                            if (fetchedName.isNotBlank()) enriched = enriched.copy(tenantName = fetchedName)
                         }
                     } catch (_: Exception) { }
 
@@ -268,21 +236,15 @@ class ManagementViewModel @Inject constructor(
                                 enriched = enriched.copy(propertyCoverUrl = fetchedUrl)
                                 urlFound = true
                             }
-                            if (!urlFound) {
-                                drawableMap[enriched.bookingId] = getPropertyImage(enriched.propertyId)
-                            }
+                            if (!urlFound) drawableMap[enriched.bookingId] = getPropertyImage(enriched.propertyId)
                         }
                     } catch (_: Exception) {
-                        if (enriched.propertyId.isNotBlank()) {
-                            drawableMap[enriched.bookingId] = getPropertyImage(enriched.propertyId)
-                        }
+                        if (enriched.propertyId.isNotBlank()) drawableMap[enriched.bookingId] = getPropertyImage(enriched.propertyId)
                     }
-
                     enriched
                 }
             }.awaitAll()
         }
-
         return Pair(enrichedList, drawableMap)
     }
 
@@ -301,6 +263,11 @@ class ManagementViewModel @Inject constructor(
     }
 
     fun deleteProperty(propertyId: String) = viewModelScope.launch {
+        // Guard: sirf Super Admin property delete kar sakta hai
+        if (!_uiState.value.isSuperAdmin) {
+            _uiState.update { it.copy(errorMessage = "Only Super Admin can delete properties.") }
+            return@launch
+        }
         if (propertyId.isBlank()) return@launch
         _uiState.update { it.copy(isLoading = true) }
         handleActionResult(adminRepository.deleteProperty(propertyId)) { loadAllProperties() }
@@ -318,6 +285,51 @@ class ManagementViewModel @Inject constructor(
         if (userId.isBlank()) return@launch
         _uiState.update { it.copy(isLoading = true) }
         handleActionResult(adminRepository.unbanUser(userId)) { loadAllUsers() }
+    }
+
+    fun deleteUser(userId: String) = viewModelScope.launch {
+        // Guard: sirf Super Admin user delete kar sakta hai
+        if (!_uiState.value.isSuperAdmin) {
+            _uiState.update { it.copy(errorMessage = "Only Super Admin can delete users.") }
+            return@launch
+        }
+        if (userId.isBlank()) return@launch
+        _uiState.update { it.copy(isLoading = true) }
+        handleActionResult(adminRepository.deleteUser(userId)) { loadAllUsers() }
+    }
+
+    // ── Make/Remove Sub-Admin ─────────────────────────────────────────────────
+
+    fun makeSubAdmin(userId: String, permissions: AdminPermissions) = viewModelScope.launch {
+        if (!_uiState.value.isSuperAdmin) {
+            _uiState.update { it.copy(errorMessage = "Only Super Admin can grant admin access.") }
+            return@launch
+        }
+        if (userId.isBlank()) return@launch
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        handleActionResult(
+            result    = adminRepository.makeSubAdmin(userId, permissions),
+            onSuccess = {
+                loadAllUsers()
+                _uiState.update { it.copy(successMessage = "Admin access granted successfully.") }
+            }
+        )
+    }
+
+    fun removeSubAdmin(userId: String) = viewModelScope.launch {
+        if (!_uiState.value.isSuperAdmin) {
+            _uiState.update { it.copy(errorMessage = "Only Super Admin can revoke admin access.") }
+            return@launch
+        }
+        if (userId.isBlank()) return@launch
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        handleActionResult(
+            result    = adminRepository.removeSubAdmin(userId),
+            onSuccess = {
+                loadAllUsers()
+                _uiState.update { it.copy(successMessage = "Admin access revoked successfully.") }
+            }
+        )
     }
 
     // ── Booking Actions ───────────────────────────────────────────────────────
@@ -341,17 +353,14 @@ class ManagementViewModel @Inject constructor(
                             actionSuccess  = true,
                             successMessage = "Booking confirmed successfully!",
                             bookings       = state.bookings.map { b ->
-                                if (b.bookingId == bookingId) b.copy(status = BookingStatus.CONFIRMED.name)
-                                else b
+                                if (b.bookingId == bookingId) b.copy(status = BookingStatus.CONFIRMED.name) else b
                             }
                         )
                     }
                     loadAllBookings()
                 }
-                is Resource.Error -> _uiState.update {
-                    it.copy(isLoading = false, errorMessage = result.message)
-                }
-                Resource.Loading -> Unit
+                is Resource.Error   -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                is Resource.Loading -> Unit
             }
         } catch (e: Exception) {
             _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
@@ -371,36 +380,25 @@ class ManagementViewModel @Inject constructor(
                             actionSuccess  = true,
                             successMessage = "Booking rejected.",
                             bookings       = state.bookings.map { b ->
-                                if (b.bookingId == bookingId) b.copy(status = BookingStatus.CANCELLED.name)
-                                else b
+                                if (b.bookingId == bookingId) b.copy(status = BookingStatus.CANCELLED.name) else b
                             }
                         )
                     }
                     loadAllBookings()
                 }
-                is Resource.Error -> _uiState.update {
-                    it.copy(isLoading = false, errorMessage = result.message)
-                }
-                Resource.Loading -> Unit
+                is Resource.Error   -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                is Resource.Loading -> Unit
             }
         } catch (e: Exception) {
             _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
         }
     }
 
-    // ── Helper ────────────────────────────────────────────────────────────────
-
     private fun handleActionResult(result: Resource<Unit>, onSuccess: () -> Unit) {
         _uiState.update { state ->
             when (result) {
-                is Resource.Success -> {
-                    onSuccess()
-                    state.copy(isLoading = false, actionSuccess = true)
-                }
-                is Resource.Error -> state.copy(
-                    isLoading    = false,
-                    errorMessage = result.message ?: "Unknown error"
-                )
+                is Resource.Success -> { onSuccess(); state.copy(isLoading = false, actionSuccess = true) }
+                is Resource.Error   -> state.copy(isLoading = false, errorMessage = result.message ?: "Unknown error")
                 is Resource.Loading -> state.copy(isLoading = true)
             }
         }
@@ -410,19 +408,3 @@ class ManagementViewModel @Inject constructor(
         _uiState.update { it.copy(actionSuccess = false, errorMessage = null, successMessage = null) }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -208,6 +208,7 @@ fun AddPropertyScreen(
                                     amenities      = selectedAmenities.toList(),
                                     images         = selectedImages,
                                     pt1DocumentUri = pt1DocumentUri,
+                                    isPremium      = selectedType == "Premium",
                                     petsAllowed    = petsAllowed,
                                     smokingAllowed = smokingAllowed,
                                     partiesAllowed = partiesAllowed,

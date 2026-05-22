@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -49,28 +50,26 @@ import com.example.havenhub.viewmodel.NotificationViewModel
 import com.example.havenhub.viewmodel.VacationViewModel
 import kotlinx.coroutines.launch
 
-// =============================================================================
-// LIGHT THEME DESIGN TOKENS
-// =============================================================================
-private val NavyDeep    = Color(0xFF071020)
-private val NavyPrime   = Color(0xFF0D1B3E)
-private val NavyMid     = Color(0xFF1A3A6B)
-private val GoldPrime   = Color(0xFFD4AF37)
-private val GoldLight   = Color(0xFFF5D060)
-private val GoldFaint   = Color(0xFFFFF8E1)
-private val GoldDim     = Color(0xFFB8962E)
-private val PageBg      = Color(0xFFF0F4FA)
-private val CardWhite   = Color(0xFFFFFFFF)
-private val CardBg      = Color(0xFFFFFFFF)
-private val TextMuted   = Color(0xFF8899AA)
-private val TextDark    = Color(0xFF1A2744)
-private val GreenOk     = Color(0xFF4CAF50)
-private val OrangePend  = Color(0xFFFF9800)
-private val DividerCol  = Color(0xFFE8ECF4)
+// ═══════════════════════════════════════════════════════════════════════════════
+// DESIGN TOKENS — LIGHT THEME
+// ═══════════════════════════════════════════════════════════════════════════════
+private val L_NavyDeep    = Color(0xFF060E20)
+private val L_NavyPrime   = Color(0xFF0D1B3E)
+private val L_NavyMid     = Color(0xFF1A3A6B)
+private val L_GoldPrime   = Color(0xFFD4AF37)
+private val L_GoldLight   = Color(0xFFF5D060)
+private val L_GoldFaint   = Color(0xFFFFF8E1)
+private val L_GoldDim     = Color(0xFFB8962E)
+private val L_PageBg      = Color(0xFFF0F4FA)
+private val L_CardBg      = Color(0xFFFFFFFF)
+private val L_TextMuted   = Color(0xFF8899AA)
+private val L_TextDark    = Color(0xFF1A2744)
+private val L_GreenOk     = Color(0xFF4CAF50)
+private val L_OrangePend  = Color(0xFFFF9800)
 
-// =============================================================================
-// DARK THEME DESIGN TOKENS
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
+// DESIGN TOKENS — DARK THEME
+// ═══════════════════════════════════════════════════════════════════════════════
 private val D_BgDeep        = Color(0xFF060D1A)
 private val D_BgPrimary     = Color(0xFF0D1B3E)
 private val D_BgSecondary   = Color(0xFF122040)
@@ -86,26 +85,125 @@ private val D_Border        = Color(0xFF1E2E50)
 private val D_GreenOk       = Color(0xFF3DCC7A)
 private val D_OrangePend    = Color(0xFFFFB347)
 
-// =============================================================================
-// SHARED BRUSHES
-// =============================================================================
-private val NavyLinear   = Brush.linearGradient(listOf(NavyDeep, NavyMid))
-private val GoldLinear   = Brush.linearGradient(listOf(GoldPrime, GoldLight))
-private val GoldGradient = Brush.linearGradient(listOf(GoldPrime, GoldLight, GoldPrime))
-private val NavyGradient = Brush.verticalGradient(listOf(NavyDeep, NavyMid))
-
-private val D_GoldBorderBrush = Brush.horizontalGradient(
-    listOf(D_GoldPrimary.copy(0.9f), D_GoldLight.copy(0.4f), D_GoldPrimary.copy(0.9f))
+// ═══════════════════════════════════════════════════════════════════════════════
+// THEME-AWARE TOKEN RESOLVER
+// ═══════════════════════════════════════════════════════════════════════════════
+private data class ThemeTokens(
+    val pageBg      : Color,
+    val cardBg      : Color,
+    val textDark    : Color,
+    val textMuted   : Color,
+    val goldPrime   : Color,
+    val goldLight   : Color,
+    val goldFaint   : Color,
+    val goldDim     : Color,
+    val greenOk     : Color,
+    val orangePend  : Color,
+    val navyLinear  : Brush,
+    val navyGradient: Brush,
+    val goldLinear  : Brush,
+    val goldGradient: Brush,
+    val goldBorder  : Brush
 )
-private val D_NavyGradient = Brush.verticalGradient(listOf(D_BgDeep, D_BgPrimary, D_BgSecondary))
-private val D_NavyLinear   = Brush.linearGradient(listOf(D_BgDeep, D_BgSecondary))
-private val D_GoldLinear   = Brush.linearGradient(listOf(D_GoldPrimary, D_GoldLight))
-private val D_GoldGradient = Brush.linearGradient(listOf(D_GoldPrimary, D_GoldLight, D_GoldPrimary))
 
-// =============================================================================
-// MAIN ENTRY POINT
-// Routes to LandlordHomeScreen or TenantHomeScreen based on user role.
-// =============================================================================
+private fun resolveTokens(isDark: Boolean): ThemeTokens {
+    val goldP = if (isDark) D_GoldPrimary else L_GoldPrime
+    val goldL = if (isDark) D_GoldLight   else L_GoldLight
+    return ThemeTokens(
+        pageBg       = if (isDark) D_BgDeep       else L_PageBg,
+        cardBg       = if (isDark) D_BgCard        else L_CardBg,
+        textDark     = if (isDark) D_TextPrimary   else L_TextDark,
+        textMuted    = if (isDark) D_TextSecondary else L_TextMuted,
+        goldPrime    = goldP,
+        goldLight    = goldL,
+        goldFaint    = if (isDark) D_GoldFaint     else L_GoldFaint,
+        goldDim      = if (isDark) D_GoldDim       else L_GoldDim,
+        greenOk      = if (isDark) D_GreenOk       else L_GreenOk,
+        orangePend   = if (isDark) D_OrangePend    else L_OrangePend,
+        navyLinear   = if (isDark)
+            Brush.linearGradient(listOf(D_BgDeep, D_BgSecondary))
+        else
+            Brush.linearGradient(listOf(L_NavyDeep, L_NavyMid)),
+        navyGradient = if (isDark)
+            Brush.verticalGradient(listOf(D_BgDeep, D_BgPrimary, D_BgSecondary))
+        else
+            Brush.verticalGradient(listOf(L_NavyDeep, L_NavyPrime, L_NavyMid)),
+        goldLinear   = Brush.linearGradient(listOf(goldP, goldL)),
+        goldGradient = Brush.linearGradient(listOf(goldP, goldL, goldP)),
+        goldBorder   = Brush.horizontalGradient(
+            listOf(goldP.copy(0.9f), goldL.copy(0.5f), goldP.copy(0.9f))
+        )
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CARD CLICK SHINE HELPER
+// ═══════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun GoldShineOverlay(visible: Boolean) {
+    val alpha by animateFloatAsState(
+        targetValue   = if (visible) 1f else 0f,
+        animationSpec = tween(250),
+        label         = "shine"
+    )
+    if (alpha > 0f) {
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.linearGradient(
+                    listOf(
+                        L_GoldPrime.copy(0f),
+                        L_GoldPrime.copy(0.10f * alpha),
+                        L_GoldPrime.copy(0f)
+                    )
+                )
+            )
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ✦ PROFILE AVATAR COMPOSABLE — reusable for Tenant + Landlord headers
+// ═══════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun ProfileAvatarButton(
+    photoUrl  : String,
+    initials  : String,
+    goldBorder: Brush,
+    goldPrime : Color,
+    onClick   : () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .background(goldPrime.copy(alpha = 0.18f))
+            .border(2.dp, goldBorder, CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        if (photoUrl.isNotEmpty()) {
+            AsyncImage(
+                model              = photoUrl,
+                contentDescription = "Profile",
+                modifier           = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape),
+                contentScale       = ContentScale.Crop
+            )
+        } else {
+            Text(
+                text       = initials.take(2),
+                fontSize   = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color      = goldPrime
+            )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HOME SCREEN — Entry Point
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun HomeScreen(
     navController        : NavController,
@@ -120,19 +218,13 @@ fun HomeScreen(
     val notifState by notificationViewModel.uiState.collectAsState()
     val isDark     by MainActivity.darkModeFlow.collectAsState()
 
-    // Show spinner while auth is initializing
     if (!authState.isAuthReady) {
-        val bgColor      = if (isDark) D_BgDeep else PageBg
-        val spinnerColor = if (isDark) D_GoldPrimary else GoldPrime
+        val tk = resolveTokens(isDark)
         Box(
-            modifier         = Modifier.fillMaxSize().background(bgColor),
+            modifier         = Modifier.fillMaxSize().background(tk.pageBg),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(
-                color       = spinnerColor,
-                strokeWidth = 3.dp,
-                modifier    = Modifier.size(40.dp)
-            )
+            CircularProgressIndicator(color = tk.goldPrime, strokeWidth = 3.dp, modifier = Modifier.size(40.dp))
         }
         return
     }
@@ -140,31 +232,19 @@ fun HomeScreen(
     val userRole = authState.userRole.lowercase().trim()
     val userId   = authState.currentUser?.uid ?: ""
 
-    // Start listening for notifications when user is available
     LaunchedEffect(userId) {
         if (userId.isNotEmpty()) notificationViewModel.startListening(userId)
     }
-
-    // Initial data load — runs once when userId or userRole changes
     LaunchedEffect(userId, userRole) {
         when {
             userRole == "landlord" && userId.isNotEmpty() -> viewModel.loadLandlordStats(userId)
-            else -> {
-                viewModel.loadHomeData()
-                vacationViewModel.loadVacationProperties()
-            }
+            else -> { viewModel.loadHomeData(); vacationViewModel.loadVacationProperties() }
         }
     }
-
-    // Refresh on every screen re-entry (navigating back from another screen)
-    // Without this, newly approved properties only appear after full app restart
     LaunchedEffect(Unit) {
         when (userRole) {
             "landlord" -> { if (userId.isNotEmpty()) viewModel.refreshLandlordStats() }
-            else -> {
-                viewModel.refreshHomeData()
-                vacationViewModel.loadVacationProperties()
-            }
+            else       -> { viewModel.refreshHomeData(); vacationViewModel.loadVacationProperties() }
         }
     }
 
@@ -187,11 +267,9 @@ fun HomeScreen(
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // IMAGE HELPER
-// Prefers remote ImgBB URL over local drawable resource.
-// Falls back to drawable if imageUrls is empty (manually seeded properties).
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 private fun resolveDrawable(property: Property): Int {
     if (property.drawableImageName.isNotEmpty())    return getPropertyImage(property.drawableImageName)
     if (property.resolvedDrawableName.isNotEmpty()) return getPropertyImage(property.resolvedDrawableName)
@@ -206,26 +284,15 @@ private fun PropertyImage(
 ) {
     val remoteUrl = property.imageUrls.firstOrNull { it.isNotBlank() }
     if (!remoteUrl.isNullOrEmpty()) {
-        AsyncImage(
-            model              = remoteUrl,
-            contentDescription = property.title,
-            modifier           = modifier,
-            contentScale       = contentScale
-        )
+        AsyncImage(model = remoteUrl, contentDescription = property.title, modifier = modifier, contentScale = contentScale)
     } else {
-        Image(
-            painter            = painterResource(id = resolveDrawable(property)),
-            contentDescription = property.title,
-            modifier           = modifier,
-            contentScale       = contentScale
-        )
+        Image(painter = painterResource(id = resolveDrawable(property)), contentDescription = property.title, modifier = modifier, contentScale = contentScale)
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // LANDLORD HOME SCREEN
-// Shows revenue, quick actions, and the landlord's own property listings.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun LandlordHomeScreen(
     navController: NavController,
@@ -233,21 +300,7 @@ private fun LandlordHomeScreen(
     unreadCount  : Int     = 0,
     isDark       : Boolean = false
 ) {
-    val pageBg     = if (isDark) D_BgDeep      else PageBg
-    val headerGrad = if (isDark) D_NavyGradient else NavyGradient
-    val goldBorder = if (isDark)
-        Brush.horizontalGradient(listOf(D_GoldPrimary, D_GoldLight.copy(0.85f), D_GoldPrimary))
-    else
-        Brush.horizontalGradient(listOf(GoldPrime, GoldLight.copy(0.85f), GoldPrime))
-    val goldP      = if (isDark) D_GoldPrimary   else GoldPrime
-    val goldL      = if (isDark) D_GoldLight      else GoldLight
-    val goldF      = if (isDark) D_GoldFaint      else GoldFaint
-    val navyLinear = if (isDark) D_NavyLinear     else NavyLinear
-    val goldGrad   = if (isDark) D_GoldGradient   else GoldGradient
-    val textDk     = if (isDark) D_TextPrimary    else TextDark
-    val textMtd    = if (isDark) D_TextSecondary  else TextMuted
-    val greenOk    = if (isDark) D_GreenOk        else GreenOk
-    val orangePnd  = if (isDark) D_OrangePend     else OrangePend
+    val tk = resolveTokens(isDark)
 
     val formattedRevenue = remember(uiState.totalRevenue) {
         when {
@@ -257,54 +310,65 @@ private fun LandlordHomeScreen(
         }
     }
 
-    // Pulsing animation for pending requests badge
     val pulseAnim  = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by pulseAnim.animateFloat(
         initialValue  = 0.6f,
         targetValue   = 1f,
-        animationSpec = infiniteRepeatable(
-            animation  = tween(900, easing = EaseInOut),
-            repeatMode = RepeatMode.Reverse
-        ),
+        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOut), RepeatMode.Reverse),
         label = "pulseAlpha"
     )
 
     LazyColumn(
-        modifier       = Modifier.fillMaxSize().background(pageBg),
+        modifier       = Modifier.fillMaxSize().background(tk.pageBg),
         contentPadding = PaddingValues(bottom = 90.dp)
     ) {
         // ── 1. HEADER ─────────────────────────────────────────────────────────
         item {
-            Box(modifier = Modifier.fillMaxWidth().background(headerGrad)) {
-                Box(Modifier.size(200.dp).align(Alignment.TopEnd).offset(x = 70.dp, y = (-70).dp).clip(CircleShape).background(goldP.copy(alpha = 0.06f)))
-                Box(Modifier.size(100.dp).align(Alignment.BottomStart).offset(x = (-30).dp, y = 40.dp).clip(CircleShape).background(goldP.copy(alpha = 0.04f)))
-                Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.BottomCenter).background(goldBorder))
+            Box(modifier = Modifier.fillMaxWidth().background(tk.navyGradient)) {
+                Box(Modifier.size(200.dp).align(Alignment.TopEnd).offset(x = 70.dp, y = (-70).dp).clip(CircleShape).background(tk.goldPrime.copy(0.06f)))
+                Box(Modifier.size(100.dp).align(Alignment.BottomStart).offset(x = (-30).dp, y = 40.dp).clip(CircleShape).background(tk.goldPrime.copy(0.04f)))
+                Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.BottomCenter).background(tk.goldBorder))
 
                 Column(
                     Modifier.fillMaxWidth().statusBarsPadding()
-                        .padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 24.dp)
+                        .padding(horizontal = 20.dp).padding(top = 18.dp, bottom = 26.dp)
                 ) {
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
-                        Column {
-                            Text("Welcome Back 👋", color = goldP, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Column(Modifier.weight(1f)) {
+                            Text("Welcome Back 👋", color = tk.goldPrime, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.3.sp)
                             Spacer(Modifier.height(6.dp))
                             Text("Manage Your Haven", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
-                            Text("Track listings & booking requests", color = Color.White.copy(0.55f), fontSize = 12.sp)
+                            Text("Track listings & booking requests", color = Color.White.copy(0.5f), fontSize = 12.sp)
                         }
-                        NotificationIconButton(
-                            count   = unreadCount,
-                            onClick = { navController.navigate(Screen.Notifications.route) },
-                            tint    = goldP
-                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment     = Alignment.CenterVertically
+                        ) {
+                            NotificationIconButton(
+                                count   = unreadCount,
+                                onClick = { navController.navigate(Screen.Notifications.route) },
+                                tint    = tk.goldPrime
+                            )
+                            ProfileAvatarButton(
+                                photoUrl   = uiState.currentUserPhotoUrl,
+                                initials   = uiState.currentUserInitials,
+                                goldBorder = tk.goldBorder,
+                                goldPrime  = tk.goldPrime,
+                                onClick    = { navController.navigate(Screen.Profile.route) }
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(22.dp))
 
+                    // ── Stat cards row ────────────────────────────────────────
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Active Tenants
                         LandlordStatCard(
                             icon       = Icons.Default.People,
                             iconTint   = Color(0xFF5BC8FF),
@@ -316,23 +380,26 @@ private fun LandlordHomeScreen(
                             isDark     = isDark,
                             onClick    = { navController.navigate(Screen.MyBookings.createRoute(tab = 2)) }
                         )
+                        // ✦ CHANGE — Avg Rating card is now clickable → navigates to ViewReviews
                         LandlordStatCard(
                             icon       = Icons.Default.Star,
-                            iconTint   = goldP,
-                            bgColor    = goldP.copy(0.15f),
+                            iconTint   = tk.goldPrime,
+                            bgColor    = tk.goldPrime.copy(0.15f),
                             label      = "Avg Rating",
                             value      = if (uiState.averageRating > 0f) "%.1f".format(uiState.averageRating) else "—",
-                            valueColor = goldL,
+                            valueColor = tk.goldLight,
                             modifier   = Modifier.weight(1f),
-                            isDark     = isDark
+                            isDark     = isDark,
+                            onClick    = { navController.navigate(Screen.ViewReviews.route) }
                         )
+                        // Pending Requests
                         LandlordStatCard(
                             icon       = Icons.Default.Notifications,
-                            iconTint   = if (uiState.pendingRequestsCount > 0) orangePnd else textMtd,
-                            bgColor    = if (uiState.pendingRequestsCount > 0) orangePnd.copy(0.2f) else Color.White.copy(0.08f),
+                            iconTint   = if (uiState.pendingRequestsCount > 0) tk.orangePend else tk.textMuted,
+                            bgColor    = if (uiState.pendingRequestsCount > 0) tk.orangePend.copy(0.2f) else Color.White.copy(0.08f),
                             label      = "Pending Req",
                             value      = "${uiState.pendingRequestsCount}",
-                            valueColor = if (uiState.pendingRequestsCount > 0) orangePnd.copy(pulseAlpha) else Color.White,
+                            valueColor = if (uiState.pendingRequestsCount > 0) tk.orangePend.copy(pulseAlpha) else Color.White,
                             modifier   = Modifier.weight(1f),
                             isDark     = isDark,
                             highlight  = uiState.pendingRequestsCount > 0,
@@ -345,139 +412,146 @@ private fun LandlordHomeScreen(
 
         // ── 2. REVENUE CARD ───────────────────────────────────────────────────
         item {
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(20.dp))
+            var revenuePressed by remember { mutableStateOf(false) }
             Box(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-                    .shadow(12.dp, RoundedCornerShape(22.dp))
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(navyLinear)
-                    .border(2.dp, goldBorder, RoundedCornerShape(22.dp))
+                    .shadow(16.dp, RoundedCornerShape(24.dp), ambientColor = L_GoldPrime.copy(0.2f), spotColor = L_GoldPrime.copy(0.25f))
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(tk.navyLinear)
+                    .border(2.dp, tk.goldBorder, RoundedCornerShape(24.dp))
             ) {
-                Box(Modifier.size(130.dp).align(Alignment.CenterEnd).offset(x = 40.dp).clip(CircleShape).background(goldP.copy(0.08f)))
-                Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopCenter).background(goldBorder))
+                GoldShineOverlay(revenuePressed)
+                Box(Modifier.size(140.dp).align(Alignment.CenterEnd).offset(x = 45.dp).clip(CircleShape).background(tk.goldPrime.copy(0.08f)))
+                Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopCenter).background(tk.goldBorder))
 
                 Row(
-                    modifier              = Modifier.fillMaxWidth().padding(20.dp),
+                    modifier              = Modifier.fillMaxWidth().padding(22.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("TOTAL REVENUE", color = Color.White.copy(0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        Text("TOTAL REVENUE", color = Color.White.copy(0.45f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
                         Spacer(Modifier.height(8.dp))
-                        Text(formattedRevenue, color = goldP, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-                        Spacer(Modifier.height(5.dp))
+                        Text(formattedRevenue, color = tk.goldPrime, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+                        Spacer(Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(16.dp).clip(CircleShape).background(greenOk.copy(0.2f)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = greenOk, modifier = Modifier.size(10.dp))
+                            Box(Modifier.size(18.dp).clip(CircleShape).background(tk.greenOk.copy(0.2f)), Alignment.Center) {
+                                Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = tk.greenOk, modifier = Modifier.size(10.dp))
                             }
-                            Spacer(Modifier.width(5.dp))
-                            Text("Updated in real-time", color = greenOk.copy(0.9f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Updated in real-time", color = tk.greenOk.copy(0.9f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                     Box(
-                        modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(goldGrad)
-                            .shadow(6.dp, RoundedCornerShape(18.dp))
-                            .clickable { navController.navigate(Screen.PaymentReports.route) }
-                            .padding(horizontal = 18.dp, vertical = 14.dp)
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(tk.goldGradient)
+                            .shadow(10.dp, RoundedCornerShape(20.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication        = null
+                            ) { revenuePressed = true; navController.navigate(Screen.PaymentReports.route) }
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.AccountBalanceWallet, null, tint = if (isDark) D_BgDeep else NavyDeep, modifier = Modifier.size(22.dp))
-                            Spacer(Modifier.height(5.dp))
-                            Text("Earnings", color = if (isDark) D_BgDeep else NavyDeep, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                            Icon(Icons.Default.AccountBalanceWallet, null, tint = if (isDark) D_BgDeep else L_NavyDeep, modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.height(6.dp))
+                            Text("Earnings", color = if (isDark) D_BgDeep else L_NavyDeep, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                         }
                     }
                 }
             }
+            LaunchedEffect(revenuePressed) { if (revenuePressed) { kotlinx.coroutines.delay(300); revenuePressed = false } }
         }
 
         // ── 3. QUICK ACTIONS ──────────────────────────────────────────────────
         item {
-            Spacer(Modifier.height(26.dp))
+            Spacer(Modifier.height(30.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text("Quick Actions", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = textDk)
-                    Text("Manage everything fast", fontSize = 12.sp, color = textMtd)
+                    Text("Quick Actions", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = tk.textDark)
+                    Text("Manage everything fast", fontSize = 12.sp, color = tk.textMuted)
                 }
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
 
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Add new property button
+                // Add property button
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(80.dp)
-                        .shadow(10.dp, RoundedCornerShape(18.dp))
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            if (isDark)
-                                Brush.linearGradient(listOf(D_BgPrimary, D_BgSecondary))
-                            else
-                                Brush.linearGradient(listOf(NavyDeep, NavyMid))
-                        )
-                        .border(2.5.dp, goldBorder, RoundedCornerShape(18.dp))
+                    modifier = Modifier.fillMaxWidth().height(84.dp)
+                        .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = L_GoldPrime.copy(0.18f), spotColor = L_GoldPrime.copy(0.22f))
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(tk.navyLinear)
+                        .border(2.dp, tk.goldBorder, RoundedCornerShape(20.dp))
                         .clickable { navController.navigate(Screen.AddProperty.route) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter).background(goldBorder))
+                    Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter).background(tk.goldBorder))
                     Row(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
-                        modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                        modifier              = Modifier.fillMaxWidth().padding(horizontal = 22.dp)
                     ) {
                         Box(
-                            modifier         = Modifier.size(44.dp).clip(CircleShape)
-                                .background(goldP.copy(0.18f))
-                                .border(1.5.dp, goldP.copy(0.6f), CircleShape),
-                            contentAlignment = Alignment.Center
+                            Modifier.size(48.dp).clip(CircleShape)
+                                .background(tk.goldPrime.copy(0.18f))
+                                .border(1.5.dp, tk.goldBorder, CircleShape),
+                            Alignment.Center
                         ) {
-                            Icon(Icons.Default.Add, null, tint = goldP, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Add, null, tint = tk.goldPrime, modifier = Modifier.size(26.dp))
                         }
                         Spacer(Modifier.width(14.dp))
                         Column {
-                            Text("Add New Property", color = goldP, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                            Text("List your property for rent", color = goldL.copy(0.65f), fontSize = 11.sp)
+                            Text("Add New Property", color = tk.goldPrime, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                            Text("List your property for rent", color = tk.goldLight.copy(0.6f), fontSize = 11.sp)
                         }
                         Spacer(Modifier.weight(1f))
-                        Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, null, tint = goldP.copy(0.7f), modifier = Modifier.size(14.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, null, tint = tk.goldPrime.copy(0.7f), modifier = Modifier.size(14.dp))
                     }
                 }
 
-                // Active bookings + My properties tiles
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Active bookings card
                     Box(
-                        modifier = Modifier.weight(1f).height(110.dp)
-                            .shadow(6.dp, RoundedCornerShape(18.dp))
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(navyLinear)
-                            .border(2.dp, goldBorder, RoundedCornerShape(18.dp))
+                        modifier = Modifier.weight(1f).height(114.dp)
+                            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = L_GoldPrime.copy(0.15f), spotColor = L_GoldPrime.copy(0.18f))
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(tk.navyLinear)
+                            .border(2.dp, tk.goldBorder, RoundedCornerShape(20.dp))
                             .clickable { navController.navigate(Screen.MyBookings.route) }
                     ) {
-                        Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter).background(goldBorder))
-                        Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.CalendarMonth, null, tint = goldP, modifier = Modifier.size(24.dp))
+                        Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter).background(tk.goldBorder))
+                        Column(
+                            Modifier.fillMaxSize().padding(14.dp),
+                            verticalArrangement   = Arrangement.Center,
+                            horizontalAlignment   = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.CalendarMonth, null, tint = tk.goldPrime, modifier = Modifier.size(24.dp))
                             Spacer(Modifier.height(6.dp))
-                            Text("${uiState.activeBookingsCount}", color = goldP, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp)
-                            Text("Active Bookings", color = Color.White.copy(0.65f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                            Text("${uiState.activeBookingsCount}", color = tk.goldPrime, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp)
+                            Text("Active Bookings", color = Color.White.copy(0.6f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
                         }
                     }
+
+                    // My properties card
                     Box(
-                        modifier = Modifier.weight(1f).height(110.dp)
-                            .shadow(6.dp, RoundedCornerShape(18.dp))
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(if (isDark) D_BgCard else GoldFaint)
-                            .border(2.dp,
-                                if (isDark)
-                                    Brush.horizontalGradient(listOf(D_GoldPrimary.copy(0.6f), D_GoldLight.copy(0.4f), D_GoldPrimary.copy(0.6f)))
-                                else
-                                    Brush.horizontalGradient(listOf(GoldPrime.copy(0.7f), GoldLight.copy(0.5f), GoldPrime.copy(0.7f))),
-                                RoundedCornerShape(18.dp)
-                            )
+                        modifier = Modifier.weight(1f).height(114.dp)
+                            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = L_GoldPrime.copy(0.15f), spotColor = L_GoldPrime.copy(0.18f))
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (isDark) Brush.verticalGradient(listOf(D_BgCard, D_BgCardRaised)) else Brush.verticalGradient(listOf(L_GoldFaint, Color.White)))
+                            .border(2.dp, tk.goldBorder, RoundedCornerShape(20.dp))
                             .clickable { navController.navigate(Screen.MyProperties.route) }
                     ) {
-                        Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Home, null, tint = if (isDark) D_GoldPrimary else NavyDeep, modifier = Modifier.size(24.dp))
+                        Column(
+                            Modifier.fillMaxSize().padding(14.dp),
+                            verticalArrangement   = Arrangement.Center,
+                            horizontalAlignment   = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.Home, null, tint = if (isDark) D_GoldPrimary else L_NavyDeep, modifier = Modifier.size(24.dp))
                             Spacer(Modifier.height(6.dp))
-                            Text("${uiState.totalProperties}", color = if (isDark) D_GoldPrimary else NavyDeep, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp)
-                            Text("My Properties", color = textMtd, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                            Text("${uiState.totalProperties}", color = if (isDark) D_GoldPrimary else L_NavyDeep, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp)
+                            Text("My Properties", color = tk.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
@@ -486,29 +560,27 @@ private fun LandlordHomeScreen(
 
         // ── 4. MY PROPERTIES LIST ─────────────────────────────────────────────
         item {
-            Spacer(Modifier.height(28.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.height(30.dp))
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
                 Column {
-                    Text("My Properties", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = textDk)
-                    Text("${uiState.featuredProperties.size} listed properties", fontSize = 12.sp, color = textMtd)
+                    Text("My Properties", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = tk.textDark)
+                    Text("${uiState.featuredProperties.size} listed properties", fontSize = 12.sp, color = tk.textMuted)
                 }
                 Box(
                     modifier = Modifier.clip(RoundedCornerShape(12.dp))
-                        .background(if (isDark) D_GoldFaint else GoldFaint)
-                        .border(1.5.dp,
-                            if (isDark)
-                                Brush.horizontalGradient(listOf(D_GoldPrimary.copy(0.6f), D_GoldLight.copy(0.4f)))
-                            else
-                                Brush.horizontalGradient(listOf(GoldPrime.copy(0.7f), GoldLight.copy(0.5f))),
-                            RoundedCornerShape(12.dp)
-                        )
+                        .background(if (isDark) D_GoldFaint else L_GoldFaint)
+                        .border(1.5.dp, tk.goldBorder, RoundedCornerShape(12.dp))
                         .clickable { navController.navigate(Screen.MyProperties.route) }
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("See All", fontSize = 12.sp, color = if (isDark) D_GoldDim else GoldDim, fontWeight = FontWeight.ExtraBold)
+                        Text("See All", fontSize = 12.sp, color = tk.goldDim, fontWeight = FontWeight.ExtraBold)
                         Spacer(Modifier.width(4.dp))
-                        Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, null, tint = if (isDark) D_GoldDim else GoldDim, modifier = Modifier.size(10.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, null, tint = tk.goldDim, modifier = Modifier.size(10.dp))
                     }
                 }
             }
@@ -520,22 +592,22 @@ private fun LandlordHomeScreen(
             uiState.featuredProperties.isEmpty() -> item {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-                        .shadow(8.dp, RoundedCornerShape(20.dp))
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(navyLinear)
-                        .border(2.dp, goldBorder, RoundedCornerShape(20.dp))
+                        .shadow(10.dp, RoundedCornerShape(22.dp))
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(tk.navyLinear)
+                        .border(2.dp, tk.goldBorder, RoundedCornerShape(22.dp))
                         .clickable { navController.navigate(Screen.AddProperty.route) }
-                        .padding(40.dp),
+                        .padding(44.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(goldP.copy(0.1f)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.AddHome, null, tint = goldP, modifier = Modifier.size(32.dp))
+                        Box(Modifier.size(68.dp).clip(CircleShape).background(tk.goldPrime.copy(0.12f)), Alignment.Center) {
+                            Icon(Icons.Default.AddHome, null, tint = tk.goldPrime, modifier = Modifier.size(34.dp))
                         }
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(14.dp))
                         Text("No properties yet", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
                         Spacer(Modifier.height(4.dp))
-                        Text("Tap to add your first property", color = goldP, fontSize = 13.sp)
+                        Text("Tap to add your first property", color = tk.goldPrime, fontSize = 13.sp)
                     }
                 }
             }
@@ -551,10 +623,9 @@ private fun LandlordHomeScreen(
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // LANDLORD STAT CARD
-// Small metric tile shown in the landlord header row.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun LandlordStatCard(
     icon      : ImageVector,
@@ -568,87 +639,91 @@ private fun LandlordStatCard(
     highlight : Boolean    = false,
     onClick   : () -> Unit = {}
 ) {
-    val localOrangePnd = if (isDark) D_OrangePend  else OrangePend
-    val localGoldP     = if (isDark) D_GoldPrimary else GoldPrime
-    val localGoldL     = if (isDark) D_GoldLight   else GoldLight
-
-    val normalBorder    = Brush.linearGradient(listOf(localGoldP.copy(0.85f), localGoldL.copy(0.55f), localGoldP.copy(0.85f)))
-    val highlightBorder = Brush.linearGradient(listOf(localOrangePnd, localOrangePnd.copy(0.6f), localOrangePnd))
+    val tk = resolveTokens(isDark)
 
     Box(
         modifier = modifier
-            .clickable { onClick() }
-            .shadow(if (isDark) 0.dp else 4.dp, RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
+            .shadow(if (isDark) 0.dp else 6.dp, RoundedCornerShape(18.dp), ambientColor = L_GoldPrime.copy(0.15f), spotColor = L_GoldPrime.copy(0.18f))
+            .clip(RoundedCornerShape(18.dp))
             .background(
-                brush = when {
-                    highlight -> Brush.linearGradient(listOf(localOrangePnd.copy(0.18f), localOrangePnd.copy(0.10f)))
+                when {
+                    highlight -> Brush.linearGradient(listOf(tk.orangePend.copy(0.18f), tk.orangePend.copy(0.10f)))
                     isDark    -> Brush.linearGradient(listOf(D_BgCard, D_BgCardRaised))
                     else      -> Brush.linearGradient(listOf(Color.White.copy(0.13f), Color.White.copy(0.06f)))
-                },
-                shape = RoundedCornerShape(16.dp)
+                }
             )
+            .border(
+                width = 1.5.dp,
+                brush = if (highlight)
+                    Brush.horizontalGradient(listOf(tk.orangePend.copy(0.7f), tk.orangePend.copy(0.3f), tk.orangePend.copy(0.7f)))
+                else
+                    Brush.horizontalGradient(listOf(tk.goldPrime.copy(0.9f), tk.goldLight.copy(0.5f), tk.goldPrime.copy(0.9f))),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable { onClick() }
             .padding(horizontal = 8.dp, vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                modifier = Modifier.size(38.dp).clip(CircleShape)
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
                     .background(bgColor)
-                    .border(1.dp, if (highlight) localOrangePnd.copy(0.5f) else localGoldP.copy(0.3f), CircleShape),
+                    .border(
+                        width = 1.dp,
+                        brush = if (highlight)
+                            Brush.horizontalGradient(listOf(tk.orangePend.copy(0.5f), tk.orangePend.copy(0.5f)))
+                        else
+                            Brush.horizontalGradient(listOf(tk.goldPrime.copy(0.9f), tk.goldLight.copy(0.5f), tk.goldPrime.copy(0.9f))),
+                        shape = CircleShape
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, label, tint = iconTint, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.height(8.dp))
-            Text(value, color = valueColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp)
+            Text(value, color = valueColor, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp)
             Spacer(Modifier.height(2.dp))
             Text(label, color = if (isDark) D_TextSecondary.copy(0.85f) else Color.White.copy(0.7f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = 0.3.sp)
         }
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // LANDLORD PROPERTY CARD
-// Compact horizontal card used in the landlord's My Properties list.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun PremiumLandlordPropertyCard(
     property: Property,
     isDark  : Boolean    = false,
     onClick : () -> Unit
 ) {
-    val cardBg  = if (isDark) D_BgCard        else CardBg
-    val textDk  = if (isDark) D_TextPrimary   else TextDark
-    val textMtd = if (isDark) D_TextSecondary else TextMuted
-    val goldP   = if (isDark) D_GoldPrimary   else GoldPrime
-    val goldF   = if (isDark) D_GoldFaint     else GoldFaint
-    val greenOk = if (isDark) D_GreenOk       else GreenOk
+    val tk = resolveTokens(isDark)
 
-    Card(
-        modifier  = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
-            .shadow(if (isDark) 0.dp else 6.dp, RoundedCornerShape(18.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .shadow(if (isDark) 0.dp else 10.dp, RoundedCornerShape(20.dp), ambientColor = L_GoldPrime.copy(0.2f), spotColor = L_GoldPrime.copy(0.25f))
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isDark) Brush.verticalGradient(listOf(D_BgCard, D_BgCardRaised)) else Brush.verticalGradient(listOf(L_CardBg, L_GoldFaint.copy(0.3f))))
+            .border(2.dp, tk.goldBorder, RoundedCornerShape(20.dp))
             .clickable { onClick() }
-            .border(1.5.dp,
-                if (isDark)
-                    Brush.horizontalGradient(listOf(D_GoldPrimary.copy(0.35f), D_GoldLight.copy(0.2f), D_GoldPrimary.copy(0.35f)))
-                else
-                    Brush.horizontalGradient(listOf(GoldPrime.copy(0.3f), GoldLight.copy(0.15f), GoldPrime.copy(0.3f))),
-                RoundedCornerShape(18.dp)
-            ),
-        shape     = RoundedCornerShape(18.dp),
-        colors    = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box {
-                Box(Modifier.padding(start = 8.dp).size(88.dp).clip(RoundedCornerShape(14.dp))) {
+                Box(
+                    Modifier.padding(start = 8.dp).size(90.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.5.dp, tk.goldBorder, RoundedCornerShape(16.dp))
+                ) {
                     PropertyImage(property = property, modifier = Modifier.fillMaxSize())
                     Box(
                         Modifier.align(Alignment.TopStart).padding(6.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (property.isAvailable) greenOk else OrangePend)
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(if (property.isAvailable) tk.greenOk else tk.orangePend)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(if (property.isAvailable) "Active" else "Inactive", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.ExtraBold)
                     }
@@ -656,41 +731,35 @@ private fun PremiumLandlordPropertyCard(
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(property.title, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = textDk)
+                Text(property.title, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = tk.textDark)
                 Spacer(Modifier.height(5.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocationOn, null, tint = goldP, modifier = Modifier.size(12.dp))
-                    Text(" ${property.city}", color = textMtd, fontSize = 11.sp)
+                    Icon(Icons.Default.LocationOn, null, tint = tk.goldPrime, modifier = Modifier.size(12.dp))
+                    Text(" ${property.city}", color = tk.textMuted, fontSize = 11.sp)
                 }
                 Spacer(Modifier.height(5.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.KingBed, null, tint = textMtd.copy(0.7f), modifier = Modifier.size(12.dp))
-                    Text(" ${property.bedrooms} beds", fontSize = 11.sp, color = textMtd)
+                    Icon(Icons.Default.KingBed, null, tint = tk.textMuted.copy(0.7f), modifier = Modifier.size(12.dp))
+                    Text(" ${property.bedrooms} beds", fontSize = 11.sp, color = tk.textMuted)
                     Spacer(Modifier.width(10.dp))
-                    Icon(Icons.Default.People, null, tint = textMtd.copy(0.7f), modifier = Modifier.size(12.dp))
-                    Text(" ${property.maxGuests} guests", fontSize = 11.sp, color = textMtd)
+                    Icon(Icons.Default.People, null, tint = tk.textMuted.copy(0.7f), modifier = Modifier.size(12.dp))
+                    Text(" ${property.maxGuests} guests", fontSize = 11.sp, color = tk.textMuted)
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column {
-                        Text("Price/month", fontSize = 9.sp, color = textMtd)
-                        Text(property.formattedPrice, fontWeight = FontWeight.ExtraBold, color = if (isDark) D_GoldPrimary else NavyDeep, fontSize = 14.sp)
+                        Text("Price/month", fontSize = 9.sp, color = tk.textMuted)
+                        Text(property.formattedPrice, fontWeight = FontWeight.ExtraBold, color = if (isDark) D_GoldPrimary else L_NavyDeep, fontSize = 14.sp)
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clip(RoundedCornerShape(10.dp))
-                            .background(goldF)
-                            .border(1.dp,
-                                if (isDark)
-                                    Brush.horizontalGradient(listOf(D_GoldPrimary.copy(0.4f), D_GoldLight.copy(0.25f)))
-                                else
-                                    Brush.horizontalGradient(listOf(GoldPrime.copy(0.5f), GoldLight.copy(0.3f))),
-                                RoundedCornerShape(10.dp)
-                            )
+                            .background(tk.goldFaint)
+                            .border(1.dp, tk.goldBorder, RoundedCornerShape(10.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Icon(Icons.Default.Star, null, tint = goldP, modifier = Modifier.size(12.dp))
-                        Text(" ${property.averageRating}", fontSize = 12.sp, color = if (isDark) D_TextPrimary else NavyDeep, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Star, null, tint = tk.goldPrime, modifier = Modifier.size(12.dp))
+                        Text(" ${property.averageRating}", fontSize = 12.sp, color = tk.textDark, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -698,11 +767,9 @@ private fun PremiumLandlordPropertyCard(
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // TENANT HOME SCREEN
-// Shows browse-by-type chips, featured properties carousel, vacation banner,
-// and nearby properties list.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun TenantHomeScreen(
     navController     : NavController,
@@ -713,53 +780,32 @@ private fun TenantHomeScreen(
     unreadCount       : Int     = 0,
     isDark            : Boolean = false
 ) {
-    val categories      = listOf("All", "House", "Apartment", "Room", "Villa", "Studio")
+    val categories       = listOf("All", "Premium", "House", "Apartment", "Room", "Villa", "Studio")
     var selectedCategory by remember { mutableStateOf("All") }
     val featScrollState  = rememberScrollState()
     val scope            = rememberCoroutineScope()
+    val tk               = resolveTokens(isDark)
 
-    val pageBg  = if (isDark) D_BgDeep        else PageBg
-    val cardBg  = if (isDark) D_BgCard        else CardWhite
-    val navyP   = if (isDark) D_TextPrimary   else NavyPrime
-    val textMtd = if (isDark) D_TextSecondary else TextMuted
-    val goldP   = if (isDark) D_GoldPrimary   else GoldPrime
-
-    // Combine featured + nearby into one master list for fallback use
     val allProperties = uiState.allProperties.ifEmpty {
         (uiState.featuredProperties + uiState.nearbyProperties).distinctBy { it.propertyId }
     }
 
-    // ==========================================================================
-    // FILTER FIX: When a specific type is selected (e.g. "House"):
-    //
-    // Before: filteredFeatured only searched inside featuredProperties (isFeatured=true).
-    //         If no House property had isFeatured=true → empty → showed empty state.
-    //
-    // Now:    If the filtered result from featuredProperties is empty for that type,
-    //         fall back to allProperties filtered by type so the section still shows
-    //         relevant cards instead of an empty state.
-    //
-    // filteredNearby stays unchanged — it always filters from nearbyProperties.
-    // ==========================================================================
-    val filteredFeatured = if (selectedCategory == "All") {
-        uiState.featuredProperties
-    } else {
-        val fromFeatured = uiState.featuredProperties.filter {
-            it.propertyType.equals(selectedCategory, ignoreCase = true)
+    val filteredFeatured = when (selectedCategory) {
+        "All"     -> uiState.featuredProperties
+        "Premium" -> {
+            val fromFeatured = uiState.featuredProperties.filter { it.isPremium || it.propertyType.equals("PREMIUM", ignoreCase = true) }
+            fromFeatured.ifEmpty { allProperties.filter { it.isPremium || it.propertyType.equals("PREMIUM", ignoreCase = true) } }
         }
-        // If no featured property matches this type, show all matching from full list
-        if (fromFeatured.isNotEmpty()) fromFeatured
-        else allProperties.filter {
-            it.propertyType.equals(selectedCategory, ignoreCase = true)
+        else -> {
+            val fromFeatured = uiState.featuredProperties.filter { it.propertyType.equals(selectedCategory, ignoreCase = true) }
+            fromFeatured.ifEmpty { allProperties.filter { it.propertyType.equals(selectedCategory, ignoreCase = true) } }
         }
     }
 
-    val filteredNearby = if (selectedCategory == "All") {
-        uiState.nearbyProperties
-    } else {
-        uiState.nearbyProperties.filter {
-            it.propertyType.equals(selectedCategory, ignoreCase = true)
-        }
+    val filteredNearby = when (selectedCategory) {
+        "All"     -> uiState.nearbyProperties
+        "Premium" -> uiState.nearbyProperties.filter { it.isPremium || it.propertyType.equals("PREMIUM", ignoreCase = true) }
+        else      -> uiState.nearbyProperties.filter { it.propertyType.equals(selectedCategory, ignoreCase = true) }
     }
 
     val vacCountLabel = when {
@@ -768,145 +814,111 @@ private fun TenantHomeScreen(
         else              -> "0"
     }
 
+    val canScrollBack    by remember { derivedStateOf { featScrollState.value > 0 } }
+    val canScrollForward by remember { derivedStateOf { featScrollState.value < featScrollState.maxValue } }
+
     LazyColumn(
-        modifier       = Modifier.fillMaxSize().background(pageBg),
+        modifier       = Modifier.fillMaxSize().background(tk.pageBg),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
-        // ── 1. HEADER ─────────────────────────────────────────────────────────
         item {
             HomeHeaderSection(
                 onSearchClick       = { navController.navigate(Screen.Search.route) },
                 onNotificationClick = { navController.navigate(Screen.Notifications.route) },
                 onProfileClick      = { navController.navigate(Screen.Profile.route) },
                 unreadCount         = unreadCount,
+                profilePhotoUrl     = uiState.currentUserPhotoUrl,
+                profileInitials     = uiState.currentUserInitials,
                 isDark              = isDark
             )
         }
 
-        // ── 2. BROWSE BY TYPE ─────────────────────────────────────────────────
         item {
             Spacer(Modifier.height(22.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text("Browse by Type", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = navyP)
-                    Text("Find your perfect stay", fontSize = 12.sp, color = textMtd)
+                    Text("Browse by Type", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = tk.textDark)
+                    Text("Find your perfect stay", fontSize = 12.sp, color = tk.textMuted)
                 }
-                Text(
-                    "See All",
-                    fontSize = 13.sp,
-                    color    = goldP,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { navController.navigate(Screen.PropertyList.route) }
-                )
+                Text("See All", fontSize = 13.sp, color = tk.goldPrime, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { navController.navigate(Screen.PropertyList.route) })
             }
             Spacer(Modifier.height(14.dp))
 
-            // Category filter chips — text only, no emoji icons
-            LazyRow(
-                contentPadding        = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(categories) { category ->
-                    val isSelected = selectedCategory == category
+                    val isSelected    = selectedCategory == category
+                    val isPremiumChip = category == "Premium"
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(
-                                if (isSelected)
-                                    if (isDark) D_BgSecondary else NavyPrime
-                                else cardBg
+                                when {
+                                    isSelected && isPremiumChip -> Brush.linearGradient(listOf(L_GoldPrime, L_GoldLight, L_GoldPrime))
+                                    isSelected                  -> Brush.linearGradient(listOf(if (isDark) D_BgSecondary else L_NavyPrime, if (isDark) D_BgPrimary else L_NavyMid))
+                                    isPremiumChip               -> Brush.linearGradient(listOf(L_GoldPrime.copy(0.15f), L_GoldLight.copy(0.08f)))
+                                    else                        -> Brush.linearGradient(listOf(tk.cardBg, tk.cardBg))
+                                }
                             )
                             .border(
-                                1.dp,
-                                if (isSelected) goldP.copy(0.5f)
-                                else if (isDark) D_Border else Color.Transparent,
-                                RoundedCornerShape(12.dp)
+                                width = if (isPremiumChip) 1.5.dp else 1.dp,
+                                brush = when {
+                                    isPremiumChip -> Brush.horizontalGradient(listOf(L_GoldPrime.copy(0.8f), L_GoldLight.copy(0.5f), L_GoldPrime.copy(0.8f)))
+                                    isSelected    -> Brush.horizontalGradient(listOf(tk.goldPrime.copy(0.5f), tk.goldPrime.copy(0.5f)))
+                                    else          -> Brush.horizontalGradient(listOf(if (isDark) D_Border else Color.Transparent, if (isDark) D_Border else Color.Transparent))
+                                },
+                                shape = RoundedCornerShape(14.dp)
                             )
                             .clickable { selectedCategory = category }
-                            .padding(horizontal = 18.dp, vertical = 10.dp)
+                            .padding(horizontal = if (isPremiumChip) 14.dp else 18.dp, vertical = 10.dp)
                     ) {
-                        Text(
-                            text       = category,
-                            color      = if (isSelected) goldP else navyP,
-                            fontSize   = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            if (isPremiumChip) Text("👑", fontSize = 13.sp)
+                            Text(
+                                category,
+                                color = when {
+                                    isSelected && isPremiumChip -> L_NavyDeep
+                                    isSelected                  -> tk.goldPrime
+                                    isPremiumChip               -> L_GoldPrime
+                                    else                        -> tk.textDark
+                                },
+                                fontSize   = 13.sp,
+                                fontWeight = if (isSelected || isPremiumChip) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // ── 3. FEATURED PROPERTIES ────────────────────────────────────────────
+        // Featured Properties
         item {
             Spacer(Modifier.height(28.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text("Featured Properties", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = navyP)
-                    Text("Handpicked for you", fontSize = 12.sp, color = textMtd)
+                    Text("Featured Properties", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = tk.textDark)
+                    Text("Handpicked for you", fontSize = 12.sp, color = tk.textMuted)
                 }
-                // Scroll arrows for the horizontal featured list
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val btnActiveBg = if (isDark) D_BgSecondary else NavyPrime
-                    val btnInactBg  = if (isDark) D_BgCard else Color(0xFFE0E0E0)
-                    Box(
-                        Modifier.size(32.dp).clip(CircleShape)
-                            .background(if (featScrollState.value > 0) btnActiveBg else btnInactBg)
-                            .clickable { scope.launch { featScrollState.animateScrollTo((featScrollState.value - 550).coerceAtLeast(0)) } },
-                        contentAlignment = Alignment.Center
-                    ) { Text("‹", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold) }
-
-                    Box(
-                        Modifier.size(32.dp).clip(CircleShape)
-                            .background(if (featScrollState.value < featScrollState.maxValue) btnActiveBg else btnInactBg)
-                            .clickable { scope.launch { featScrollState.animateScrollTo((featScrollState.value + 550).coerceAtMost(featScrollState.maxValue)) } },
-                        contentAlignment = Alignment.Center
-                    ) { Text("›", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold) }
+                    val activeBg = if (isDark) D_BgSecondary else L_NavyPrime
+                    val inactBg  = if (isDark) D_BgCard else Color(0xFFE0E0E0)
+                    Box(Modifier.size(34.dp).clip(CircleShape).background(if (canScrollBack) activeBg else inactBg).clickable { scope.launch { featScrollState.animateScrollTo((featScrollState.value - 550).coerceAtLeast(0)) } }, Alignment.Center) { Text("‹", fontSize = 22.sp, color = Color.White, fontWeight = FontWeight.Bold) }
+                    Box(Modifier.size(34.dp).clip(CircleShape).background(if (canScrollForward) activeBg else inactBg).clickable { scope.launch { featScrollState.animateScrollTo((featScrollState.value + 550).coerceAtMost(featScrollState.maxValue)) } }, Alignment.Center) { Text("›", fontSize = 22.sp, color = Color.White, fontWeight = FontWeight.Bold) }
                 }
             }
             Spacer(Modifier.height(14.dp))
 
             when {
                 uiState.isLoading -> LoadingShimmer(isDark)
-
-                uiState.errorMessage != null && allProperties.isEmpty() ->
-                    Text("Error: ${uiState.errorMessage}", Modifier.padding(20.dp), color = MaterialTheme.colorScheme.error)
-
-                filteredFeatured.isEmpty() -> {
-                    // Empty state — only shown when genuinely no properties of this type exist
-                    Box(
-                        Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(cardBg)
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("🏠", fontSize = 32.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                if (selectedCategory == "All") "No featured properties"
-                                else "No featured $selectedCategory properties",
-                                color    = textMtd,
-                                fontSize = 13.sp
-                            )
-                            if (selectedCategory != "All") {
-                                Text(
-                                    "Check Nearby Properties below",
-                                    color      = goldP,
-                                    fontSize   = 12.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
+                uiState.errorMessage != null && allProperties.isEmpty() -> Text("Error: ${uiState.errorMessage}", Modifier.padding(20.dp), color = MaterialTheme.colorScheme.error)
+                filteredFeatured.isEmpty() -> Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(16.dp)).background(tk.cardBg).padding(28.dp), Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(if (selectedCategory == "Premium") "👑" else "🏠", fontSize = 34.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text(when (selectedCategory) { "All" -> "No featured properties"; "Premium" -> "No premium properties available"; else -> "No featured $selectedCategory properties" }, color = tk.textMuted, fontSize = 13.sp)
+                        if (selectedCategory != "All") { Spacer(Modifier.height(4.dp)); Text("Check Nearby Properties below", color = tk.goldPrime, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
                     }
                 }
-
-                else -> Row(
-                    Modifier.fillMaxWidth()
-                        .horizontalScroll(featScrollState)
-                        .padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+                else -> Row(Modifier.fillMaxWidth().horizontalScroll(featScrollState).padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     filteredFeatured.take(7).forEach { property ->
                         FeaturedPropertyCard(
                             property    = property,
@@ -916,120 +928,91 @@ private fun TenantHomeScreen(
                             onClick     = { navController.navigate(Screen.PropertyDetail.createRoute(property.propertyId)) }
                         )
                     }
-                    // "See all" card at the end of the horizontal list
-                    Card(
-                        Modifier.width(160.dp).height(260.dp).clickable { navController.navigate(Screen.PropertyList.route) },
-                        shape     = RoundedCornerShape(20.dp),
-                        colors    = CardDefaults.cardColors(containerColor = cardBg),
-                        elevation = CardDefaults.cardElevation(6.dp)
+                    Box(
+                        modifier = Modifier.width(160.dp).height(265.dp)
+                            .shadow(6.dp, RoundedCornerShape(20.dp))
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(tk.cardBg)
+                            .border(2.dp, tk.goldBorder, RoundedCornerShape(20.dp))
+                            .clickable { navController.navigate(Screen.PropertyList.route) },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(12.dp)) {
-                                Text("→", fontSize = 28.sp, color = goldP)
-                                Spacer(Modifier.height(8.dp))
-                                Text("See all", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = navyP)
-                                Text("${allProperties.size} properties", fontSize = 11.sp, color = textMtd)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                            Box(Modifier.size(52.dp).clip(CircleShape).background(tk.goldFaint).border(1.5.dp, tk.goldBorder, CircleShape), Alignment.Center) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = tk.goldPrime, modifier = Modifier.size(22.dp))
                             }
+                            Spacer(Modifier.height(10.dp))
+                            Text("See all", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = tk.textDark)
+                            Text("${allProperties.size} properties", fontSize = 11.sp, color = tk.textMuted)
                         }
                     }
                 }
             }
         }
 
-        // ── 4. VACATION HUB BANNER ────────────────────────────────────────────
+        // Vacation Hub
         item {
-            Spacer(Modifier.height(22.dp))
-            val bannerGrad = if (isDark)
-                Brush.linearGradient(listOf(D_BgDeep, D_BgPrimary, D_BgSecondary))
-            else
-                Brush.linearGradient(listOf(NavyDeep, NavyPrime, NavyMid))
-            val goldBorder2 = if (isDark)
-                Brush.horizontalGradient(listOf(D_GoldPrimary, D_GoldLight.copy(0.85f), D_GoldPrimary))
-            else
-                Brush.horizontalGradient(listOf(GoldPrime, GoldLight.copy(0.85f), GoldPrime))
-            val goldP2 = if (isDark) D_GoldPrimary else GoldPrime
-
+            Spacer(Modifier.height(24.dp))
             Box(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-                    .clip(RoundedCornerShape(24.dp)).background(bannerGrad)
+                    .shadow(14.dp, RoundedCornerShape(26.dp))
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(tk.navyLinear)
+                    .border(2.dp, tk.goldBorder, RoundedCornerShape(26.dp))
             ) {
-                Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopCenter).background(goldBorder2))
-                Box(Modifier.size(150.dp).align(Alignment.TopEnd).offset(x = 45.dp, y = (-45).dp).clip(CircleShape).background(goldP2.copy(0.07f)))
-                Box(Modifier.size(90.dp).align(Alignment.BottomEnd).offset(x = 25.dp, y = 25.dp).clip(CircleShape).background(goldP2.copy(0.05f)))
+                Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopCenter).background(tk.goldBorder))
+                Box(Modifier.size(160.dp).align(Alignment.TopEnd).offset(x = 50.dp, y = (-50).dp).clip(CircleShape).background(tk.goldPrime.copy(0.07f)))
+                Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter).background(tk.goldBorder))
 
-                Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(22.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                            Box(
-                                modifier = Modifier.size(54.dp).clip(CircleShape)
-                                    .background(Brush.radialGradient(listOf(goldP2.copy(0.28f), goldP2.copy(0.05f)))),
-                                contentAlignment = Alignment.Center
-                            ) { Text("🏔️", fontSize = 26.sp) }
+                            Box(Modifier.size(56.dp).clip(CircleShape).background(Brush.radialGradient(listOf(tk.goldPrime.copy(0.28f), tk.goldPrime.copy(0.05f)))), Alignment.Center) { Text("🏔️", fontSize = 28.sp) }
                             Column {
-                                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(goldP2.copy(0.18f)).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                                    Text("VACATION HUB", color = goldP2, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(tk.goldPrime.copy(0.18f)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                                    Text("VACATION HUB", color = tk.goldPrime, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
                                 }
                                 Spacer(Modifier.height(6.dp))
                                 Text("Explore Northern Stays", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                             }
                         }
-                        // Navigate to Vacation Hub screen
-                        Box(
-                            modifier = Modifier.size(52.dp).aspectRatio(1f).clip(CircleShape)
-                                .background(Color.Transparent)
-                                .border(1.5.dp, goldP2, CircleShape)
-                                .clickable { navController.navigate(Screen.VacationRentals.route) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = goldP2, modifier = Modifier.size(24.dp))
+                        Box(Modifier.size(52.dp).clip(CircleShape).background(Color.Transparent).border(2.dp, tk.goldBorder, CircleShape).clickable { navController.navigate(Screen.VacationRentals.route) }, Alignment.Center) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = tk.goldPrime, modifier = Modifier.size(24.dp))
                         }
                     }
+                    Spacer(Modifier.height(20.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Brush.horizontalGradient(listOf(tk.goldPrime.copy(0.45f), Color.Transparent))))
                     Spacer(Modifier.height(18.dp))
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(Brush.horizontalGradient(listOf(goldP2.copy(0.5f), Color.Transparent))))
-                    Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                        VacationMiniStat(vacCountLabel, "Stays",   "🏠")
-                        VacationMiniStat("PT-1",        "Verified","✅")
-                        VacationMiniStat("4.8★",        "Rating",  "⭐")
-                        VacationMiniStat("Secure",      "Booking", "🔒")
+                        VacationMiniStat(vacCountLabel, "Stays",   "🏠", tk.goldPrime)
+                        VacationMiniStat("PT-1",        "Verified","✅", tk.goldPrime)
+                        VacationMiniStat("4.8★",        "Rating",  "⭐", tk.goldPrime)
+                        VacationMiniStat("Secure",      "Booking", "🔒", tk.goldPrime)
                     }
                 }
             }
         }
 
-        // ── 5. NEARBY STAYS ───────────────────────────────────────────────────
+        // Nearby Stays
         item {
-            Spacer(Modifier.height(26.dp))
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
+            Spacer(Modifier.height(28.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text("Nearby Stays", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = navyP)
-                    Text("${filteredNearby.size} properties near you", fontSize = 12.sp, color = textMtd)
+                    Text("Nearby Stays", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = tk.textDark)
+                    Text("${filteredNearby.size} properties near you", fontSize = 12.sp, color = tk.textMuted)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier.clip(RoundedCornerShape(10.dp))
-                            .background(if (isDark) D_BgCard else NavyPrime)
-                            .border(1.dp, goldP.copy(0.5f), RoundedCornerShape(10.dp))
-                            .clickable { navController.navigate(Screen.ExploreMap.route) }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🗺", fontSize = 13.sp)
-                            Spacer(Modifier.width(4.dp))
-                            Text("Map", fontSize = 12.sp, color = goldP, fontWeight = FontWeight.Bold)
-                        }
+                Box(
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp))
+                        .background(if (isDark) D_BgCard else L_NavyPrime)
+                        .border(1.dp, tk.goldBorder, RoundedCornerShape(10.dp))
+                        .clickable { navController.navigate(Screen.ExploreMap.route) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🗺", fontSize = 13.sp)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Explore Map", fontSize = 12.sp, color = tk.goldPrime, fontWeight = FontWeight.Bold)
                     }
-                    Text(
-                        "See All",
-                        fontSize   = 13.sp,
-                        color      = goldP,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier   = Modifier.clickable { navController.navigate(Screen.PropertyList.route) }
-                    )
                 }
             }
             Spacer(Modifier.height(14.dp))
@@ -1038,16 +1021,11 @@ private fun TenantHomeScreen(
         when {
             uiState.isLoading -> item { LoadingShimmer(isDark) }
             filteredNearby.isEmpty() -> item {
-                Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().padding(40.dp), Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🔍", fontSize = 40.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "No ${if (selectedCategory == "All") "" else "$selectedCategory "}nearby properties found",
-                            color     = textMtd,
-                            fontSize  = 14.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        Text(if (selectedCategory == "Premium") "👑" else "🔍", fontSize = 42.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Text(when (selectedCategory) { "Premium" -> "No premium stays nearby"; "All" -> "No nearby properties found"; else -> "No $selectedCategory stays nearby" }, color = tk.textMuted, fontSize = 14.sp, textAlign = TextAlign.Center)
                     }
                 }
             }
@@ -1065,75 +1043,74 @@ private fun TenantHomeScreen(
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // HOME HEADER — Tenant
-// Top banner with welcome text, notification bell, profile button, search bar.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun HomeHeaderSection(
     onSearchClick      : () -> Unit,
     onNotificationClick: () -> Unit = {},
     onProfileClick     : () -> Unit = {},
     unreadCount        : Int        = 0,
+    profilePhotoUrl    : String     = "",
+    profileInitials    : String     = "",
     isDark             : Boolean    = false
 ) {
-    val headerGrad = if (isDark) D_NavyGradient else Brush.verticalGradient(listOf(NavyDeep, NavyPrime, NavyMid))
-    val goldBorder = if (isDark)
-        Brush.horizontalGradient(listOf(D_GoldPrimary, D_GoldLight.copy(0.85f), D_GoldPrimary))
-    else
-        Brush.horizontalGradient(listOf(GoldPrime, GoldLight.copy(0.85f), GoldPrime))
-    val goldP    = if (isDark) D_GoldPrimary   else GoldPrime
-    val searchBg = if (isDark) D_BgCard        else CardWhite
-    val textMtd  = if (isDark) D_TextSecondary else TextMuted
-    val searchBtn = if (isDark) D_BgSecondary  else NavyPrime
+    val tk       = resolveTokens(isDark)
+    val searchBg  = if (isDark) D_BgCard else L_CardBg
+    val searchBtn = if (isDark) D_BgSecondary else L_NavyPrime
 
-    Box(modifier = Modifier.fillMaxWidth().background(headerGrad)) {
-        Box(Modifier.size(160.dp).align(Alignment.TopEnd).offset(x = 50.dp, y = (-50).dp).clip(CircleShape).background(goldP.copy(0.06f)))
-        Box(Modifier.size(80.dp).align(Alignment.BottomStart).offset(x = (-20).dp, y = 20.dp).clip(CircleShape).background(goldP.copy(0.04f)))
-        Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.BottomCenter).background(goldBorder))
+    Box(modifier = Modifier.fillMaxWidth().background(tk.navyGradient)) {
+        Box(Modifier.size(170.dp).align(Alignment.TopEnd).offset(x = 55.dp, y = (-55).dp).clip(CircleShape).background(tk.goldPrime.copy(0.06f)))
+        Box(Modifier.size(80.dp).align(Alignment.BottomStart).offset(x = (-20).dp, y = 20.dp).clip(CircleShape).background(tk.goldPrime.copy(0.04f)))
+        Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.BottomCenter).background(tk.goldBorder))
 
         Column(
             Modifier.fillMaxWidth().statusBarsPadding()
-                .padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 24.dp)
+                .padding(horizontal = 20.dp).padding(top = 18.dp, bottom = 26.dp)
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Welcome Back 👋", color = goldP, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text("Welcome Back 👋", color = tk.goldPrime, fontSize = 13.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
                     Spacer(Modifier.height(5.dp))
-                    Text("Find Your Haven", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                    Text("Pakistan's trusted rental platform", color = Color.White.copy(0.6f), fontSize = 11.sp)
+                    Text("Find Your Haven", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Pakistan's trusted rental platform", color = Color.White.copy(0.55f), fontSize = 11.sp)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    NotificationIconButton(count = unreadCount, onClick = onNotificationClick, tint = goldP)
-                    Box(
-                        Modifier.size(42.dp).clip(CircleShape)
-                            .background(goldP.copy(0.2f))
-                            .border(1.5.dp, goldP, CircleShape)
-                            .clickable { onProfileClick() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Person, null, tint = goldP, modifier = Modifier.size(22.dp))
-                    }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    NotificationIconButton(count = unreadCount, onClick = onNotificationClick, tint = tk.goldPrime)
+                    ProfileAvatarButton(
+                        photoUrl   = profilePhotoUrl,
+                        initials   = profileInitials,
+                        goldBorder = tk.goldBorder,
+                        goldPrime  = tk.goldPrime,
+                        onClick    = onProfileClick
+                    )
                 }
             }
             Spacer(Modifier.height(22.dp))
-            // Search bar — tapping navigates to SearchScreen
             Box(
-                Modifier.fillMaxWidth().height(52.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                Modifier.fillMaxWidth().height(54.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(searchBg)
-                    .border(1.dp, if (isDark) D_GoldPrimary.copy(0.15f) else Color.Transparent, RoundedCornerShape(14.dp))
+                    .border(1.5.dp, tk.goldBorder, RoundedCornerShape(16.dp))
                     .clickable { onSearchClick() }
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Search, null, tint = goldP, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Search, null, tint = tk.goldPrime, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(10.dp))
-                        Text("Search city, property type...", color = textMtd, fontSize = 14.sp)
+                        Text("Search city, property type...", color = tk.textMuted, fontSize = 14.sp)
                     }
-                    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(searchBtn).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Box(Modifier.clip(RoundedCornerShape(10.dp)).background(searchBtn).padding(horizontal = 12.dp, vertical = 7.dp)) {
                         Text("Search", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -1142,10 +1119,9 @@ fun HomeHeaderSection(
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // FEATURED PROPERTY CARD
-// Wide card used in the horizontal scroll row on the tenant home screen.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun FeaturedPropertyCard(
     property   : Property,
@@ -1154,64 +1130,68 @@ fun FeaturedPropertyCard(
     isDark     : Boolean    = false,
     onClick    : () -> Unit
 ) {
-    val cardBg  = if (isDark) D_BgCard        else CardWhite
-    val navyP   = if (isDark) D_TextPrimary   else NavyPrime
-    val textMtd = if (isDark) D_TextSecondary else TextMuted
-    val goldP   = if (isDark) D_GoldPrimary   else GoldPrime
-    val goldF   = if (isDark) D_GoldFaint     else GoldFaint
-    val goldL   = if (isDark) D_GoldLinear    else GoldLinear
-    val greenOk = if (isDark) D_GreenOk       else GreenOk
+    val tk = resolveTokens(isDark)
 
-    Card(
-        Modifier.width(260.dp).wrapContentHeight().clickable { onClick() },
-        shape     = RoundedCornerShape(20.dp),
-        colors    = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(if (isDark) 0.dp else 6.dp)
+    Box(
+        modifier = Modifier.width(265.dp).wrapContentHeight()
+            .shadow(if (isDark) 0.dp else 10.dp, RoundedCornerShape(22.dp), ambientColor = L_GoldPrime.copy(0.2f), spotColor = L_GoldPrime.copy(0.25f))
+            .clip(RoundedCornerShape(22.dp))
+            .background(tk.cardBg)
+            .border(2.dp, tk.goldBorder, RoundedCornerShape(22.dp))
+            .clickable { onClick() }
     ) {
-        if (isDark) Box(Modifier.fillMaxWidth().height(1.dp).background(D_GoldBorderBrush))
         Column {
-            Box(Modifier.fillMaxWidth().height(155.dp)) {
+            Box(Modifier.fillMaxWidth().height(158.dp)) {
                 PropertyImage(property = property, modifier = Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.45f)))))
-                // Favourite toggle button
-                Box(Modifier.align(Alignment.TopEnd).padding(9.dp).size(32.dp).clip(CircleShape).background(Color.Black.copy(0.35f)).clickable { onFavToggle() }, contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.5f)))))
+                if (property.isPremium) {
+                    Box(
+                        Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Brush.horizontalGradient(listOf(L_GoldDim, L_GoldPrime, L_GoldLight, L_GoldPrime, L_GoldDim)))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("👑", fontSize = 9.sp)
+                            Text("PREMIUM", color = L_NavyDeep, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                        }
+                    }
+                }
+                Box(Modifier.align(Alignment.TopEnd).padding(10.dp).size(34.dp).clip(CircleShape).background(Color.Black.copy(0.35f)).clickable { onFavToggle() }, Alignment.Center) {
                     Icon(if (isFavourite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Favourite", tint = if (isFavourite) Color(0xFFE53935) else Color.White, modifier = Modifier.size(17.dp))
                 }
-                // Price badge
-                Box(Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(10.dp)).background(goldL).padding(horizontal = 10.dp, vertical = 5.dp)) {
-                    Text(property.formattedPrice, color = if (isDark) D_BgDeep else NavyPrime, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                Box(Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(10.dp)).background(tk.goldLinear).padding(horizontal = 10.dp, vertical = 5.dp)) {
+                    Text(property.formattedPrice, color = if (isDark) D_BgDeep else L_NavyDeep, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                 }
-                // Property type badge
-                Box(Modifier.align(Alignment.BottomStart).padding(10.dp).clip(RoundedCornerShape(6.dp)).background(if (isDark) D_BgSecondary.copy(0.9f) else NavyPrime.copy(0.85f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    Text(property.propertyTypeEnum.displayName(), color = goldP, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.align(Alignment.BottomStart).padding(10.dp).clip(RoundedCornerShape(6.dp)).background(if (isDark) D_BgSecondary.copy(0.9f) else L_NavyPrime.copy(0.85f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(property.propertyTypeEnum.displayName(), color = tk.goldPrime, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
-                // Available badge
                 if (property.isAvailable) {
-                    Box(Modifier.align(Alignment.BottomEnd).padding(10.dp).clip(RoundedCornerShape(6.dp)).background(greenOk).padding(horizontal = 6.dp, vertical = 3.dp)) {
+                    Box(Modifier.align(Alignment.BottomEnd).padding(10.dp).clip(RoundedCornerShape(6.dp)).background(tk.greenOk).padding(horizontal = 6.dp, vertical = 3.dp)) {
                         Text("Available", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                Text(property.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = navyP)
-                Spacer(Modifier.height(4.dp))
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Text(property.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = tk.textDark)
+                Spacer(Modifier.height(5.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocationOn, null, tint = goldP, modifier = Modifier.size(12.dp))
-                    Text(" ${property.city}", color = textMtd, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Icon(Icons.Default.LocationOn, null, tint = tk.goldPrime, modifier = Modifier.size(12.dp))
+                    Text(" ${property.city}", color = tk.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Spacer(Modifier.height(9.dp))
+                Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(goldF).padding(horizontal = 6.dp, vertical = 3.dp)) {
-                        Icon(Icons.Default.Star, null, tint = goldP, modifier = Modifier.size(12.dp))
-                        Text(" ${property.averageRating}", fontSize = 12.sp, color = navyP, fontWeight = FontWeight.SemiBold)
-                        Text(" (${property.reviewCount})", fontSize = 11.sp, color = textMtd)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(tk.goldFaint).padding(horizontal = 6.dp, vertical = 3.dp)) {
+                        Icon(Icons.Default.Star, null, tint = tk.goldPrime, modifier = Modifier.size(12.dp))
+                        Text(" ${property.averageRating}", fontSize = 12.sp, color = tk.textDark, fontWeight = FontWeight.SemiBold)
+                        Text(" (${property.reviewCount})", fontSize = 11.sp, color = tk.textMuted)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.KingBed, null, tint = textMtd, modifier = Modifier.size(12.dp))
-                        Text(" ${property.bedrooms}", fontSize = 11.sp, color = textMtd)
+                        Icon(Icons.Default.KingBed, null, tint = tk.textMuted, modifier = Modifier.size(12.dp))
+                        Text(" ${property.bedrooms}", fontSize = 11.sp, color = tk.textMuted)
                         Spacer(Modifier.width(6.dp))
-                        Icon(Icons.Default.People, null, tint = textMtd, modifier = Modifier.size(12.dp))
-                        Text(" ${property.maxGuests}", fontSize = 11.sp, color = textMtd)
+                        Icon(Icons.Default.People, null, tint = tk.textMuted, modifier = Modifier.size(12.dp))
+                        Text(" ${property.maxGuests}", fontSize = 11.sp, color = tk.textMuted)
                     }
                 }
             }
@@ -1219,10 +1199,9 @@ fun FeaturedPropertyCard(
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // NEARBY PROPERTY CARD
-// Horizontal list card used in the Nearby Stays section.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun NearbyPropertyCard(
     property   : Property,
@@ -1231,59 +1210,56 @@ fun NearbyPropertyCard(
     isDark     : Boolean    = false,
     onClick    : () -> Unit
 ) {
-    val cardBg  = if (isDark) D_BgCard        else CardWhite
-    val navyP   = if (isDark) D_TextPrimary   else NavyPrime
-    val textMtd = if (isDark) D_TextSecondary else TextMuted
-    val goldP   = if (isDark) D_GoldPrimary   else GoldPrime
-    val goldF   = if (isDark) D_GoldFaint     else GoldFaint
-    val greenOk = if (isDark) D_GreenOk       else GreenOk
+    val tk = resolveTokens(isDark)
 
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp).clickable { onClick() }
-            .then(if (isDark) Modifier.border(1.dp, D_GoldPrimary.copy(0.15f), RoundedCornerShape(18.dp)) else Modifier),
-        shape     = RoundedCornerShape(18.dp),
-        colors    = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(if (isDark) 0.dp else 4.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .shadow(if (isDark) 0.dp else 8.dp, RoundedCornerShape(20.dp), ambientColor = L_GoldPrime.copy(0.15f), spotColor = L_GoldPrime.copy(0.2f))
+            .clip(RoundedCornerShape(20.dp))
+            .background(tk.cardBg)
+            .border(2.dp, tk.goldBorder, RoundedCornerShape(20.dp))
+            .clickable { onClick() }
     ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(100.dp).clip(RoundedCornerShape(14.dp))) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(104.dp).clip(RoundedCornerShape(16.dp)).border(1.5.dp, tk.goldBorder, RoundedCornerShape(16.dp))) {
                 PropertyImage(property = property, modifier = Modifier.fillMaxSize())
-                // Green availability dot
-                if (property.isAvailable) {
-                    Box(Modifier.align(Alignment.TopStart).padding(6.dp).size(8.dp).clip(CircleShape).background(greenOk))
+                if (property.isAvailable) { Box(Modifier.align(Alignment.TopStart).padding(7.dp).size(8.dp).clip(CircleShape).background(tk.greenOk)) }
+                if (property.isPremium) {
+                    Box(Modifier.align(Alignment.BottomStart).padding(5.dp).clip(RoundedCornerShape(5.dp)).background(Brush.horizontalGradient(listOf(L_GoldDim, L_GoldPrime))).padding(horizontal = 5.dp, vertical = 2.dp)) { Text("👑", fontSize = 9.sp) }
                 }
-                // Favourite toggle button
-                Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(26.dp).clip(CircleShape).background(Color.Black.copy(0.3f)).clickable { onFavToggle() }, contentAlignment = Alignment.Center) {
+                Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(28.dp).clip(CircleShape).background(Color.Black.copy(0.3f)).clickable { onFavToggle() }, Alignment.Center) {
                     Icon(if (isFavourite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Favourite", tint = if (isFavourite) Color(0xFFE53935) else Color.White, modifier = Modifier.size(14.dp))
                 }
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                    Text(property.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = navyP, modifier = Modifier.weight(1f))
-                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if (isDark) D_BgSecondary else NavyPrime.copy(0.08f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(property.propertyTypeEnum.displayName(), fontSize = 10.sp, color = if (isDark) D_TextSecondary else NavyPrime, fontWeight = FontWeight.Medium)
+                    Text(property.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = tk.textDark, modifier = Modifier.weight(1f))
+                    Box(Modifier.clip(RoundedCornerShape(5.dp)).background(if (isDark) D_BgSecondary else L_NavyPrime.copy(0.08f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text(property.propertyTypeEnum.displayName(), fontSize = 10.sp, color = if (isDark) D_TextSecondary else L_NavyPrime, fontWeight = FontWeight.Medium)
                     }
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(5.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocationOn, null, tint = goldP, modifier = Modifier.size(12.dp))
-                    Text(" ${property.city}", color = textMtd, fontSize = 12.sp)
+                    Icon(Icons.Default.LocationOn, null, tint = tk.goldPrime, modifier = Modifier.size(12.dp))
+                    Text(" ${property.city}", color = tk.textMuted, fontSize = 12.sp)
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.KingBed, null, tint = textMtd, modifier = Modifier.size(12.dp))
-                    Text(" ${property.bedrooms} beds", fontSize = 11.sp, color = textMtd)
+                    Icon(Icons.Default.KingBed, null, tint = tk.textMuted, modifier = Modifier.size(12.dp))
+                    Text(" ${property.bedrooms} beds", fontSize = 11.sp, color = tk.textMuted)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Default.People, null, tint = textMtd, modifier = Modifier.size(12.dp))
-                    Text(" ${property.maxGuests} guests", fontSize = 11.sp, color = textMtd)
+                    Icon(Icons.Default.People, null, tint = tk.textMuted, modifier = Modifier.size(12.dp))
+                    Text(" ${property.maxGuests} guests", fontSize = 11.sp, color = tk.textMuted)
                 }
-                Spacer(Modifier.height(9.dp))
+                Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("${property.formattedPrice}/night", fontWeight = FontWeight.ExtraBold, color = if (isDark) D_GoldPrimary else NavyPrime, fontSize = 14.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(goldF).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                        Icon(Icons.Default.Star, null, tint = goldP, modifier = Modifier.size(12.dp))
-                        Text(" ${property.averageRating}", fontSize = 12.sp, color = navyP, fontWeight = FontWeight.Bold)
+                    Text("${property.formattedPrice}/night", fontWeight = FontWeight.ExtraBold, color = if (isDark) D_GoldPrimary else L_NavyDeep, fontSize = 14.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(tk.goldFaint).border(1.dp, tk.goldBorder, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Icon(Icons.Default.Star, null, tint = tk.goldPrime, modifier = Modifier.size(12.dp))
+                        Text(" ${property.averageRating}", fontSize = 12.sp, color = tk.textDark, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1291,27 +1267,37 @@ fun NearbyPropertyCard(
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // VACATION MINI STAT
-// Small stat pill used inside the Vacation Hub banner.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
-private fun VacationMiniStat(value: String, label: String, emoji: String) {
+private fun VacationMiniStat(value: String, label: String, emoji: String, goldColor: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(emoji, fontSize = 14.sp)
-        Spacer(Modifier.height(2.dp))
-        Text(value, color = D_GoldPrimary, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+        Text(emoji, fontSize = 15.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(value, color = goldColor, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
         Text(label, color = Color.White.copy(0.45f), fontSize = 9.sp)
     }
 }
 
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 // LOADING SHIMMER
-// Centered spinner shown while properties are being fetched from Firestore.
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun LoadingShimmer(isDark: Boolean = false) {
     Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(color = if (isDark) D_GoldPrimary else GoldPrime)
+        CircularProgressIndicator(
+            color       = if (isDark) D_GoldPrimary else L_GoldPrime,
+            strokeWidth = 3.dp,
+            modifier    = Modifier.size(42.dp)
+        )
     }
 }
+
+
+
+
+
+
+
+

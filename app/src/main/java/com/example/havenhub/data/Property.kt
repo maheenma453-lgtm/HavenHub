@@ -9,12 +9,14 @@ import com.google.firebase.firestore.ServerTimestamp
 // ══════════════════════════════════════════════════════════════════════════════
 // Property.kt
 // Central data model for a property listing in HavenHub.
-// Includes Firestore mapping, coordinate resolution, and display helpers.
+// ✦ UPDATED: isPremium field added — landlord can mark a property as Premium
+//             when submitting. Premium properties appear in the "Premium" filter
+//             on both HomeScreen and AddPropertyScreen.
 // ══════════════════════════════════════════════════════════════════════════════
 
 data class Property(
 
-    // ── Firestore document ID (auto-populated by Firestore) ───────────────────
+    // ── Firestore document ID ─────────────────────────────────────────────────
     @DocumentId
     val propertyId: String = "",
 
@@ -40,9 +42,6 @@ data class Property(
     val city     : String   = "",
 
     // ── Map coordinates ───────────────────────────────────────────────────────
-    // These are saved when a landlord submits a property via AddPropertyScreen.
-    // PropertyViewModel resolves the city name to lat/lng before saving.
-    // ExploreMapScreen reads resolvedLatitude / resolvedLongitude (see below).
     val latitude  : Double = 0.0,
     val longitude : Double = 0.0,
 
@@ -60,12 +59,9 @@ data class Property(
     val floor     : Int?    = null,
 
     // ── Media ─────────────────────────────────────────────────────────────────
-    // imageUrls: uploaded to ImgBB, stored as public URLs
-    val imageUrls      : List<String> = emptyList(),
-    // pt1DocumentUrl: PT-1 property tax document image URL
-    val pt1DocumentUrl : String       = "",
-    // drawableImageName: local res/drawable name (for manually seeded properties only)
-    val drawableImageName : String    = "",
+    val imageUrls         : List<String> = emptyList(),
+    val pt1DocumentUrl    : String       = "",
+    val drawableImageName : String       = "",
 
     // ── Amenities ─────────────────────────────────────────────────────────────
     val amenities : List<String> = emptyList(),
@@ -83,12 +79,9 @@ data class Property(
     val reviewCount   : Int   = 0,
 
     // ── Admin note ────────────────────────────────────────────────────────────
-    // Set by admin when approving or rejecting a property
     val adminNote : String = "",
 
     // ── Availability & featured flags ─────────────────────────────────────────
-    // NOTE: `available` is the raw Firestore field ("isAvailable").
-    // Use isAvailable (computed below) in UI — it also accounts for status.
     @get:PropertyName("isAvailable")
     @set:PropertyName("isAvailable")
     var available : Boolean = true,
@@ -97,6 +90,16 @@ data class Property(
     @set:PropertyName("isFeatured")
     var featured : Boolean = false,
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // ✦ NEW — isPremium flag
+    // Set by landlord at property submission time (Step 1 in AddPropertyScreen).
+    // When true, property appears in the "Premium" filter chip on HomeScreen.
+    // Admin can also set this manually in Firebase Console.
+    // ══════════════════════════════════════════════════════════════════════════
+    @get:PropertyName("isPremium")
+    @set:PropertyName("isPremium")
+    var premium : Boolean = false,
+
     // ── Timestamps ────────────────────────────────────────────────────────────
     @ServerTimestamp
     val createdAt : Timestamp? = null,
@@ -104,7 +107,7 @@ data class Property(
 
 ) {
 
-    // Required by Firestore for deserialization (no-arg constructor)
+    // Required by Firestore for deserialization
     constructor() : this(propertyId = "")
 
     // ════════════════════════════════════════════════════════════════════════
@@ -119,23 +122,8 @@ data class Property(
     val formattedPrice: String
         get() = "PKR ${"%,.0f".format(pricePerNight)}"
 
-    // ════════════════════════════════════════════════════════════════════════
-    // ✅ FIX: isAvailable — now checks BOTH the raw `available` field
-    //          AND the admin-controlled `status`.
-    //
-    // Problem before: A landlord uploaded a new property. The `available`
-    // field defaulted to `true`. The PropertyDetailScreen hero badge
-    // showed "Available" (green) even though status was still "PENDING"
-    // and admin hadn't approved it yet — misleading to the tenant.
-    //
-    // Fix: A property is only truly available when:
-    //   1. The raw `available` flag is true  (landlord hasn't marked it unavailable)
-    //   2. AND status is "APPROVED"          (admin has reviewed and approved it)
-    //   3. AND status is NOT "BOOKED"        (no active booking occupying it)
-    //
-    // This single change fixes the hero badge in PropertyDetailScreen and
-    // every other place that reads `property.isAvailable`.
-    // ════════════════════════════════════════════════════════════════════════
+    // ── isAvailable: true only when admin-approved, landlord hasn't hidden it,
+    //    and it isn't currently booked
     @get:Exclude
     val isAvailable: Boolean
         get() = available
@@ -145,18 +133,17 @@ data class Property(
     @get:Exclude
     val isFeatured: Boolean get() = featured
 
-    // True if landlord uploaded a PT-1 verification document
+    // ── isPremium: public computed property used by UI filters
+    @get:Exclude
+    val isPremium: Boolean get() = premium
+
     val hasPt1Document: Boolean get() = pt1DocumentUrl.isNotBlank()
 
     // ════════════════════════════════════════════════════════════════════════
     // MAP COORDINATE RESOLUTION
-    //
-    // Priority 1: Use explicit lat/lng saved in Firestore (set by PropertyViewModel)
-    // Priority 2: Fall back to city-name lookup (covers manually seeded properties)
-    // Priority 3: Pakistan geographic center (30.3753, 69.3451) as last resort
-    //
-    // ExploreMapScreen filters out properties that land on the Pakistan center
-    // fallback so they don't appear as a cluster of unresolved pins.
+    // Priority 1 → explicit lat/lng from Firestore
+    // Priority 2 → city-name lookup table
+    // Priority 3 → Pakistan center (30.3753, 69.3451)
     // ════════════════════════════════════════════════════════════════════════
 
     @get:Exclude
@@ -176,7 +163,6 @@ data class Property(
     // ════════════════════════════════════════════════════════════════════════
     // LOCAL DRAWABLE RESOLUTION
     // Used for manually seeded properties that have a local res/drawable image.
-    // App-submitted properties use imageUrls (ImgBB URLs) instead.
     // ════════════════════════════════════════════════════════════════════════
 
     val resolvedDrawableName: String
@@ -205,27 +191,15 @@ data class Property(
             }
         }
 
-    // ── Enum accessors ────────────────────────────────────────────────────────
-
     val propertyStatusEnum: PropertyStatus
-        get() = try {
-            PropertyStatus.valueOf(status)
-        } catch (e: Exception) {
-            PropertyStatus.PENDING
-        }
+        get() = try { PropertyStatus.valueOf(status) } catch (e: Exception) { PropertyStatus.PENDING }
 
     @get:Exclude
     val propertyTypeEnum: PropertyType
-        get() = try {
-            PropertyType.valueOf(propertyType)
-        } catch (e: Exception) {
-            PropertyType.APARTMENT
-        }
+        get() = try { PropertyType.valueOf(propertyType) } catch (e: Exception) { PropertyType.APARTMENT }
 
     // ════════════════════════════════════════════════════════════════════════
-    // COMPANION: city coordinate lookup tables
-    // These are used as fallbacks when a property has no explicit lat/lng.
-    // New cities can be added here without changing any other file.
+    // COMPANION — city coordinate lookup tables
     // ════════════════════════════════════════════════════════════════════════
 
     companion object {
@@ -233,97 +207,45 @@ data class Property(
         const val PAKISTAN_CENTER_LNG = 69.3451
 
         val CITY_LATITUDES = mapOf(
-            // Northern areas
-            "skardu"       to 35.2971,
-            "hunza"        to 36.3167,
-            "gilgit"       to 35.9221,
-            "swat"         to 35.2227,
-            "naran"        to 34.9008,
-            "kaghan"       to 34.9167,
-            "murree"       to 33.9071,
-            "abbottabad"   to 34.1463,
-            "mansehra"     to 34.3293,
-            "chitral"      to 35.8517,
-
-            // Punjab
-            "islamabad"    to 33.7215,
-            "rawalpindi"   to 33.6007,
-            "lahore"       to 31.5204,
-            "faisalabad"   to 31.4504,
-            "gujranwala"   to 32.1877,
-            "sialkot"      to 32.4927,
-            "multan"       to 30.1575,
-            "bahawalpur"   to 29.3956,
-            "sargodha"     to 32.0836,
-            "gujrat"       to 32.5744,
-            "sheikhupura"  to 31.7167,
-
-            // Sindh
-            "karachi"      to 24.8607,
-            "hyderabad"    to 25.3960,
-            "sukkur"       to 27.7052,
-            "larkana"      to 27.5570,
-
-            // KPK
-            "peshawar"     to 34.0151,
-            "mardan"       to 34.1980,
-
-            // Balochistan
-            "quetta"       to 30.1798
+            "skardu" to 35.2971, "hunza" to 36.3167, "gilgit" to 35.9221,
+            "swat" to 35.2227, "naran" to 34.9008, "kaghan" to 34.9167,
+            "murree" to 33.9071, "abbottabad" to 34.1463, "mansehra" to 34.3293,
+            "chitral" to 35.8517, "islamabad" to 33.7215, "rawalpindi" to 33.6007,
+            "lahore" to 31.5204, "faisalabad" to 31.4504, "gujranwala" to 32.1877,
+            "sialkot" to 32.4927, "multan" to 30.1575, "bahawalpur" to 29.3956,
+            "sargodha" to 32.0836, "gujrat" to 32.5744, "sheikhupura" to 31.7167,
+            "karachi" to 24.8607, "hyderabad" to 25.3960, "sukkur" to 27.7052,
+            "larkana" to 27.5570, "peshawar" to 34.0151, "mardan" to 34.1980,
+            "quetta" to 30.1798
         )
 
         val CITY_LONGITUDES = mapOf(
-            // Northern areas
-            "skardu"       to 75.6352,
-            "hunza"        to 74.6500,
-            "gilgit"       to 74.3090,
-            "swat"         to 72.4258,
-            "naran"        to 73.6511,
-            "kaghan"       to 73.6333,
-            "murree"       to 73.3943,
-            "abbottabad"   to 73.2117,
-            "mansehra"     to 73.1975,
-            "chitral"      to 71.8360,
-
-            // Punjab
-            "islamabad"    to 73.0433,
-            "rawalpindi"   to 73.0651,
-            "lahore"       to 74.3587,
-            "faisalabad"   to 73.1350,
-            "gujranwala"   to 74.1945,
-            "sialkot"      to 74.5311,
-            "multan"       to 71.5249,
-            "bahawalpur"   to 71.6839,
-            "sargodha"     to 72.6689,
-            "gujrat"       to 74.0775,
-            "sheikhupura"  to 73.9850,
-
-            // Sindh
-            "karachi"      to 67.0011,
-            "hyderabad"    to 68.3578,
-            "sukkur"       to 68.8570,
-            "larkana"      to 68.2150,
-
-            // KPK
-            "peshawar"     to 71.5249,
-            "mardan"       to 72.0446,
-
-            // Balochistan
-            "quetta"       to 66.9750
+            "skardu" to 75.6352, "hunza" to 74.6500, "gilgit" to 74.3090,
+            "swat" to 72.4258, "naran" to 73.6511, "kaghan" to 73.6333,
+            "murree" to 73.3943, "abbottabad" to 73.2117, "mansehra" to 73.1975,
+            "chitral" to 71.8360, "islamabad" to 73.0433, "rawalpindi" to 73.0651,
+            "lahore" to 74.3587, "faisalabad" to 73.1350, "gujranwala" to 74.1945,
+            "sialkot" to 74.5311, "multan" to 71.5249, "bahawalpur" to 71.6839,
+            "sargodha" to 72.6689, "gujrat" to 74.0775, "sheikhupura" to 73.9850,
+            "karachi" to 67.0011, "hyderabad" to 68.3578, "sukkur" to 68.8570,
+            "larkana" to 68.2150, "peshawar" to 71.5249, "mardan" to 72.0446,
+            "quetta" to 66.9750
         )
     }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PropertyType enum
-// All possible property categories shown in AddPropertyScreen filter chips.
+// ✦ UPDATED: No separate PREMIUM enum value needed — isPremium is a flag on the
+//             property itself, not a type. All existing types are preserved.
 // ══════════════════════════════════════════════════════════════════════════════
 
 enum class PropertyType {
-    APARTMENT, HOUSE, VILLA, STUDIO, ROOM, HOSTEL, PENTHOUSE, FARMHOUSE;
+    APARTMENT,PREMIUM, HOUSE, VILLA, STUDIO, ROOM, HOSTEL, PENTHOUSE, FARMHOUSE;
 
     fun displayName(): String = when (this) {
         APARTMENT -> "Apartment"
+        PREMIUM   -> "Premium"
         HOUSE     -> "House"
         VILLA     -> "Villa"
         STUDIO    -> "Studio"
@@ -336,24 +258,17 @@ enum class PropertyType {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PropertyStatus enum
-// Reflects the admin review lifecycle of a property.
-// Only APPROVED properties are visible to tenants and shown on the map.
 // ══════════════════════════════════════════════════════════════════════════════
 
 enum class PropertyStatus {
-    PENDING,        // Just submitted by landlord, awaiting admin review
-    UNDER_REVIEW,   // Admin has opened and is reviewing the listing
-    APPROVED,       // Approved — visible to tenants and shown on explore map
-    REJECTED,       // Rejected — landlord notified via adminNote
-    INACTIVE,       // Temporarily hidden by landlord or admin
-    BOOKED;         // ✅ NEW: Currently occupied by an active booking
+    PENDING, UNDER_REVIEW, APPROVED, REJECTED, INACTIVE, BOOKED;
 
     fun displayName(): String = when (this) {
-        PENDING      -> "Pending"
+        PENDING -> "Pending"
         UNDER_REVIEW -> "Under Review"
-        APPROVED     -> "Approved"
-        REJECTED     -> "Rejected"
-        INACTIVE     -> "Inactive"
-        BOOKED       -> "Booked"
+        APPROVED -> "Approved"
+        REJECTED -> "Rejected"
+        INACTIVE -> "Inactive"
+        BOOKED -> "Booked"
     }
 }

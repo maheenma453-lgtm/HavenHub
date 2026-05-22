@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,22 +40,41 @@ fun SplashScreen(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val uiState by authViewModel.uiState.collectAsState()
-    var phase   by remember { mutableStateOf(false) }
+    var phase by remember { mutableStateOf(false) }
 
-    var splashDone      by remember { mutableStateOf(false) }
-    var navigationDone  by remember { mutableStateOf(false) }
+    var splashDone     by remember { mutableStateOf(false) }
+    var navigationDone by remember { mutableStateOf(false) }
 
-    val logoScale    by animateFloatAsState(
+    // ── Responsive sizing ─────────────────────────────────────────────────────
+    val config    = LocalConfiguration.current
+    val screenH   = config.screenHeightDp.dp
+    val screenW   = config.screenWidthDp.dp
+    val isCompact = screenH < 700.dp
+    val logoH     = when {
+        isCompact        -> 180.dp
+        screenH < 800.dp -> 210.dp
+        else             -> 240.dp
+    }
+    val titleSp   = if (isCompact) 30.sp  else 36.sp
+    val taglineSp = if (isCompact) 8.5.sp else 9.5.sp
+    val descSp    = if (isCompact) 13.sp  else 14.sp
+    val btnH      = if (isCompact) 50.dp  else 56.dp
+    val spacerMd  = if (isCompact) 20.dp  else 32.dp
+    val spacerSm  = if (isCompact) 6.dp   else 10.dp
+    val hPad      = if (screenW < 360.dp) 20.dp else 28.dp
+    // ─────────────────────────────────────────────────────────────────────────
+
+    val logoScale by animateFloatAsState(
         targetValue   = if (phase) 1f else 0.80f,
         animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
         label         = "sc"
     )
-    val logoAlpha    by animateFloatAsState(
+    val logoAlpha by animateFloatAsState(
         targetValue   = if (phase) 1f else 0f,
         animationSpec = tween(600),
         label         = "la"
     )
-    val textAlpha    by animateFloatAsState(
+    val textAlpha by animateFloatAsState(
         targetValue   = if (phase) 1f else 0f,
         animationSpec = tween(600, delayMillis = 200),
         label         = "ta"
@@ -82,17 +102,21 @@ fun SplashScreen(
         splashDone = true
     }
 
+    // ── ✅ FIXED: sub_admin bhi AdminDashboard pe jayega ──────────────────────
     LaunchedEffect(splashDone, uiState.isAuthReady) {
-        if (!splashDone) return@LaunchedEffect
+        if (!splashDone)        return@LaunchedEffect
         if (!uiState.isAuthReady) return@LaunchedEffect
-        if (navigationDone) return@LaunchedEffect
+        if (navigationDone)     return@LaunchedEffect
 
         if (uiState.isLoggedIn && uiState.userRole.isNotEmpty()) {
             navigationDone = true
-            val dest = when (uiState.userRole.lowercase()) {
-                "admin" -> Screen.AdminDashboard.route
-                else    -> Screen.Home.route
+
+            val dest = when (uiState.userRole.lowercase().trim()) {
+                "admin",
+                "sub_admin" -> Screen.AdminDashboard.route   // ← FIXED
+                else        -> Screen.Home.route
             }
+
             navController.navigate(dest) {
                 popUpTo(Screen.Splash.route) { inclusive = true }
             }
@@ -103,12 +127,12 @@ fun SplashScreen(
 
     // ══ UI ═══════════════════════════════════════════════════════════════════
     Column(
-        modifier            = Modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = 28.dp),
+            .padding(horizontal = hPad),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -119,28 +143,28 @@ fun SplashScreen(
             contentDescription = "HavenHub Logo",
             contentScale       = ContentScale.Fit,
             modifier           = Modifier
-                .fillMaxWidth()
-                .height(240.dp)
+                .fillMaxWidth(0.70f)
+                .height(logoH)
                 .scale(logoScale)
                 .alpha(logoAlpha)
         )
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(spacerSm))
 
         // ── BRAND NAME ───────────────────────────────────────────────────────
         Row(modifier = Modifier.alpha(textAlpha)) {
             Text(
-                text          = "HAVEN",
-                fontSize      = 36.sp,
-                fontWeight    = FontWeight.Black,
-                color         = NavyDark,
+                text         = "HAVEN",
+                fontSize     = titleSp,
+                fontWeight   = FontWeight.Black,
+                color        = NavyDark,
                 letterSpacing = 2.sp
             )
             Text(
-                text          = "HUB",
-                fontSize      = 36.sp,
-                fontWeight    = FontWeight.Black,
-                color         = GoldPrimary,
+                text         = "HUB",
+                fontSize     = titleSp,
+                fontWeight   = FontWeight.Black,
+                color        = GoldPrimary,
                 letterSpacing = 2.sp
             )
         }
@@ -149,21 +173,21 @@ fun SplashScreen(
 
         // ── TAGLINE ──────────────────────────────────────────────────────────
         Text(
-            text          = "SMART RENTAL & VACATION STAY",
-            fontSize      = 9.5.sp,
-            fontWeight    = FontWeight.Medium,
-            color         = NavyDark.copy(alpha = 0.45f),
+            text         = "SMART RENTAL & VACATION STAY",
+            fontSize     = taglineSp,
+            fontWeight   = FontWeight.Medium,
+            color        = NavyDark.copy(alpha = 0.45f),
             letterSpacing = 2.6.sp,
-            modifier      = Modifier.alpha(textAlpha)
+            modifier     = Modifier.alpha(textAlpha)
         )
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(spacerSm))
 
         // ── SHIMMER DIVIDER ──────────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .width(100.dp)
-                .height(1.dp)
+                .height(1.5.dp)
                 .alpha(textAlpha)
                 .background(
                     Brush.horizontalGradient(
@@ -178,23 +202,23 @@ fun SplashScreen(
                 )
         )
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(spacerSm))
 
         // ── DESCRIPTION ──────────────────────────────────────────────────────
         Text(
-            text       = "Verified properties for students,\nfamilies, job holders & travelers",
-            fontSize   = 14.sp,
-            color      = NavyDark.copy(alpha = 0.60f),
-            textAlign  = TextAlign.Center,
+            text      = "Verified properties for students,\nfamilies, job holders & travelers",
+            fontSize  = descSp,
+            color     = NavyDark.copy(alpha = 0.60f),
+            textAlign = TextAlign.Center,
             lineHeight = 22.sp,
-            modifier   = Modifier.alpha(textAlpha)
+            modifier  = Modifier.alpha(textAlpha)
         )
 
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(spacerMd))
 
         // ── BUTTONS ──────────────────────────────────────────────────────────
         Column(
-            modifier            = Modifier
+            modifier = Modifier
                 .alpha(if (showButtons) buttonsAlpha else 0f)
                 .offset(y = buttonsSlide.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -207,16 +231,16 @@ fun SplashScreen(
                 },
                 modifier  = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(btnH),
                 shape     = RoundedCornerShape(16.dp),
                 colors    = ButtonDefaults.buttonColors(containerColor = NavyDark),
                 elevation = ButtonDefaults.buttonElevation(0.dp)
             ) {
                 Text(
-                    text          = "Get Started",
-                    fontSize      = 16.sp,
-                    fontWeight    = FontWeight.Bold,
-                    color         = GoldPrimary,
+                    text         = "Get Started",
+                    fontSize     = 16.sp,
+                    fontWeight   = FontWeight.Bold,
+                    color        = GoldPrimary,
                     letterSpacing = 0.8.sp
                 )
             }
@@ -231,7 +255,7 @@ fun SplashScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(btnH),
                 shape    = RoundedCornerShape(16.dp),
                 border   = androidx.compose.foundation.BorderStroke(
                     1.5.dp, NavyDark.copy(alpha = 0.35f)
@@ -241,15 +265,15 @@ fun SplashScreen(
                 )
             ) {
                 Text(
-                    text          = "I Already Have an Account",
-                    fontSize      = 15.sp,
-                    fontWeight    = FontWeight.SemiBold,
-                    color         = NavyDark,
+                    text         = "I Already Have an Account",
+                    fontSize     = 15.sp,
+                    fontWeight   = FontWeight.SemiBold,
+                    color        = NavyDark,
                     letterSpacing = 0.3.sp
                 )
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(if (isCompact) 18.dp else 28.dp))
 
             // ── FOOTER ───────────────────────────────────────────────────────
             Box(
@@ -274,3 +298,4 @@ fun SplashScreen(
         }
     }
 }
+

@@ -128,7 +128,6 @@ fun AddReviewScreen(
                     .fillMaxWidth()
                     .background(headerGrad)
             ) {
-                // gold accent line at bottom
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -141,9 +140,11 @@ fun AddReviewScreen(
                         Text(
                             "Write a Review",
                             fontWeight    = FontWeight.Bold,
-                            fontSize      = 20.sp,
+                            fontSize      = 18.sp,
                             color         = Color.White,
-                            letterSpacing = 0.3.sp
+                            letterSpacing = 0.3.sp,
+                            maxLines      = 1,
+                            overflow      = TextOverflow.Ellipsis
                         )
                     },
                     navigationIcon = {
@@ -167,8 +168,8 @@ fun AddReviewScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
 
             // ══════════════════════════════════════════════════════
@@ -179,12 +180,12 @@ fun AddReviewScreen(
                     Row(
                         modifier          = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier         = Modifier
-                                .size(48.dp)
+                                .size(44.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(goldP.copy(0.12f)),
                             contentAlignment = Alignment.Center
@@ -193,15 +194,15 @@ fun AddReviewScreen(
                                 Icons.Default.Home,
                                 contentDescription = null,
                                 tint               = goldP,
-                                modifier           = Modifier.size(26.dp)
+                                modifier           = Modifier.size(24.dp)
                             )
                         }
-                        Spacer(Modifier.width(14.dp))
+                        Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text       = propertyTitle.ifEmpty { "Property" },
                                 fontWeight = FontWeight.Bold,
-                                fontSize   = 15.sp,
+                                fontSize   = 14.sp,
                                 color      = textPrimary,
                                 maxLines   = 1,
                                 overflow   = TextOverflow.Ellipsis
@@ -212,25 +213,26 @@ fun AddReviewScreen(
                                     Icons.Default.BookOnline,
                                     null,
                                     tint     = textSecond,
-                                    modifier = Modifier.size(12.dp)
+                                    modifier = Modifier.size(11.dp)
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
                                     text     = "Booking #${bookingId.take(8).uppercase()}",
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     color    = textSecond
                                 )
                             }
                         }
+                        Spacer(Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(goldP.copy(0.12f))
-                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text       = "Selected",
-                                fontSize   = 11.sp,
+                                fontSize   = 10.sp,
                                 color      = goldP,
                                 fontWeight = FontWeight.Bold
                             )
@@ -246,7 +248,7 @@ fun AddReviewScreen(
                         Row(
                             modifier              = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp),
+                                .padding(12.dp),
                             verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -256,7 +258,7 @@ fun AddReviewScreen(
                             ) {
                                 Box(
                                     modifier         = Modifier
-                                        .size(36.dp)
+                                        .size(34.dp)
                                         .clip(RoundedCornerShape(10.dp))
                                         .background(goldP.copy(0.12f)),
                                     contentAlignment = Alignment.Center
@@ -271,7 +273,7 @@ fun AddReviewScreen(
                                 Spacer(Modifier.width(10.dp))
                                 Text(
                                     text       = selectedPropertyTitle.ifEmpty { selectedPropertyId },
-                                    fontSize   = 14.sp,
+                                    fontSize   = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color      = textPrimary,
                                     maxLines   = 1,
@@ -418,20 +420,24 @@ fun AddReviewScreen(
             // 2. OVERALL RATING
             // ══════════════════════════════════════════════════════
             PremiumCard(cardBg = cardBg, goldBorder = goldBorder, isDark = isDark) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     SectionLabel("Overall Rating", goldP)
                     Spacer(Modifier.height(12.dp))
+
+                    // ── RESPONSIVE: use fillMaxWidth + SpaceEvenly so all 5 stars
+                    //    fit on any screen size without clipping the last one ──────
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         (1..5).forEach { star ->
                             Box(
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(46.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        if (star <= rating) goldP.copy(0.12f)
+                                        if (star <= rating) goldP.copy(0.14f)
                                         else Color.Transparent
                                     )
                                     .clickable { rating = star },
@@ -439,14 +445,27 @@ fun AddReviewScreen(
                             ) {
                                 Icon(
                                     imageVector        = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = null,
+                                    contentDescription = "$star stars",
                                     tint               = if (star <= rating) goldP else textSecond,
-                                    modifier           = Modifier.size(30.dp)
+                                    modifier           = Modifier.size(30.dp)    // consistent size for all stars
                                 )
                             }
                         }
-                        if (rating > 0) {
-                            Spacer(Modifier.width(4.dp))
+                    }
+
+                    if (rating > 0) {
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            modifier          = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text       = ratingLabel(rating),
+                                fontSize   = 13.sp,
+                                color      = goldP,
+                                fontWeight = FontWeight.Medium
+                            )
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
@@ -462,61 +481,52 @@ fun AddReviewScreen(
                             }
                         }
                     }
-                    if (rating > 0) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text  = ratingLabel(rating),
-                            fontSize = 12.sp,
-                            color    = goldP,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
                 }
             }
 
             // ══════════════════════════════════════════════════════
-            // 3. CATEGORY RATINGS
+            // 3. CATEGORY RATINGS  (responsive row layout)
             // ══════════════════════════════════════════════════════
             PremiumCard(cardBg = cardBg, goldBorder = goldBorder, isDark = isDark) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     SectionLabel("Category Ratings", goldP)
                     Spacer(Modifier.height(12.dp))
                     CategoryRatingRow(
-                        label      = "Cleanliness",
-                        emoji      = "🧹",
-                        rating     = cleanliness,
-                        goldP      = goldP,
+                        label       = "Cleanliness",
+                        emoji       = "🧹",
+                        rating      = cleanliness,
+                        goldP       = goldP,
                         textPrimary = textPrimary,
-                        textSecond = textSecond,
-                        onRating   = { cleanliness = it }
+                        textSecond  = textSecond,
+                        onRating    = { cleanliness = it }
                     )
                     HorizontalDivider(
-                        modifier  = Modifier.padding(vertical = 8.dp),
+                        modifier  = Modifier.padding(vertical = 10.dp),
                         color     = if (isDark) D_Border else Color(0xFFE8ECF4),
                         thickness = 0.5.dp
                     )
                     CategoryRatingRow(
-                        label      = "Location",
-                        emoji      = "📍",
-                        rating     = location,
-                        goldP      = goldP,
+                        label       = "Location",
+                        emoji       = "📍",
+                        rating      = location,
+                        goldP       = goldP,
                         textPrimary = textPrimary,
-                        textSecond = textSecond,
-                        onRating   = { location = it }
+                        textSecond  = textSecond,
+                        onRating    = { location = it }
                     )
                     HorizontalDivider(
-                        modifier  = Modifier.padding(vertical = 8.dp),
+                        modifier  = Modifier.padding(vertical = 10.dp),
                         color     = if (isDark) D_Border else Color(0xFFE8ECF4),
                         thickness = 0.5.dp
                     )
                     CategoryRatingRow(
-                        label      = "Value for Money",
-                        emoji      = "💰",
-                        rating     = value,
-                        goldP      = goldP,
+                        label       = "Value",
+                        emoji       = "💰",
+                        rating      = value,
+                        goldP       = goldP,
                         textPrimary = textPrimary,
-                        textSecond = textSecond,
-                        onRating   = { value = it }
+                        textSecond  = textSecond,
+                        onRating    = { value = it }
                     )
                 }
             }
@@ -525,7 +535,7 @@ fun AddReviewScreen(
             // 4. REVIEW TEXT
             // ══════════════════════════════════════════════════════
             PremiumCard(cardBg = cardBg, goldBorder = goldBorder, isDark = isDark) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     SectionLabel("Your Review", goldP)
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
@@ -560,12 +570,13 @@ fun AddReviewScreen(
                     ) {
                         if (reviewText.isNotEmpty()) {
                             Text(
-                                text      = if (reviewText.length < 20) "Add more details for a better review" else "Looking good!",
-                                fontSize  = 11.sp,
-                                color     = if (reviewText.length < 20) textSecond else goldP
+                                text     = if (reviewText.length < 20) "Add more details" else "Looking good!",
+                                fontSize = 11.sp,
+                                color    = if (reviewText.length < 20) textSecond else goldP,
+                                modifier = Modifier.weight(1f)
                             )
                         } else {
-                            Spacer(Modifier.width(1.dp))
+                            Spacer(Modifier.weight(1f))
                         }
                         Text(
                             text     = "${reviewText.length}/500",
@@ -727,7 +738,6 @@ private fun PremiumCard(
                 shape = RoundedCornerShape(16.dp)
             )
     ) {
-        // top gold accent line
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -738,49 +748,63 @@ private fun PremiumCard(
     }
 }
 
+// ── RESPONSIVE Category Rating Row ───────────────────────────────────────────
+// Label is flexible (weight), stars use SpaceEvenly in a fixed Box so all
+// 5 stars always render at the same size regardless of screen width.
 @Composable
 private fun CategoryRatingRow(
-    label      : String,
-    emoji      : String,
-    rating     : Int,
-    goldP      : Color,
-    textPrimary: Color,
-    textSecond : Color,
-    onRating   : (Int) -> Unit
+    label       : String,
+    emoji       : String,
+    rating      : Int,
+    goldP       : Color,
+    textPrimary : Color,
+    textSecond  : Color,
+    onRating    : (Int) -> Unit
 ) {
     Row(
         modifier          = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(emoji, fontSize = 16.sp)
-        Spacer(Modifier.width(8.dp))
+        // Emoji + label — flexible
+        Text(emoji, fontSize = 15.sp)
+        Spacer(Modifier.width(6.dp))
         Text(
-            text     = label,
-            fontSize = 13.sp,
-            color    = textPrimary,
-            modifier = Modifier.width(110.dp),
-            fontWeight = FontWeight.Medium
+            text       = label,
+            fontSize   = 12.sp,
+            color      = textPrimary,
+            fontWeight = FontWeight.Medium,
+            maxLines   = 1,
+            overflow   = TextOverflow.Ellipsis,
+            modifier   = Modifier.weight(1f)       // takes remaining space
         )
-        Spacer(Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            (1..5).forEach { star ->
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (star <= rating) goldP.copy(0.10f)
-                            else Color.Transparent
+        Spacer(Modifier.width(6.dp))
+
+        // Stars — fixed 160dp box, SpaceEvenly ensures uniform sizing
+        Box(modifier = Modifier.width(160.dp)) {
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                (1..5).forEach { star ->
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (star <= rating) goldP.copy(0.10f)
+                                else Color.Transparent
+                            )
+                            .clickable { onRating(star) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector        = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = "$star stars",
+                            tint               = if (star <= rating) goldP else textSecond,
+                            modifier           = Modifier.size(20.dp)   // uniform for all 5
                         )
-                        .clickable { onRating(star) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector        = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = null,
-                        tint               = if (star <= rating) goldP else textSecond,
-                        modifier           = Modifier.size(20.dp)
-                    )
+                    }
                 }
             }
         }
@@ -802,11 +826,11 @@ private fun PropertySearchItem(
             .fillMaxWidth()
             .clickable { onSelect() }
             .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment     = Alignment.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Box(
-            modifier         = Modifier
+            modifier = Modifier
                 .size(38.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(accentColor.copy(0.12f)),
@@ -814,23 +838,23 @@ private fun PropertySearchItem(
         ) {
             Icon(
                 Icons.Default.Home, null,
-                tint     = accentColor,
+                tint = accentColor,
                 modifier = Modifier.size(20.dp)
             )
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 property.title,
-                fontSize   = 13.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color      = textPrimary,
-                maxLines   = 1,
-                overflow   = TextOverflow.Ellipsis
+                color = textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 "${property.city} · ${property.propertyTypeEnum.displayName()}",
                 fontSize = 11.sp,
-                color    = textSecond,
+                color = textSecond,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -838,37 +862,24 @@ private fun PropertySearchItem(
         if (property.averageRating > 0) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier          = Modifier
+                modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(accentColor.copy(0.10f))
                     .padding(horizontal = 6.dp, vertical = 3.dp)
             ) {
                 Icon(
                     Icons.Default.Star, null,
-                    tint     = accentColor,
+                    tint = accentColor,
                     modifier = Modifier.size(11.dp)
                 )
                 Spacer(Modifier.width(2.dp))
                 Text(
                     "%.1f".format(property.averageRating),
-                    fontSize   = 11.sp,
-                    color      = accentColor,
+                    fontSize = 11.sp,
+                    color = accentColor,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

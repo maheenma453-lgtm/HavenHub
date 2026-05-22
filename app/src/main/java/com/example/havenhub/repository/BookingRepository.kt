@@ -40,35 +40,182 @@ class BookingRepository @Inject constructor(
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // ✅ NEW: isPropertyBooked
-    // Check karta hai koi property abhi CONFIRMED ya PENDING booking mein hai ya nahi.
-    // PropertyDetailScreen aur PropertyCard dono isko use kar sakte hain.
+    // isPropertyBooked — DATE-AWARE CHECK
     //
-    // Logic:
-    //   - Firestore mein "bookings" collection query karo jahan propertyId match ho
-    //   - Sirf CONFIRMED aur PENDING statuses count karti hain
-    //     (CANCELLED aur COMPLETED ignore hoti hain — property dobara available hoti hai)
-    //   - Agar koi aisi booking mili → true return karo
-    //   - Exception pe false return karo (silent fail, UI stuck nahi hoga)
+    // Returns true only if the property has an ACTIVE booking that has NOT
+    // yet ended (i.e. checkOutDate is in the future or today).
+    //
+    // OLD behaviour (broken):
+    //   - Only checked status == CONFIRMED or PENDING
+    //   - Did NOT look at dates → a booking from last month still showed "Booked"
+    //
+    // NEW behaviour (fixed):
+    //   Step 1: Fetch all CONFIRMED + PENDING bookings for this property
+    //   Step 2: For each booking, check if checkOutDate > now
+    //           - If yes  → property is still occupied  → return true
+    //           - If no   → booking has expired, auto-mark it COMPLETED in background
+    //   Step 3: If no active (non-expired) booking found → return false
+    //           → property is available for new tenants
+    //
+    // Why auto-complete here?
+    //   Calling markExpiredBookingsCompleted() inside this check means the
+    //   cleanup happens silently every time a tenant opens PropertyDetailScreen
+    //   — no cron job or Cloud Function needed.
     // ══════════════════════════════════════════════════════════════════════════
     suspend fun isPropertyBooked(propertyId: String): Boolean {
         if (propertyId.isBlank()) return false
         return try {
+            val now = Timestamp.now()
+
+            // Fetch bookings that are in an "active" status
             val snap = bookingsCol
                 .whereEqualTo("propertyId", propertyId)
                 .whereIn("status", listOf(
                     BookingStatus.CONFIRMED.name,
-                    BookingStatus.PENDING.name
+                    BookingStatus.PENDING.name,
+                    BookingStatus.CHECKED_IN.name      // also block during active stay
                 ))
                 .get()
                 .await()
 
-            val booked = !snap.isEmpty
-            Log.d("BOOKING_REPO", "isPropertyBooked('$propertyId') = $booked (${snap.size()} active bookings)")
-            booked
+            if (snap.isEmpty) {
+                Log.d("BOOKING_REPO", "isPropertyBooked('$propertyId') = false (no active bookings)")
+                return false
+            }
+
+            var hasActiveBooking = false
+
+            for (doc in snap.documents) {
+                val booking = parseBookingSafe(doc) ?: continue
+
+                val checkOut = booking.checkOutDate
+
+                // If checkOutDate is missing, treat as still active (safe default)
+                if (checkOut == null) {
+                    hasActiveBooking = true
+                    Log.d("BOOKING_REPO", "Booking ${booking.bookingId} has no checkOutDate — treating as active")
+                    continue
+                }
+
+                if (checkOut.toDate().after(now.toDate())) {
+                    // Booking is still ongoing — property is occupied
+                    hasActiveBooking = true
+                    Log.d("BOOKING_REPO", "Booking ${booking.bookingId} is active until ${checkOut.toDate()}")
+                } else {
+                    // checkOutDate has passed — auto-complete this booking in background
+                    // This frees the property for new customers automatically
+                    Log.d("BOOKING_REPO", "Booking ${booking.bookingId} expired on ${checkOut.toDate()} — auto-completing")
+                    autoCompleteExpiredBooking(booking)
+                }
+            }
+
+            Log.d("BOOKING_REPO", "isPropertyBooked('$propertyId') = $hasActiveBooking")
+            hasActiveBooking
+
         } catch (e: Exception) {
             Log.e("BOOKING_REPO", "isPropertyBooked error: ${e.localizedMessage}")
             false
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // autoCompleteExpiredBooking — PRIVATE HELPER
+    //
+    // Called internally when a booking's checkOutDate has passed.
+    // Marks the booking as COMPLETED so it no longer blocks the property.
+    //
+    // What it does:
+    //   1. Updates booking status → COMPLETED in Firestore
+    //   2. Sends a "stay completed" notification to the tenant
+    //      (optional but good UX — tenant can now leave a review)
+    //
+    // This runs silently — any failure is logged but does NOT crash the UI.
+    // ══════════════════════════════════════════════════════════════════════════
+    private suspend fun autoCompleteExpiredBooking(booking: Booking) {
+        try {
+            // Only auto-complete CONFIRMED or CHECKED_IN bookings
+            // Do NOT auto-complete PENDING — those haven't started yet
+            if (booking.status != BookingStatus.CONFIRMED.name &&
+                booking.status != BookingStatus.CHECKED_IN.name) {
+                Log.d("BOOKING_REPO", "Skipping auto-complete for status=${booking.status}")
+                return
+            }
+
+            bookingsCol.document(booking.bookingId).update(
+                mapOf(
+                    "status"    to BookingStatus.COMPLETED.name,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+
+            Log.d("BOOKING_REPO", "✅ Auto-completed booking ${booking.bookingId} — property is now free")
+
+            // Send notification to tenant so they can leave a review
+            try {
+                if (booking.tenantId.isNotBlank()) {
+                    notificationRepository.sendBookingCompletedToTenant(
+                        tenantId      = booking.tenantId,
+                        bookingId     = booking.bookingId,
+                        propertyTitle = booking.propertyTitle.ifBlank { "Property" }
+                    )
+                }
+            } catch (notifEx: Exception) {
+                // Notification failure should never block the main flow
+                Log.e("BOOKING_REPO", "Auto-complete notification error: ${notifEx.localizedMessage}")
+            }
+
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "autoCompleteExpiredBooking error for ${booking.bookingId}: ${e.localizedMessage}")
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // markExpiredBookingsCompleted — PUBLIC (call from ViewModel/WorkManager)
+    //
+    // Scans ALL active bookings across ALL properties and completes expired ones.
+    // Can be called:
+    //   - On app launch (from a ViewModel init block)
+    //   - From a scheduled WorkManager job (recommended for production)
+    //   - Manually from admin dashboard
+    //
+    // Useful for bulk cleanup when the app hasn't been opened for a few days.
+    // ══════════════════════════════════════════════════════════════════════════
+    suspend fun markExpiredBookingsCompleted() {
+        Log.d("BOOKING_REPO", "markExpiredBookingsCompleted — scanning all active bookings")
+        try {
+            val now = Timestamp.now()
+
+            // Fetch all CONFIRMED + CHECKED_IN bookings across all properties
+            val snap = bookingsCol
+                .whereIn("status", listOf(
+                    BookingStatus.CONFIRMED.name,
+                    BookingStatus.CHECKED_IN.name
+                ))
+                .get()
+                .await()
+
+            if (snap.isEmpty) {
+                Log.d("BOOKING_REPO", "No active bookings found — nothing to complete")
+                return
+            }
+
+            var completedCount = 0
+
+            for (doc in snap.documents) {
+                val booking  = parseBookingSafe(doc) ?: continue
+                val checkOut = booking.checkOutDate ?: continue  // skip if no date
+
+                if (!checkOut.toDate().after(now.toDate())) {
+                    // Booking has expired — mark it complete
+                    autoCompleteExpiredBooking(booking)
+                    completedCount++
+                }
+            }
+
+            Log.d("BOOKING_REPO", "markExpiredBookingsCompleted done — completed $completedCount bookings")
+
+        } catch (e: Exception) {
+            Log.e("BOOKING_REPO", "markExpiredBookingsCompleted error: ${e.localizedMessage}")
         }
     }
 
@@ -189,6 +336,12 @@ class BookingRepository @Inject constructor(
                             )
                         BookingStatus.CANCELLED ->
                             notificationRepository.sendBookingCancelledToTenant(
+                                tenantId      = booking.tenantId,
+                                bookingId     = bookingId,
+                                propertyTitle = booking.propertyTitle.ifBlank { "Property" }
+                            )
+                        BookingStatus.COMPLETED ->
+                            notificationRepository.sendBookingCompletedToTenant(
                                 tenantId      = booking.tenantId,
                                 bookingId     = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }

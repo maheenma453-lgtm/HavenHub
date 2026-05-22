@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -54,51 +55,30 @@ fun ExploreMapScreen(
     viewModel     : HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val isDark  by MainActivity.darkModeFlow.collectAsState()
+    val isDark by MainActivity.darkModeFlow.collectAsState()
     val context = LocalContext.current
 
-    val goldP   = if (isDark) D_GoldPrimary   else GoldPrime
-    val bgColor = if (isDark) D_BgDeep        else Color(0xFFF0F4FA)
-    val cardBg  = if (isDark) D_BgCard        else Color.White
-    val textDk  = if (isDark) D_TextPrimary   else NavyPrime
+    val goldP = if (isDark) D_GoldPrimary else GoldPrime
+    val bgColor = if (isDark) D_BgDeep else Color(0xFFF0F4FA)
+    val cardBg = if (isDark) D_BgCard else Color.White
+    val textDk = if (isDark) D_TextPrimary else NavyPrime
     val textMtd = if (isDark) D_TextSecondary else Color(0xFF8899AA)
 
     var selectedProperty by remember { mutableStateOf<Property?>(null) }
 
-    // =========================================================================
-    // ALWAYS fetch fresh data when this screen opens.
-    // No isEmpty() condition — that was the original bug.
-    // =========================================================================
     LaunchedEffect(Unit) {
         viewModel.refreshHomeData()
     }
 
     Configuration.getInstance().userAgentValue = context.packageName
 
-    // =========================================================================
-    // Build the filtered property list for the map.
-    //
-    // Filter rules:
-    //   1. status == APPROVED
-    //   2. coordinates are NOT the Pakistan center fallback
-    //      (lat=30.3753 AND lng=69.3451 means city was unresolved)
-    //
-    // NOTE: We derive resolvedLat/resolvedLng here manually instead of calling
-    // property.resolvedLatitude — this makes the value available as a plain
-    // Double that AndroidView's update lambda can capture reliably without
-    // stale-closure issues.
-    // =========================================================================
     val mapProperties: List<Triple<Property, Double, Double>> = remember(uiState.allProperties) {
         uiState.allProperties.mapNotNull { property ->
             if (!property.status.equals(PropertyStatus.APPROVED.name, ignoreCase = true)) {
                 return@mapNotNull null
             }
-
-            // Priority 1: explicit lat/lng saved in Firestore
-            // Priority 2: city-name lookup from companion object tables
-            // Priority 3: Pakistan center (filtered out below)
             val lat = when {
-                property.latitude  != 0.0 -> property.latitude
+                property.latitude != 0.0 -> property.latitude
                 else -> Property.CITY_LATITUDES[property.city.lowercase().trim()]
                     ?: PAKISTAN_CENTER_LAT
             }
@@ -107,12 +87,9 @@ fun ExploreMapScreen(
                 else -> Property.CITY_LONGITUDES[property.city.lowercase().trim()]
                     ?: PAKISTAN_CENTER_LNG
             }
-
-            // Hide properties that fell back to Pakistan center — no valid location
             if (lat == PAKISTAN_CENTER_LAT && lng == PAKISTAN_CENTER_LNG) {
                 return@mapNotNull null
             }
-
             Triple(property, lat, lng)
         }
     }
@@ -122,14 +99,8 @@ fun ExploreMapScreen(
     else
         GeoPoint(PAKISTAN_CENTER_LAT, PAKISTAN_CENTER_LNG)
 
-    // Keep a ref to the MapView so we can call invalidate() from outside AndroidView
     val mapViewRef = remember { mutableStateOf<MapView?>(null) }
 
-    // =========================================================================
-    // Re-draw pins every time mapProperties changes.
-    // This runs OUTSIDE AndroidView so it is triggered by Compose recomposition,
-    // which AndroidView's update lambda sometimes misses when the list grows.
-    // =========================================================================
     LaunchedEffect(mapProperties) {
         val mapView = mapViewRef.value ?: return@LaunchedEffect
         mapView.overlays.clear()
@@ -137,8 +108,8 @@ fun ExploreMapScreen(
             val marker = Marker(mapView).apply {
                 position = GeoPoint(lat, lng)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                title    = property.title
-                snippet  = "${property.formattedPrice} • ${property.city}"
+                title = property.title
+                snippet = "${property.formattedPrice} • ${property.city}"
                 setOnMarkerClickListener { _, _ ->
                     selectedProperty = property
                     true
@@ -151,44 +122,39 @@ fun ExploreMapScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
 
-        // ---------------------------------------------------------------------
-        // OSMDroid MapView
-        // factory  : creates MapView once, stores ref for LaunchedEffect above
-        // update   : kept minimal — actual pin drawing is in LaunchedEffect above
-        // ---------------------------------------------------------------------
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory  = { ctx ->
+            factory = { ctx ->
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     controller.setZoom(if (mapProperties.isNotEmpty()) 6.0 else 5.5)
                     controller.setCenter(startCenter)
                     clipToOutline = true
-                    // Store ref so LaunchedEffect(mapProperties) can access it
                     mapViewRef.value = this
                 }
             },
             update = { mapView ->
-                // Keep ref fresh in case AndroidView recreates the view
                 mapViewRef.value = mapView
             }
         )
 
-        // ---------------------------------------------------------------------
-        // Top bar: back button, title, property count
-        // ---------------------------------------------------------------------
+        // ─────────────────────────────────────────────────────────────────────
+        // RESPONSIVE Top bar — back button left, title center, count badge right
+        // Uses IntrinsicSize.Min for the title so it never pushes other items off
+        // ─────────────────────────────────────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment     = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            // Back button
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(cardBg)
                     .border(1.dp, goldP.copy(0.4f), CircleShape)
@@ -198,57 +164,62 @@ fun ExploreMapScreen(
                 Icon(
                     Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint               = textDk,
-                    modifier           = Modifier.size(20.dp)
+                    tint = textDk,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
+            // Title — weight(1f) + padding so it scales between the two badges
             Box(
                 modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Brush.horizontalGradient(listOf(NavyPrime, Color(0xFF1A3A6B))))
                     .border(1.dp, goldP.copy(0.6f), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 18.dp, vertical = 9.dp)
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                contentAlignment = Alignment.Center
             ) {
                 Text(
                     "Explore Nearby",
-                    color      = goldP,
+                    color = goldP,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize   = 14.sp
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            // Count badge — shows how many pins are on the map right now
+            // Count badge
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
                     .background(cardBg)
                     .border(1.dp, goldP.copy(0.4f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 Text(
                     "${mapProperties.size} Stays",
-                    color      = textDk,
+                    color = textDk,
                     fontWeight = FontWeight.Bold,
-                    fontSize   = 12.sp
+                    fontSize = 12.sp,
+                    maxLines = 1
                 )
             }
         }
 
-        // ---------------------------------------------------------------------
         // Loading overlay
-        // ---------------------------------------------------------------------
         if (uiState.isLoading) {
             Box(
-                modifier         = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Card(
-                    shape  = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = cardBg)
                 ) {
                     Column(
-                        modifier            = Modifier.padding(24.dp),
+                        modifier = Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -259,9 +230,7 @@ fun ExploreMapScreen(
             }
         }
 
-        // ---------------------------------------------------------------------
-        // Empty state — only shown after loading finishes with zero results
-        // ---------------------------------------------------------------------
+        // Empty state
         if (!uiState.isLoading && mapProperties.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -269,23 +238,23 @@ fun ExploreMapScreen(
                     .padding(32.dp)
             ) {
                 Card(
-                    shape  = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = cardBg)
                 ) {
                     Column(
-                        modifier            = Modifier.padding(24.dp),
+                        modifier = Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
                             "No approved properties with location data found",
-                            fontSize   = 14.sp,
-                            color      = textMtd,
+                            fontSize = 14.sp,
+                            color = textMtd,
                             fontWeight = FontWeight.Medium
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             "Properties submitted via app appear here after admin approval",
-                            color    = goldP.copy(0.8f),
+                            color = goldP.copy(0.8f),
                             fontSize = 11.sp
                         )
                     }
@@ -293,17 +262,19 @@ fun ExploreMapScreen(
             }
         }
 
-        // ---------------------------------------------------------------------
-        // Selected property bottom card — appears when user taps a pin
-        // ---------------------------------------------------------------------
+        // ─────────────────────────────────────────────────────────────────────
+        // RESPONSIVE Bottom property card
+        // NavigationBarsPadding ensures it clears gesture bars on all devices
+        // ─────────────────────────────────────────────────────────────────────
         selectedProperty?.let { property ->
             Card(
-                modifier  = Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-                shape     = RoundedCornerShape(20.dp),
-                colors    = CardDefaults.cardColors(containerColor = cardBg),
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBg),
                 elevation = CardDefaults.cardElevation(12.dp)
             ) {
                 if (isDark) {
@@ -323,31 +294,38 @@ fun ExploreMapScreen(
                     )
                 }
 
-                Column(Modifier.padding(16.dp)) {
-
+                Column(Modifier.padding(14.dp)) {
                     Row(
-                        modifier              = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment     = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
                                 property.title,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize   = 16.sp,
-                                color      = textDk,
-                                maxLines   = 1
+                                fontSize = 15.sp,
+                                color = textDk,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Spacer(Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     Icons.Default.LocationOn,
                                     null,
-                                    tint     = goldP,
+                                    tint = goldP,
                                     modifier = Modifier.size(13.dp)
                                 )
-                                Text(" ${property.city}", color = textMtd, fontSize = 12.sp)
-                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    " ${property.city}",
+                                    color = textMtd,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                Spacer(Modifier.width(6.dp))
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
@@ -359,17 +337,18 @@ fun ExploreMapScreen(
                                 ) {
                                     Text(
                                         property.propertyTypeEnum.displayName(),
-                                        fontSize   = 10.sp,
-                                        color      = if (isDark) D_TextSecondary else NavyPrime,
+                                        fontSize = 10.sp,
+                                        color = if (isDark) D_TextSecondary else NavyPrime,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
                             }
                         }
 
+                        Spacer(Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(if (isDark) D_BgCard else Color(0xFFF0F4FA))
                                 .clickable { selectedProperty = null },
@@ -377,8 +356,8 @@ fun ExploreMapScreen(
                         ) {
                             Text(
                                 "✕",
-                                color      = textMtd,
-                                fontSize   = 14.sp,
+                                color = textMtd,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -387,46 +366,48 @@ fun ExploreMapScreen(
                     Spacer(Modifier.height(12.dp))
 
                     Row(
-                        modifier              = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment     = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
                             Text("Price/night", fontSize = 10.sp, color = textMtd)
                             Text(
                                 property.formattedPrice,
                                 fontWeight = FontWeight.ExtraBold,
-                                color      = if (isDark) D_GoldPrimary else NavyPrime,
-                                fontSize   = 18.sp
+                                color = if (isDark) D_GoldPrimary else NavyPrime,
+                                fontSize = 17.sp
                             )
                         }
 
                         Row(
-                            verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            // Star rating badge
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier          = Modifier
+                                modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(if (isDark) Color(0xFF1A1608) else Color(0xFFFFF8E1))
                                     .border(1.dp, goldP.copy(0.4f), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                                    .padding(horizontal = 7.dp, vertical = 5.dp)
                             ) {
                                 Icon(
                                     Icons.Default.Star,
                                     null,
-                                    tint     = goldP,
+                                    tint = goldP,
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Text(
                                     " ${property.averageRating}",
-                                    fontSize   = 12.sp,
-                                    color      = textDk,
+                                    fontSize = 12.sp,
+                                    color = textDk,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
 
+                            // View Detail button
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
@@ -439,23 +420,22 @@ fun ExploreMapScreen(
                                             Screen.PropertyDetail.createRoute(property.propertyId)
                                         )
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                                    .padding(horizontal = 14.dp, vertical = 10.dp)
                             ) {
                                 Text(
                                     "View Detail →",
-                                    color      = NavyPrime,
+                                    color = NavyPrime,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize   = 13.sp
+                                    fontSize = 12.sp
                                 )
                             }
                         }
                     }
 
                     Spacer(Modifier.height(4.dp))
-
                     Text(
                         "${property.bedrooms} beds  •  ${property.maxGuests} guests max",
-                        color    = textMtd,
+                        color = textMtd,
                         fontSize = 11.sp
                     )
                 }

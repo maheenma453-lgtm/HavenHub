@@ -22,48 +22,50 @@ import com.example.havenhub.data.PropertyType
 import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.SearchViewModel
 
-// ── Dark theme tokens for FilterScreen ───────────────────────────────────────
-private val F_DarkBg      = Color(0xFF060D1A)   // page background
-private val F_DarkCard    = Color(0xFF112038)   // card / field container
-private val F_DarkNavy    = Color(0xFF0D1B3E)   // top bar
-private val F_DarkGold    = Color(0xFFD4AF37)   // primary accent
-private val F_DarkTextPri = Color(0xFFF0F4FF)   // primary text
-private val F_DarkTextSec = Color(0xFF8899BB)   // secondary text
-private val F_DarkBorder  = Color(0xFF1E2E50)   // divider / border
+// ── Dark theme tokens ─────────────────────────────────────────────────────────
+private val F_DarkBg      = Color(0xFF060D1A)
+private val F_DarkCard    = Color(0xFF112038)
+private val F_DarkNavy    = Color(0xFF0D1B3E)
+private val F_DarkGold    = Color(0xFFD4AF37)
+private val F_DarkTextPri = Color(0xFFF0F4FF)
+private val F_DarkTextSec = Color(0xFF8899BB)
+private val F_DarkBorder  = Color(0xFF1E2E50)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun FilterScreen(
     navController : NavController,
     viewModel     : SearchViewModel = hiltViewModel()
 ) {
-    // ── Dark theme detection ──────────────────────────────────────────────────
     val isDark = isSystemInDarkTheme()
 
-    // ── Theme-aware aliases ───────────────────────────────────────────────────
-    val pageBg   = if (isDark) F_DarkBg      else BackgroundWhite
-    val topBarBg = if (isDark) F_DarkNavy    else PrimaryBlue
-    val goldC    = if (isDark) F_DarkGold    else PrimaryBlue
-    val textPri  = if (isDark) F_DarkTextPri else TextPrimary
-    val textSec  = if (isDark) F_DarkTextSec else TextSecondary
-    val dividerC = if (isDark) F_DarkBorder  else BorderGray
-    val chipSelBg    = if (isDark) F_DarkGold  else PrimaryBlue
-    val chipSelLabel = if (isDark) F_DarkNavy  else BackgroundWhite
-    val chipBg       = if (isDark) F_DarkCard  else SurfaceVariantLight
+    val pageBg       = if (isDark) F_DarkBg      else BackgroundWhite
+    val topBarBg     = if (isDark) F_DarkNavy    else PrimaryBlue
+    val goldC        = if (isDark) F_DarkGold    else PrimaryBlue
+    val textPri      = if (isDark) F_DarkTextPri else TextPrimary
+    val textSec      = if (isDark) F_DarkTextSec else TextSecondary
+    val dividerC     = if (isDark) F_DarkBorder  else BorderGray
+    val chipSelBg    = if (isDark) F_DarkGold    else PrimaryBlue
+    val chipSelLabel = if (isDark) F_DarkNavy    else BackgroundWhite
+    val chipBg       = if (isDark) F_DarkCard    else SurfaceVariantLight
     val chipLabel    = if (isDark) F_DarkTextSec else TextSecondary
 
-    // ── Local UI State ────────────────────────────────────────────────────────
     var selectedCity      by remember { mutableStateOf("") }
     var selectedType      by remember { mutableStateOf("") }
     var priceRange        by remember { mutableStateOf(0f..100000f) }
     var selectedAmenities by remember { mutableStateOf(setOf<String>()) }
 
-    val cities    = listOf("Lahore", "Karachi", "Islamabad", "Rawalpindi", "Murree", "Swat", "Hunza")
+    val cities = listOf(
+        "Lahore", "Karachi", "Islamabad", "Rawalpindi", "Quetta", "Faisalabad", "Multan",
+        "Sialkot", "Gujranwala",
+        "Murree", "Swat", "Hunza", "Naran",
+        "Skardu", "Gilgit", "Muzaffarabad"
+    )
     val types     = listOf("House", "Apartment", "Room", "Studio", "Villa", "Hostel")
     val amenities = listOf("WiFi", "Parking", "AC", "Generator", "Security", "Kitchen", "Furnished")
 
     Scaffold(
-        containerColor = pageBg,                                // dark: deep navy
+        containerColor = pageBg,
         topBar = {
             TopAppBar(
                 title = { Text("Filter Properties") },
@@ -86,19 +88,19 @@ fun FilterScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = topBarBg,      // dark: deep navy, light: primary blue
+                    containerColor             = topBarBg,
                     titleContentColor          = BackgroundWhite,
                     navigationIconContentColor = BackgroundWhite
                 )
             )
         },
         bottomBar = {
-            // Apply button — dark aware
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(if (isDark) F_DarkNavy else BackgroundWhite)
-                    .padding(16.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Button(
                     onClick = {
@@ -137,41 +139,66 @@ fun FilterScreen(
                 .background(pageBg)
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
-            // City filter
+            // ── City filter ───────────────────────────────────────────────────
             FilterSectionTitle("City", isDark = isDark)
             Spacer(Modifier.height(10.dp))
-            FilterChipGroup(
-                options       = cities,
-                selected      = selectedCity,
-                onSelect      = { selectedCity = it },
-                chipSelBg     = chipSelBg,
-                chipSelLabel  = chipSelLabel,
-                chipBg        = chipBg,
-                chipLabel     = chipLabel
-            )
+
+            // FlowRow wraps chips naturally on any screen width
+            FlowRow(
+                modifier            = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement   = Arrangement.spacedBy(8.dp)
+            ) {
+                cities.forEach { city ->
+                    val isSelected = selectedCity == city
+                    FilterChip(
+                        selected = isSelected,
+                        onClick  = { selectedCity = if (isSelected) "" else city },
+                        label    = { Text(city, fontSize = 13.sp) },
+                        colors   = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = chipSelBg,
+                            selectedLabelColor     = chipSelLabel,
+                            containerColor         = chipBg,
+                            labelColor             = chipLabel
+                        )
+                    )
+                }
+            }
 
             FilterDivider(color = dividerC)
 
-            // Property type filter
+            // ── Property type filter ──────────────────────────────────────────
             FilterSectionTitle("Property Type", isDark = isDark)
             Spacer(Modifier.height(10.dp))
-            FilterChipGroup(
-                options       = types,
-                selected      = selectedType,
-                onSelect      = { selectedType = it },
-                chipSelBg     = chipSelBg,
-                chipSelLabel  = chipSelLabel,
-                chipBg        = chipBg,
-                chipLabel     = chipLabel
-            )
+
+            FlowRow(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement   = Arrangement.spacedBy(8.dp)
+            ) {
+                types.forEach { type ->
+                    val isSelected = selectedType == type
+                    FilterChip(
+                        selected = isSelected,
+                        onClick  = { selectedType = if (isSelected) "" else type },
+                        label    = { Text(type, fontSize = 13.sp) },
+                        colors   = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = chipSelBg,
+                            selectedLabelColor     = chipSelLabel,
+                            containerColor         = chipBg,
+                            labelColor             = chipLabel
+                        )
+                    )
+                }
+            }
 
             FilterDivider(color = dividerC)
 
-            // Price range
+            // ── Price range ───────────────────────────────────────────────────
             FilterSectionTitle("Price Range (PKR/night)", isDark = isDark)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
 
             Row(
                 modifier              = Modifier.fillMaxWidth(),
@@ -197,8 +224,12 @@ fun FilterScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // Quick price preset buttons
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Quick price preset buttons — responsive wrap on small screens
+            FlowRow(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement   = Arrangement.spacedBy(8.dp)
+            ) {
                 listOf("< 20K", "20K-50K", "50K-100K", "100K+").forEach { label ->
                     OutlinedButton(
                         onClick = {
@@ -209,45 +240,43 @@ fun FilterScreen(
                                 else       -> 100000f..500000f
                             }
                         },
-                        modifier = Modifier.weight(1f),
-                        shape    = RoundedCornerShape(8.dp),
-                        colors   = ButtonDefaults.outlinedButtonColors(contentColor = goldC)
+                        shape  = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = goldC)
                     ) {
-                        Text(label, fontSize = 11.sp)
+                        Text(label, fontSize = 12.sp)
                     }
                 }
             }
 
             FilterDivider(color = dividerC)
 
-            // Amenities (multi-select)
+            // ── Amenities (multi-select) ──────────────────────────────────────
             FilterSectionTitle("Amenities", isDark = isDark)
             Spacer(Modifier.height(10.dp))
 
-            Column {
-                amenities.chunked(3).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        row.forEach { amenity ->
-                            val isSelected = amenity in selectedAmenities
-                            FilterChip(
-                                selected = isSelected,
-                                onClick  = {
-                                    selectedAmenities = if (isSelected)
-                                        selectedAmenities - amenity
-                                    else
-                                        selectedAmenities + amenity
-                                },
-                                label  = { Text(amenity, fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = chipSelBg,
-                                    selectedLabelColor     = chipSelLabel,
-                                    containerColor         = chipBg,
-                                    labelColor             = chipLabel
-                                )
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
+            FlowRow(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement   = Arrangement.spacedBy(8.dp)
+            ) {
+                amenities.forEach { amenity ->
+                    val isSelected = amenity in selectedAmenities
+                    FilterChip(
+                        selected = isSelected,
+                        onClick  = {
+                            selectedAmenities = if (isSelected)
+                                selectedAmenities - amenity
+                            else
+                                selectedAmenities + amenity
+                        },
+                        label  = { Text(amenity, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = chipSelBg,
+                            selectedLabelColor     = chipSelLabel,
+                            containerColor         = chipBg,
+                            labelColor             = chipLabel
+                        )
+                    )
                 }
             }
 
@@ -256,7 +285,7 @@ fun FilterScreen(
     }
 }
 
-// ── Section title — dark aware ────────────────────────────────────────────────
+// ── Section title ─────────────────────────────────────────────────────────────
 @Composable
 private fun FilterSectionTitle(title: String, isDark: Boolean = false) {
     Text(
@@ -267,44 +296,10 @@ private fun FilterSectionTitle(title: String, isDark: Boolean = false) {
     )
 }
 
-// ── Divider with custom color ─────────────────────────────────────────────────
+// ── Divider ───────────────────────────────────────────────────────────────────
 @Composable
 private fun FilterDivider(color: Color = BorderGray) {
     Spacer(Modifier.height(20.dp))
     HorizontalDivider(color = color, thickness = 1.dp)
     Spacer(Modifier.height(20.dp))
-}
-
-// ── Single-select chip group — dark aware ─────────────────────────────────────
-@Composable
-private fun FilterChipGroup(
-    options      : List<String>,
-    selected     : String,
-    onSelect     : (String) -> Unit,
-    chipSelBg    : Color,
-    chipSelLabel : Color,
-    chipBg       : Color,
-    chipLabel    : Color
-) {
-    Column {
-        options.chunked(4).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { option ->
-                    val isSelected = selected == option
-                    FilterChip(
-                        selected = isSelected,
-                        onClick  = { onSelect(if (isSelected) "" else option) },
-                        label    = { Text(option, fontSize = 13.sp) },
-                        colors   = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = chipSelBg,
-                            selectedLabelColor     = chipSelLabel,
-                            containerColor         = chipBg,
-                            labelColor             = chipLabel
-                        )
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-        }
-    }
 }

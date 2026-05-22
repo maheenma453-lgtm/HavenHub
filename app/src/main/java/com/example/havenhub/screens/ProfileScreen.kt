@@ -25,7 +25,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,6 +41,11 @@ private val NavyMedium  = Color(0xFF243358)
 private val GoldPrimary = Color(0xFFC9A84C)
 private val GoldLight   = Color(0xFFE2C47A)
 
+// ── Logout button golden gradient stops ────────────────────────────────
+private val GoldDark    = Color(0xFFAA8530)
+private val GoldMid     = Color(0xFFC9A84C)
+private val GoldBright  = Color(0xFFE2C47A)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
@@ -56,7 +60,6 @@ fun ProfileScreen(
     val avatarSize        = (screenWidth * 0.24f).coerceIn(76f, 116f).dp
     val nameFontSize      = (screenWidth * 0.054f).coerceIn(17f, 23f).sp
     val horizontalPadding = (screenWidth * 0.045f).coerceIn(14f, 22f).dp
-    val statFontSize      = (screenWidth * 0.047f).coerceIn(15f, 21f).sp
     val heroPadV          = (screenHeight * 0.038f).coerceIn(22f, 40f).dp
 
     val uiState     by profileViewModel.uiState.collectAsState()
@@ -90,6 +93,11 @@ fun ProfileScreen(
         colors = listOf(GoldPrimary, GoldLight, GoldPrimary),
         start  = Offset(0f, 0f),
         end    = Offset(300f, 300f)
+    )
+
+    // Golden gradient for logout button
+    val logoutGradient = Brush.horizontalGradient(
+        colors = listOf(GoldDark, GoldMid, GoldBright, GoldMid, GoldDark)
     )
 
     Scaffold(
@@ -313,79 +321,7 @@ fun ProfileScreen(
             }
 
             // ══════════════════════════════════════════════════════════
-            // STATS ROW
-            // ══════════════════════════════════════════════════════════
-            Surface(
-                modifier        = Modifier.fillMaxWidth(),
-                color           = surface,
-                shadowElevation = 2.dp
-            ) {
-                Row(
-                    modifier              = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 18.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    ProfileStat(
-                        value = when {
-                            isAdmin    -> "N/A"
-                            isLandlord -> "${uiState.user?.landlordReviewCount ?: 0}"
-                            else       -> "0"
-                        },
-                        label    = "Reviews",
-                        fontSize = statFontSize,
-                        color    = GoldPrimary
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(36.dp)
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        GoldPrimary.copy(alpha = 0.4f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
-                    ProfileStat(
-                        value = when {
-                            isAdmin    -> "N/A"
-                            isLandlord -> "%.1f".format(uiState.user?.landlordRating ?: 0f)
-                            else       -> "0.0"
-                        },
-                        label    = "Rating",
-                        fontSize = statFontSize,
-                        color    = GoldPrimary
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(36.dp)
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        GoldPrimary.copy(alpha = 0.4f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
-                    ProfileStat(
-                        value    = roleText,
-                        label    = "Role",
-                        fontSize = statFontSize,
-                        color    = GoldPrimary
-                    )
-                }
-            }
-
-            // ══════════════════════════════════════════════════════════
-            // EDIT PROFILE BUTTON — REMOVED
+            // STATS ROW — REMOVED
             // ══════════════════════════════════════════════════════════
 
             Spacer(Modifier.height(12.dp))
@@ -467,32 +403,37 @@ fun ProfileScreen(
             Spacer(Modifier.height(20.dp))
 
             // ══════════════════════════════════════════════════════════
-            // LOGOUT BUTTON
+            // LOGOUT BUTTON — golden gradient
             // ══════════════════════════════════════════════════════════
-            Button(
-                onClick   = { authViewModel.signOut() },
-                colors    = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C)),
-                modifier  = Modifier
+            Box(
+                modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = horizontalPadding)
-                    .height(52.dp),
-                shape     = RoundedCornerShape(12.dp),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(logoutGradient)
+                    .clickable { authViewModel.signOut() },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Logout,
-                    null,
-                    tint     = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    "Logout",
-                    color         = Color.White,
-                    fontWeight    = FontWeight.Bold,
-                    fontSize      = 15.sp,
-                    letterSpacing = 0.5.sp
-                )
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector        = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = null,
+                        tint               = NavyDeep,
+                        modifier           = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text          = "Logout",
+                        color         = NavyDeep,
+                        fontWeight    = FontWeight.Bold,
+                        fontSize      = 15.sp,
+                        letterSpacing = 0.8.sp
+                    )
+                }
             }
 
             Spacer(Modifier.height(88.dp))
@@ -534,29 +475,6 @@ private fun PSectionHeader(
 }
 
 @Composable
-private fun ProfileStat(
-    value   : String,
-    label   : String,
-    fontSize: TextUnit,
-    color   : Color
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text       = value,
-            fontSize   = fontSize,
-            fontWeight = FontWeight.Bold,
-            color      = color
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text     = label,
-            fontSize = 12.sp,
-            color    = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
 private fun PProfileMenuItem(
     icon          : ImageVector,
     label         : String,
@@ -565,19 +483,19 @@ private fun PProfileMenuItem(
     onClick       : () -> Unit
 ) {
     Surface(
-        onClick  = onClick,
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        color    = surfaceColor
+        color = surfaceColor
     ) {
         Column {
             Row(
-                modifier          = Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 15.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    modifier         = Modifier
+                    modifier = Modifier
                         .size(36.dp)
                         .background(GoldPrimary.copy(alpha = 0.10f), RoundedCornerShape(8.dp)),
                     contentAlignment = Alignment.Center
@@ -585,27 +503,27 @@ private fun PProfileMenuItem(
                     Icon(
                         icon,
                         null,
-                        tint     = GoldPrimary,
+                        tint = GoldPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
                 Spacer(Modifier.width(14.dp))
                 Text(
                     label,
-                    fontSize   = 15.sp,
-                    color      = onSurfaceColor,
-                    modifier   = Modifier.weight(1f),
+                    fontSize = 15.sp,
+                    color = onSurfaceColor,
+                    modifier = Modifier.weight(1f),
                     fontWeight = FontWeight.Medium
                 )
                 Icon(
                     Icons.Default.ChevronRight,
                     null,
-                    tint     = onSurfaceColor.copy(alpha = 0.35f),
+                    tint = onSurfaceColor.copy(alpha = 0.35f),
                     modifier = Modifier.size(20.dp)
                 )
             }
             HorizontalDivider(
-                color     = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f),
                 thickness = 0.5.dp
             )
         }
