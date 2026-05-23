@@ -3,12 +3,15 @@ package com.example.havenhub.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,6 +66,21 @@ fun PropertyDetailScreen(
     var currentUserRole by remember { mutableStateOf("") }
     val currentUserId   = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
+    // ── Scroll state to detect when hero image is out of view ──────────────
+    val listState = rememberLazyListState()
+
+    // Show bottom bar only when the first item (hero image, index 0) is
+    // no longer fully visible — i.e. user has scrolled past it.
+    val showBottomBar by remember {
+        derivedStateOf {
+            val firstVisible = listState.firstVisibleItemIndex
+            val firstOffset  = listState.firstVisibleItemScrollOffset
+            // item 0 = hero image (270.dp tall).
+            // Show bar as soon as user scrolls at all past item 0.
+            firstVisible > 0 || firstOffset > 0
+        }
+    }
+
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
             try {
@@ -107,15 +125,16 @@ fun PropertyDetailScreen(
             property != null -> {
                 val isOwner = property.ownerId == currentUserId
 
-                // FIX 1: bottomPad increased for landlord so Location section fully visible
+                // Bottom padding: only needed when bar is visible
                 val bottomPad = when {
                     roleLoaded && isTenant && !isOwner && hasActivePackage -> 160.dp
                     roleLoaded && isTenant && !isOwner                     -> 110.dp
-                    roleLoaded && isLandlord && isOwner                    -> 140.dp  // was 115, now 140
+                    roleLoaded && isLandlord && isOwner                    -> 140.dp
                     else                                                   -> 110.dp
                 }
 
                 LazyColumn(
+                    state          = listState,        // ← attach scroll state
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = bottomPad)
                 ) {
@@ -286,7 +305,7 @@ fun PropertyDetailScreen(
                         HorizontalDivider(color = background, thickness = 6.dp)
                     }
 
-                    // 8. LOCATION — extra bottom padding added inside so it clears the bar
+                    // 8. LOCATION
                     item {
                         Column(
                             Modifier
@@ -319,129 +338,131 @@ fun PropertyDetailScreen(
                 }
 
                 // ══════════════════════════════════════════════════════════════
-                // STICKY BOTTOM BAR
+                // STICKY BOTTOM BAR — only visible after scrolling past hero
                 // ══════════════════════════════════════════════════════════════
-                Surface(
-                    modifier        = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                    shadowElevation = 16.dp,
-                    color           = surface
+                AnimatedVisibility(
+                    visible = showBottomBar,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+                    exit  = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)
                 ) {
-                    if (roleLoaded && isTenant && !isOwner) {
+                    Surface(
+                        modifier        = Modifier.fillMaxWidth(),
+                        shadowElevation = 16.dp,
+                        color           = surface
+                    ) {
+                        if (roleLoaded && isTenant && !isOwner) {
 
-                        // TENANT BOTTOM BAR
-                        Column(
-                            modifier            = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            if (isPropertyBooked == true) {
-                                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Orange.copy(alpha = 0.10f)).padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                                    Icon(Icons.Default.EventBusy, null, tint = Orange, modifier = Modifier.size(15.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("This property is currently booked", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Orange, textAlign = TextAlign.Center)
-                                }
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text("Per night", fontSize = 10.sp, color = onSurfaceVariant)
-                                    Text(property.formattedPrice, fontSize = 17.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
-                                }
-                                if (property.ownerId.isNotEmpty()) {
-                                    OutlinedButton(onClick = { navController.navigate(Screen.Chat.createRoute(userId = property.ownerId, ownerName = property.ownerName.ifEmpty { "Owner" })) }, modifier = Modifier.height(44.dp), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.5.dp, primary), colors = ButtonDefaults.outlinedButtonColors(contentColor = primary), contentPadding = PaddingValues(horizontal = 14.dp)) {
-                                        Icon(Icons.Default.Message, null, modifier = Modifier.size(15.dp))
-                                        Spacer(Modifier.width(5.dp))
-                                        Text(property.ownerName.ifEmpty { "Owner" }.split(" ").first(), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                    }
-                                }
-                                Button(onClick = { if (isPropertyBooked != true) navController.navigate(Screen.Booking.createRoute(propertyId)) }, enabled = isPropertyBooked != true, modifier = Modifier.height(44.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = primary, contentColor = onPrimary, disabledContainerColor = onSurfaceVariant.copy(0.18f), disabledContentColor = onSurfaceVariant.copy(0.5f)), contentPadding = PaddingValues(horizontal = 20.dp), elevation = ButtonDefaults.buttonElevation(defaultElevation = if (isPropertyBooked == true) 0.dp else 4.dp)) {
-                                    Text(text = when { isCheckingBooking -> "Checking..."; isPropertyBooked == true -> "Booked"; else -> "Book Now" }, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-                                }
-                            }
-                            if (hasActivePackage && isPropertyBooked != true) {
-                                Button(onClick = { navController.navigate(Screen.PreBooking.createRoute(propertyId)) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = tertiary, contentColor = primary), elevation = ButtonDefaults.buttonElevation(3.dp)) {
-                                    Icon(Icons.Default.LocalOffer, null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Book with Package", fontWeight = FontWeight.Black, fontSize = 14.sp)
-                                }
-                            }
-                            if (hasActivePackage && isPropertyBooked == true) {
-                                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(onSurfaceVariant.copy(0.07f)).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                                    Icon(Icons.Default.LocalOffer, null, tint = onSurfaceVariant.copy(0.45f), modifier = Modifier.size(14.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Package available — book when property is free", fontSize = 11.sp, color = onSurfaceVariant.copy(0.55f), textAlign = TextAlign.Center)
-                                }
-                            }
-                        }
-
-                    } else {
-
-                        // ════════════════════════════════════════════════════
-                        // LANDLORD BOTTOM BAR
-                        // FIX 2: "Available" pill REMOVED — sirf price + 2 buttons
-                        // ════════════════════════════════════════════════════
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Price only — NO status pill
-                            Row(
-                                modifier          = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
+                            // ── TENANT BOTTOM BAR ──────────────────────────
+                            Column(
+                                modifier            = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text("Per night", fontSize = 10.sp, color = onSurfaceVariant)
-                                    Text(
-                                        property.formattedPrice,
-                                        fontSize   = 18.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color      = onSurface,
-                                        maxLines   = 1
-                                    )
+                                if (isPropertyBooked == true) {
+                                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Orange.copy(alpha = 0.10f)).padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                        Icon(Icons.Default.EventBusy, null, tint = Orange, modifier = Modifier.size(15.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("This property is currently booked", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Orange, textAlign = TextAlign.Center)
+                                    }
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Per night", fontSize = 10.sp, color = onSurfaceVariant)
+                                        Text(property.formattedPrice, fontSize = 17.sp, fontWeight = FontWeight.Black, color = onSurface, maxLines = 1)
+                                    }
+                                    if (property.ownerId.isNotEmpty()) {
+                                        OutlinedButton(onClick = { navController.navigate(Screen.Chat.createRoute(userId = property.ownerId, ownerName = property.ownerName.ifEmpty { "Owner" })) }, modifier = Modifier.height(44.dp), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.5.dp, primary), colors = ButtonDefaults.outlinedButtonColors(contentColor = primary), contentPadding = PaddingValues(horizontal = 14.dp)) {
+                                            Icon(Icons.Default.Message, null, modifier = Modifier.size(15.dp))
+                                            Spacer(Modifier.width(5.dp))
+                                            Text(property.ownerName.ifEmpty { "Owner" }.split(" ").first(), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        }
+                                    }
+                                    Button(onClick = { if (isPropertyBooked != true) navController.navigate(Screen.Booking.createRoute(propertyId)) }, enabled = isPropertyBooked != true, modifier = Modifier.height(44.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = primary, contentColor = onPrimary, disabledContainerColor = onSurfaceVariant.copy(0.18f), disabledContentColor = onSurfaceVariant.copy(0.5f)), contentPadding = PaddingValues(horizontal = 20.dp), elevation = ButtonDefaults.buttonElevation(defaultElevation = if (isPropertyBooked == true) 0.dp else 4.dp)) {
+                                        Text(text = when { isCheckingBooking -> "Checking..."; isPropertyBooked == true -> "Booked"; else -> "Book Now" }, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                                    }
+                                }
+                                if (hasActivePackage && isPropertyBooked != true) {
+                                    Button(onClick = { navController.navigate(Screen.PreBooking.createRoute(propertyId)) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = tertiary, contentColor = primary), elevation = ButtonDefaults.buttonElevation(3.dp)) {
+                                        Icon(Icons.Default.LocalOffer, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Book with Package", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                    }
+                                }
+                                if (hasActivePackage && isPropertyBooked == true) {
+                                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(onSurfaceVariant.copy(0.07f)).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                        Icon(Icons.Default.LocalOffer, null, tint = onSurfaceVariant.copy(0.45f), modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Package available — book when property is free", fontSize = 11.sp, color = onSurfaceVariant.copy(0.55f), textAlign = TextAlign.Center)
+                                    }
                                 }
                             }
 
-                            HorizontalDivider(color = onSurfaceVariant.copy(0.10f))
+                        } else {
 
-                            // Both buttons in ONE ROW
-                            if (roleLoaded && isLandlord && isOwner) {
+                            // ── LANDLORD BOTTOM BAR ────────────────────────
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 Row(
-                                    modifier              = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment     = Alignment.CenterVertically
+                                    modifier          = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Button(
-                                        onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
-                                        modifier       = Modifier.weight(1f).height(44.dp),
-                                        shape          = RoundedCornerShape(12.dp),
-                                        colors         = ButtonDefaults.buttonColors(
-                                            containerColor = primary,
-                                            contentColor   = tertiary
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 10.dp),
-                                        elevation      = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 1.dp)
-                                    ) {
-                                        Icon(Icons.Default.Edit, null, modifier = Modifier.size(15.dp))
-                                        Spacer(Modifier.width(5.dp))
-                                        Text("Edit", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, maxLines = 1)
-                                    }
-
-                                    OutlinedButton(
-                                        onClick        = { navController.navigate(Screen.ViewReviews.createRoute(propertyId)) },
-                                        modifier       = Modifier.weight(1f).height(44.dp),
-                                        shape          = RoundedCornerShape(12.dp),
-                                        border         = BorderStroke(1.5.dp, tertiary),
-                                        colors         = ButtonDefaults.outlinedButtonColors(contentColor = tertiary),
-                                        contentPadding = PaddingValues(horizontal = 10.dp)
-                                    ) {
-                                        Icon(Icons.Default.RateReview, null, modifier = Modifier.size(15.dp))
-                                        Spacer(Modifier.width(5.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Per night", fontSize = 10.sp, color = onSurfaceVariant)
                                         Text(
-                                            "Reviews (${property.reviewCount})",
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize   = 13.sp,
+                                            property.formattedPrice,
+                                            fontSize   = 18.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color      = onSurface,
                                             maxLines   = 1
                                         )
+                                    }
+                                }
+
+                                HorizontalDivider(color = onSurfaceVariant.copy(0.10f))
+
+                                if (roleLoaded && isLandlord && isOwner) {
+                                    Row(
+                                        modifier              = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment     = Alignment.CenterVertically
+                                    ) {
+                                        Button(
+                                            onClick        = { navController.navigate(Screen.EditProperty.createRoute(propertyId)) },
+                                            modifier       = Modifier.weight(1f).height(44.dp),
+                                            shape          = RoundedCornerShape(12.dp),
+                                            colors         = ButtonDefaults.buttonColors(
+                                                containerColor = primary,
+                                                contentColor   = tertiary
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 10.dp),
+                                            elevation      = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 1.dp)
+                                        ) {
+                                            Icon(Icons.Default.Edit, null, modifier = Modifier.size(15.dp))
+                                            Spacer(Modifier.width(5.dp))
+                                            Text("Edit", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, maxLines = 1)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick        = { navController.navigate(Screen.ViewReviews.createRoute(propertyId)) },
+                                            modifier       = Modifier.weight(1f).height(44.dp),
+                                            shape          = RoundedCornerShape(12.dp),
+                                            border         = BorderStroke(1.5.dp, tertiary),
+                                            colors         = ButtonDefaults.outlinedButtonColors(contentColor = tertiary),
+                                            contentPadding = PaddingValues(horizontal = 10.dp)
+                                        ) {
+                                            Icon(Icons.Default.RateReview, null, modifier = Modifier.size(15.dp))
+                                            Spacer(Modifier.width(5.dp))
+                                            Text(
+                                                "Reviews (${property.reviewCount})",
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize   = 13.sp,
+                                                maxLines   = 1
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -520,7 +541,10 @@ fun getStatusLabel(status: String): String = when (status.uppercase()) {
 
 @Composable
 fun BadgeBox(label: String, color: Color) {
-    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.1f)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+    Box(
+        Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.1f))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
         Text(label, fontSize = 11.sp, color = color, fontWeight = FontWeight.Bold)
     }
 }

@@ -34,15 +34,20 @@ private val HavenGoldDark  = Color(0xFFA87C2A)
 /**
  * Chat message bubble — HavenHub branded.
  *
- * ✦ ROLE-BASED COLORS:
- *   • Landlord ka message  → Golden gradient (HavenGold → HavenGoldLight)
- *   • Tenant ka message    → Navy Blue gradient (HavenNavy → HavenNavyLight)
+ * ✦ ROLE-BASED + SIDE-BASED COLORS:
  *
- * isSentByMe = true  → current logged-in user ka message (right side)
- * isSentByMe = false → other user ka message (left side)
+ *   isSentByMe = true  → RIGHT side bubble (mera message)
+ *     • Landlord send kare → NAVY gradient  (HavenNavy → HavenNavyLight)
+ *     • Tenant send kare   → NAVY gradient  (same — mera apna sent)
  *
- * senderRole = "landlord" ya "tenant" — bubble color determine karta hai
- *   - Agar senderRole nahi diya → isSentByMe ke basis pe Navy use hoga
+ *   isSentByMe = false → LEFT side bubble (dusre ka message — RECEIVED)
+ *     ✦ Received bubble HAMESHA GOLDEN hoga — role se qata nazar
+ *     • Golden gradient (HavenGoldDark → HavenGold)
+ *     • Text white hoga received bubble mein bhi (gold pe white readable hai)
+ *
+ *   Yani:
+ *     → Mera message     = RIGHT, NAVY bubble
+ *     → Dusre ka message = LEFT,  GOLDEN bubble  ✦ (aapki requirement)
  *
  * ✦ Selection mode: long press → select, tap → toggle
  * ✦ Date dividers: use [MessageDateDivider] between date groups
@@ -57,7 +62,7 @@ fun MessageBubble(
     isRead         : Boolean  = false,
     isPending      : Boolean  = false,
     senderName     : String?  = null,
-    senderRole     : String?  = null,   // ✦ NEW — "landlord" ya "tenant"
+    senderRole     : String?  = null,   // "landlord" ya "tenant" — optional badge ke liye
     isSelected     : Boolean  = false,
     isSelectionMode: Boolean  = false,
     onLongPress    : () -> Unit = {},
@@ -66,26 +71,27 @@ fun MessageBubble(
     val configuration  = LocalConfiguration.current
     val maxBubbleWidth = (configuration.screenWidthDp * 0.72).dp
 
-    // ✦ Role-based bubble color logic
-    // Landlord → Golden, Tenant → Navy Blue
     val isLandlord = senderRole?.lowercase()?.trim() == "landlord"
 
+    // ✦ SENT bubble (isSentByMe = true → RIGHT side) → NAVY
     val sentBubbleBrush = when {
-        isSelected && isLandlord  -> Brush.linearGradient(listOf(HavenGold.copy(0.65f),      HavenGoldLight.copy(0.65f)))
-        isSelected && !isLandlord -> Brush.linearGradient(listOf(HavenNavy.copy(0.65f),      HavenNavyLight.copy(0.65f)))
-        isLandlord                -> Brush.linearGradient(listOf(HavenGoldDark,              HavenGold))
-        else                      -> Brush.linearGradient(listOf(HavenNavy,                  HavenNavyLight))
+        isSelected -> Brush.linearGradient(
+            listOf(HavenNavy.copy(0.65f), HavenNavyLight.copy(0.65f))
+        )
+        else       -> Brush.linearGradient(
+            listOf(HavenNavy, HavenNavyLight)
+        )
     }
 
+    // ✦ RECEIVED bubble (isSentByMe = false → LEFT side) → GOLDEN
+    // Aapki requirement: received bubble golden honi chahiye
     val receivedBubbleBrush = when {
-        isSelected -> Brush.linearGradient(listOf(
-            MaterialTheme.colorScheme.surfaceVariant.copy(0.6f),
-            MaterialTheme.colorScheme.surfaceVariant.copy(0.6f)
-        ))
-        else -> Brush.linearGradient(listOf(
-            MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.surfaceVariant
-        ))
+        isSelected -> Brush.linearGradient(
+            listOf(HavenGoldDark.copy(0.60f), HavenGold.copy(0.60f))
+        )
+        else       -> Brush.linearGradient(
+            listOf(HavenGoldDark, HavenGold)
+        )
     }
 
     val rowBgColor by animateColorAsState(
@@ -107,7 +113,8 @@ fun MessageBubble(
             Icon(
                 imageVector        = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                 contentDescription = if (isSelected) "Selected" else "Not selected",
-                tint               = if (isSelected) HavenGold else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                tint               = if (isSelected) HavenGold
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
                 modifier           = Modifier.size(22.dp)
             )
             Spacer(Modifier.width(4.dp))
@@ -124,34 +131,34 @@ fun MessageBubble(
                 horizontalAlignment = if (isSentByMe) Alignment.End else Alignment.Start,
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                // Sender name + role badge for received messages
+                // Sender name + role badge — only for received messages
                 if (!isSentByMe && senderName != null) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        modifier              = Modifier.padding(horizontal = 4.dp)
                     ) {
                         Text(
                             text       = senderName,
                             style      = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color      = if (isLandlord) HavenGold else HavenNavyLight
+                            // ✦ Name color: Gold text on white background (above bubble)
+                            color      = HavenGoldDark
                         )
-                        // Role badge
+                        // Role badge (optional)
                         if (senderRole != null) {
                             Box(
                                 modifier = Modifier
                                     .background(
-                                        color = if (isLandlord) HavenGold.copy(alpha = 0.15f)
-                                        else HavenNavy.copy(alpha = 0.12f),
+                                        color = HavenGold.copy(alpha = 0.15f),
                                         shape = RoundedCornerShape(4.dp)
                                     )
                                     .padding(horizontal = 5.dp, vertical = 1.dp)
                             ) {
                                 Text(
-                                    text      = if (isLandlord) "Landlord" else "Tenant",
-                                    fontSize  = 9.sp,
-                                    color     = if (isLandlord) HavenGoldDark else HavenNavy,
+                                    text       = if (isLandlord) "Landlord" else "Tenant",
+                                    fontSize   = 9.sp,
+                                    color      = HavenGoldDark,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -159,11 +166,21 @@ fun MessageBubble(
                     }
                 }
 
-                // Bubble
+                // ── Bubble shape ──────────────────────────────────────────────
                 val bubbleShape = if (isSentByMe)
-                    RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp)
+                    RoundedCornerShape(
+                        topStart    = 16.dp,
+                        topEnd      = 16.dp,
+                        bottomStart = 16.dp,
+                        bottomEnd   = 4.dp
+                    )
                 else
-                    RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
+                    RoundedCornerShape(
+                        topStart    = 4.dp,
+                        topEnd      = 16.dp,
+                        bottomStart = 16.dp,
+                        bottomEnd   = 16.dp
+                    )
 
                 Box(
                     modifier = Modifier
@@ -176,15 +193,17 @@ fun MessageBubble(
                 ) {
                     Column {
                         Text(
-                            text       = message,
-                            style      = MaterialTheme.typography.bodyMedium,
-                            color      = if (isSentByMe) Color.White
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            // ✦ Both sent (navy) and received (gold) bubbles → white text
+                            color      = Color.White,
                             lineHeight = 20.sp
                         )
 
                         Row(
-                            modifier              = Modifier.align(Alignment.End).padding(top = 5.dp),
+                            modifier              = Modifier
+                                .align(Alignment.End)
+                                .padding(top = 5.dp),
                             verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
@@ -192,10 +211,11 @@ fun MessageBubble(
                                 text     = timestamp,
                                 style    = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp,
-                                color    = if (isSentByMe) Color.White.copy(alpha = 0.65f)
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                // ✦ Both sides → white timestamp (readable on navy + gold)
+                                color    = Color.White.copy(alpha = 0.70f)
                             )
 
+                            // Read receipts — only for sent messages
                             if (isSentByMe) {
                                 when {
                                     isPending -> Icon(
@@ -208,9 +228,8 @@ fun MessageBubble(
                                         Icons.Default.DoneAll,
                                         contentDescription = "Read",
                                         modifier           = Modifier.size(12.dp),
-                                        // ✦ Landlord sent → gold tick, Tenant sent → white tick
-                                        tint               = if (isLandlord) HavenNavy.copy(alpha = 0.8f)
-                                        else HavenGoldLight
+                                        // ✦ Sent bubble is NAVY → gold tick shows nicely
+                                        tint               = HavenGoldLight
                                     )
                                     else      -> Icon(
                                         Icons.Default.DoneAll,
@@ -238,7 +257,9 @@ fun MessageBubble(
 @Composable
 fun MessageDateDivider(date: String, modifier: Modifier = Modifier) {
     Row(
-        modifier          = modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 16.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
@@ -251,11 +272,11 @@ fun MessageDateDivider(date: String, modifier: Modifier = Modifier) {
                 .padding(horizontal = 14.dp, vertical = 5.dp)
         ) {
             Text(
-                text       = date,
-                style      = MaterialTheme.typography.labelSmall,
+                text = date,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
-                color      = HavenGold,
-                fontSize   = 11.sp
+                color = HavenGold,
+                fontSize = 11.sp
             )
         }
     }

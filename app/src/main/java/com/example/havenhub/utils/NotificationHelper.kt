@@ -16,6 +16,20 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NotificationHelper.kt
+//
+// Manages all push notification channels and notification display.
+//
+// Channels:
+//   CHANNEL_BOOKINGS  — booking confirmations, cancellations, reminders
+//   CHANNEL_PAYMENTS  — payment receipts
+//   CHANNEL_MESSAGES  — in-app chat messages
+//   CHANNEL_SYSTEM    — app updates, verifications
+//   CHANNEL_PROPERTY  — property approval/rejection
+//   CHANNEL_SEASONAL  — ✦ NEW: seasonal & holiday alerts (Eid, Summer, etc.)
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Singleton
 class NotificationHelper @Inject constructor(
     @ApplicationContext private val context: Context
@@ -26,14 +40,21 @@ class NotificationHelper @Inject constructor(
         const val CHANNEL_MESSAGES = "channel_messages"
         const val CHANNEL_SYSTEM   = "channel_system"
         const val CHANNEL_PROPERTY = "channel_property"
+        const val CHANNEL_SEASONAL = "channel_seasonal"   // ✦ NEW seasonal channel
 
         private val notificationIdCounter = AtomicInteger(1000)
         fun nextId() = notificationIdCounter.getAndIncrement()
     }
 
-    // ── Create all channels ───────────────────────────────────────────────────
-    // FIX: lockscreenVisibility = VISIBILITY_PUBLIC added so notifications show
-    //      on lock screen (like Snapchat). Without this they were hidden on lock screen.
+    // ─────────────────────────────────────────────────────────────────────────
+    // createNotificationChannels
+    //
+    // Creates all notification channels on first app launch (Android O+).
+    // Safe to call multiple times — OS ignores duplicates.
+    //
+    // lockscreenVisibility = VISIBILITY_PUBLIC → shows on lock screen
+    // IMPORTANCE_HIGH → heads-up popup when app is in foreground
+    // ─────────────────────────────────────────────────────────────────────────
     fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager =
@@ -41,16 +62,18 @@ class NotificationHelper @Inject constructor(
 
             manager.createNotificationChannels(
                 listOf(
+                    // ── Bookings ──────────────────────────────────────────────
                     NotificationChannel(
                         CHANNEL_BOOKINGS,
                         "Bookings",
                         NotificationManager.IMPORTANCE_HIGH
                     ).apply {
-                        description         = "Booking confirmations, reminders and cancellations"
+                        description          = "Booking confirmations, reminders and cancellations"
                         enableVibration(true)
-                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅ lock screen fix
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     },
 
+                    // ── Payments ──────────────────────────────────────────────
                     NotificationChannel(
                         CHANNEL_PAYMENTS,
                         "Payments",
@@ -58,28 +81,31 @@ class NotificationHelper @Inject constructor(
                     ).apply {
                         description          = "Payment receipts and confirmations"
                         enableVibration(true)
-                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     },
 
+                    // ── Messages ──────────────────────────────────────────────
                     NotificationChannel(
                         CHANNEL_MESSAGES,
                         "Messages",
-                        NotificationManager.IMPORTANCE_HIGH                           // ✅ DEFAULT → HIGH (popup fix)
+                        NotificationManager.IMPORTANCE_HIGH
                     ).apply {
                         description          = "New messages from hosts and tenants"
                         enableVibration(true)
-                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     },
 
+                    // ── System ────────────────────────────────────────────────
                     NotificationChannel(
                         CHANNEL_SYSTEM,
                         "System",
-                        NotificationManager.IMPORTANCE_HIGH                           // ✅ LOW → HIGH
+                        NotificationManager.IMPORTANCE_HIGH
                     ).apply {
                         description          = "App updates and announcements"
-                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     },
 
+                    // ── Property Updates ──────────────────────────────────────
                     NotificationChannel(
                         CHANNEL_PROPERTY,
                         "Property Updates",
@@ -87,14 +113,31 @@ class NotificationHelper @Inject constructor(
                     ).apply {
                         description          = "Property approval and rejection alerts"
                         enableVibration(true)
-                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC   // ✅
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                    },
+
+                    // ── ✦ NEW: Seasonal Alerts ────────────────────────────────
+                    // Lower importance than bookings/payments so seasonal
+                    // alerts don't interrupt important notifications.
+                    // DEFAULT importance = shows in notification tray but
+                    // no heads-up popup unless user is on notifications screen.
+                    NotificationChannel(
+                        CHANNEL_SEASONAL,
+                        "Seasonal Alerts",
+                        NotificationManager.IMPORTANCE_DEFAULT
+                    ).apply {
+                        description          = "Seasonal promotions, holiday alerts and special offers"
+                        enableVibration(false)           // No vibration for seasonal alerts
+                        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     }
                 )
             )
         }
     }
 
-    // ── Core show notification ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // showNotification — core method used by all helper functions below
+    // ─────────────────────────────────────────────────────────────────────────
     fun showNotification(
         title      : String,
         message    : String,
@@ -113,11 +156,13 @@ class NotificationHelper @Inject constructor(
             }
         }
 
+        // Map notification type string to channel ID
         val channelId = when (type) {
             Constants.NOTIF_BOOKING  -> CHANNEL_BOOKINGS
             Constants.NOTIF_PAYMENT  -> CHANNEL_PAYMENTS
             Constants.NOTIF_MESSAGE  -> CHANNEL_MESSAGES
             Constants.NOTIF_PROPERTY -> CHANNEL_PROPERTY
+            Constants.NOTIF_SEASONAL -> CHANNEL_SEASONAL  // ✦ NEW seasonal channel mapping
             else                     -> CHANNEL_SYSTEM
         }
 
@@ -134,13 +179,19 @@ class NotificationHelper @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Seasonal alerts use DEFAULT priority; everything else uses HIGH
+        val priority = if (type == Constants.NOTIF_SEASONAL)
+            NotificationCompat.PRIORITY_DEFAULT
+        else
+            NotificationCompat.PRIORITY_HIGH
+
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)          // ✅ ensures heads-up popup
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)    // ✅ lock screen visibility
+            .setPriority(priority)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
@@ -152,7 +203,31 @@ class NotificationHelper @Inject constructor(
         }
     }
 
-    // ── Booking notifications — ALL ENGLISH ──────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // ✦ NEW — showSeasonalAlert
+    //
+    // Called when Admin creates a new seasonal alert that should be pushed
+    // to users. The alertId is stored as referenceId so tapping the system
+    // notification opens the NotificationsScreen.
+    //
+    // @param title    Alert title, e.g. "Eid ul Adha Special! 🎉"
+    // @param message  Alert body, e.g. "List your property for Eid holidays"
+    // @param alertId  Firestore document ID of the SeasonalAlert
+    // ─────────────────────────────────────────────────────────────────────────
+    fun showSeasonalAlert(
+        title  : String,
+        message: String,
+        alertId: String = ""
+    ) = showNotification(
+        title       = title,
+        message     = message,
+        type        = Constants.NOTIF_SEASONAL,
+        referenceId = alertId
+    )
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Booking notifications
+    // ─────────────────────────────────────────────────────────────────────────
 
     fun showBookingConfirmed(propertyName: String, bookingId: String) =
         showNotification(
@@ -186,7 +261,9 @@ class NotificationHelper @Inject constructor(
             referenceId = bookingId
         )
 
-    // ── Payment notifications ─────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Payment notifications
+    // ─────────────────────────────────────────────────────────────────────────
 
     fun showPaymentSuccess(amount: Double, transactionId: String) =
         showNotification(
@@ -196,7 +273,9 @@ class NotificationHelper @Inject constructor(
             referenceId = transactionId
         )
 
-    // ── Message notifications ─────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Message notifications
+    // ─────────────────────────────────────────────────────────────────────────
 
     fun showNewMessage(senderName: String, preview: String, conversationId: String) =
         showNotification(
@@ -206,7 +285,9 @@ class NotificationHelper @Inject constructor(
             referenceId = conversationId
         )
 
-    // ── Property notifications ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Property notifications
+    // ─────────────────────────────────────────────────────────────────────────
 
     fun showPropertyApproved(
         propertyTitle: String,
@@ -242,7 +323,9 @@ class NotificationHelper @Inject constructor(
         )
     }
 
-    // ── User verification notifications ──────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // User verification notifications
+    // ─────────────────────────────────────────────────────────────────────────
 
     fun showUserVerified(userName: String) =
         showNotification(
@@ -263,7 +346,9 @@ class NotificationHelper @Inject constructor(
         )
     }
 
-    // ── Admin notifications ───────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Admin notifications
+    // ─────────────────────────────────────────────────────────────────────────
 
     fun showNewPropertyPending(
         propertyTitle: String,
@@ -284,26 +369,9 @@ class NotificationHelper @Inject constructor(
             referenceId = userId
         )
 
-    // ── Cancel ────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Cancel helpers
+    // ─────────────────────────────────────────────────────────────────────────
     fun cancelNotification(id: Int) = NotificationManagerCompat.from(context).cancel(id)
-    fun cancelAll() = NotificationManagerCompat.from(context).cancelAll()
+    fun cancelAll()                 = NotificationManagerCompat.from(context).cancelAll()
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

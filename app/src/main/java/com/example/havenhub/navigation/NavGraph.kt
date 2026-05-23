@@ -40,6 +40,8 @@ private val strictAdminRoutes = listOf(
     Screen.UserVerificationDetail.route,
     Screen.Reports.route,
     Screen.PaymentReports.route,
+    Screen.ManageSeasonalAlerts.route,   // ✦ NEW
+    Screen.CreateSeasonalAlert.route,    // ✦ NEW
 )
 
 private val sharedRoutes = listOf(
@@ -497,6 +499,17 @@ fun HavenHubNavGraph(
 
             composable(Screen.PaymentReports.route) {
                 when { canViewPaymentReports -> PaymentReportsScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
+            }
+
+// ── ✦ NEW — Seasonal Alerts (admin only) ─────────────────────────────────────
+            composable(Screen.ManageSeasonalAlerts.route) {
+                if (isCurrentUserAnyAdmin) ManageSeasonalAlertsScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
+            }
+
+            composable(Screen.CreateSeasonalAlert.route) {
+                if (isCurrentUserAnyAdmin) CreateSeasonalAlertScreen(navController)
+                else LaunchedEffect(Unit) { navController.popBackStack() }
             }
         }
     }

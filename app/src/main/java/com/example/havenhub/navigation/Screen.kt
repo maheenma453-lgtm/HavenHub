@@ -64,18 +64,17 @@ sealed class Screen(val route: String) {
         fun createRoute(landlordId: String) = "active_tenants/$landlordId"
     }
 
-    // ✦ NEW — Tenants tab (landlord bottom nav)
     object Tenants : Screen("tenants")
 
     object Payment :
         Screen("payment/{bookingId}/{payerId}/{payeeId}/{payerName}/{payeeName}/{amount}") {
         fun createRoute(
             bookingId: String,
-            payerId: String,
-            payeeId: String,
+            payerId  : String,
+            payeeId  : String,
             payerName: String,
             payeeName: String,
-            amount: Double
+            amount   : Double
         ) = "payment/$bookingId/$payerId/$payeeId/$payerName/$payeeName/$amount"
     }
 
@@ -113,16 +112,16 @@ sealed class Screen(val route: String) {
 
     object MessageList : Screen("message_list")
     object Chat : Screen("chat/{userId}/{ownerName}/{propertyId}") {
-        const val ARG_USER_ID = "userId"
-        const val ARG_OWNER_NAME = "ownerName"
+        const val ARG_USER_ID     = "userId"
+        const val ARG_OWNER_NAME  = "ownerName"
         const val ARG_PROPERTY_ID = "propertyId"
         fun createRoute(
-            userId: String,
-            ownerName: String = "Owner",
+            userId    : String,
+            ownerName : String = "Owner",
             propertyId: String = ""
         ): String {
             val encodedName = android.net.Uri.encode(ownerName.ifEmpty { "Owner" })
-            val encodedPid = android.net.Uri.encode(propertyId.ifEmpty { "none" })
+            val encodedPid  = android.net.Uri.encode(propertyId.ifEmpty { "none" })
             return "chat/$userId/$encodedName/$encodedPid"
         }
     }
@@ -139,13 +138,13 @@ sealed class Screen(val route: String) {
         fun createRoute(propertyId: String) = "vacation_calendar/$propertyId"
     }
 
-    object AdminDashboard : Screen("admin_dashboard")
-    object ManageUsers : Screen("manage_users")
-    object ManageProperties : Screen("manage_properties")
-    object ManageBookings : Screen("manage_bookings")
+    object AdminDashboard      : Screen("admin_dashboard")
+    object ManageUsers         : Screen("manage_users")
+    object ManageProperties    : Screen("manage_properties")
+    object ManageBookings      : Screen("manage_bookings")
 
-    object VerifyProperties : Screen("verify_properties")
-    object VerifyUsers : Screen("verify_users")
+    object VerifyProperties    : Screen("verify_properties")
+    object VerifyUsers         : Screen("verify_users")
 
     object PropertyVerificationDetail : Screen("property_verification_detail/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
@@ -157,6 +156,10 @@ sealed class Screen(val route: String) {
         fun createRoute(userId: String) = "user_verification_detail/$userId"
     }
 
-    object Reports : Screen("reports")
+    object Reports        : Screen("reports")
     object PaymentReports : Screen("payment_reports")
+
+    // ── ✦ NEW — Seasonal Alerts (Admin) ──────────────────────────────────────
+    object ManageSeasonalAlerts : Screen("manage_seasonal_alerts")
+    object CreateSeasonalAlert  : Screen("create_seasonal_alert")
 }

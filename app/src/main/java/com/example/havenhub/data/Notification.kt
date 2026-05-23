@@ -83,6 +83,10 @@ enum class NotificationType {
     ACCOUNT_VERIFIED,       // Account fully activated (post-email or admin verify)
     ACCOUNT_SUSPENDED,      // Account has been suspended by admin
 
+    // ── Seasonal / Promotional ────────────────────────────────────────────────
+    SEASONAL_ALERT,         // ✦ NEW — Seasonal & holiday promotional alerts from admin
+    // e.g. Eid, Summer, Winter offers pushed to landlords/tenants
+
     // ── General / Fallback ────────────────────────────────────────────────────
     GENERAL;                // Default type for misc or unclassified notifications
 

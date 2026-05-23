@@ -12,6 +12,7 @@ import com.example.havenhub.remote.FirebaseDataManager
 import com.example.havenhub.repository.BookingRepository
 import com.example.havenhub.repository.PaymentRepository
 import com.example.havenhub.repository.PropertyRepository
+import com.example.havenhub.repository.ReviewRepository          // ✦ NEW import
 import com.example.havenhub.utils.Resource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -44,7 +45,7 @@ data class HomeUiState(
     val isLoading            : Boolean          = false,
     val errorMessage         : String?          = null,
 
-    // ✦ NEW — logged-in user ki profile info (name + photo)
+    // ✦ logged-in user ki profile info (name + photo)
     val currentUserName      : String           = "",
     val currentUserPhotoUrl  : String           = "",
     val currentUserInitials  : String           = "",
@@ -79,7 +80,8 @@ class HomeViewModel @Inject constructor(
     private val propertyRepository : PropertyRepository,
     private val bookingRepository  : BookingRepository,
     private val paymentRepository  : PaymentRepository,
-    private val firebaseDataManager: FirebaseDataManager
+    private val firebaseDataManager: FirebaseDataManager,
+    private val reviewRepository   : ReviewRepository          // ✦ NEW inject
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -91,9 +93,9 @@ class HomeViewModel @Inject constructor(
     private val _userRole = MutableStateFlow("")
     val userRole: StateFlow<String> = _userRole.asStateFlow()
 
-    private val firestore  = FirebaseFirestore.getInstance()
-    private val usersCol   = firestore.collection("users")
-    private val propsCol   = firestore.collection("properties")
+    private val firestore = FirebaseFirestore.getInstance()
+    private val usersCol = firestore.collection("users")
+    private val propsCol = firestore.collection("properties")
 
     init {
         loadUserInfo()
@@ -108,7 +110,7 @@ class HomeViewModel @Inject constructor(
             try {
                 val firebaseUser = FirebaseAuth.getInstance().currentUser
                 if (firebaseUser == null) {
-                    _userId.value   = ""
+                    _userId.value = ""
                     _userRole.value = "tenant"
                     return@launch
                 }
@@ -122,10 +124,9 @@ class HomeViewModel @Inject constructor(
 
                 _userRole.value = doc.getString("role") ?: "tenant"
 
-                // ✦ NEW — Firestore se profile image + name load karo
-                val fullName  = doc.getString("fullName") ?: ""
-                val photoUrl  = doc.getString("profileImageUrl") ?: ""
-                val initials  = fullName
+                val fullName = doc.getString("fullName") ?: ""
+                val photoUrl = doc.getString("profileImageUrl") ?: ""
+                val initials = fullName
                     .trim()
                     .split(" ")
                     .filter { it.isNotEmpty() }
@@ -135,7 +136,7 @@ class HomeViewModel @Inject constructor(
 
                 _uiState.update { state ->
                     state.copy(
-                        currentUserName     = fullName,
+                        currentUserName = fullName,
                         currentUserPhotoUrl = photoUrl,
                         currentUserInitials = initials
                     )
@@ -144,13 +145,12 @@ class HomeViewModel @Inject constructor(
                 loadFavouriteIds(firebaseUser.uid)
 
             } catch (_: Exception) {
-                _userId.value   = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                _userId.value = FirebaseAuth.getInstance().currentUser?.uid ?: ""
                 _userRole.value = "tenant"
             }
         }
     }
 
-    // ✦ NEW — Call this after EditProfile saves so home icon updates immediately
     fun refreshCurrentUserProfile() {
         viewModelScope.launch {
             try {
@@ -168,7 +168,7 @@ class HomeViewModel @Inject constructor(
 
                 _uiState.update { state ->
                     state.copy(
-                        currentUserName     = fullName,
+                        currentUserName = fullName,
                         currentUserPhotoUrl = photoUrl,
                         currentUserInitials = initials
                     )
@@ -193,21 +193,23 @@ class HomeViewModel @Inject constructor(
 
             @Suppress("UNCHECKED_CAST")
             AppSettings(
-                isMaintenanceMode     = doc.getBoolean("isMaintenanceMode")  ?: false,
-                maintenanceMessage    = doc.getString("maintenanceMessage"),
-                minimumAppVersion     = doc.getString("minimumAppVersion")   ?: "1.0.0",
-                latestAppVersion      = doc.getString("latestAppVersion")    ?: "1.0.0",
-                forceUpdate           = doc.getBoolean("forceUpdate")        ?: false,
-                platformFeePercent    = doc.getDouble("platformFeePercent")  ?: 5.0,
-                maxPropertyImages     = (doc.getLong("maxPropertyImages")    ?: 10L).toInt(),
+                isMaintenanceMode = doc.getBoolean("isMaintenanceMode") ?: false,
+                maintenanceMessage = doc.getString("maintenanceMessage"),
+                minimumAppVersion = doc.getString("minimumAppVersion") ?: "1.0.0",
+                latestAppVersion = doc.getString("latestAppVersion") ?: "1.0.0",
+                forceUpdate = doc.getBoolean("forceUpdate") ?: false,
+                platformFeePercent = doc.getDouble("platformFeePercent") ?: 5.0,
+                maxPropertyImages = (doc.getLong("maxPropertyImages") ?: 10L).toInt(),
                 maxBookingDaysAdvance = (doc.getLong("maxBookingDaysAdvance") ?: 90L).toInt(),
-                featuredPropertyIds   = (doc.get("featuredPropertyIds") as? List<*>)
-                    ?.filterIsInstance<String>()                             ?: emptyList(),
-                announcementBanner    = doc.getString("announcementBanner"),
-                supportEmail          = doc.getString("supportEmail")        ?: "support@havenhub.co.za",
-                termsOfServiceUrl     = doc.getString("termsOfServiceUrl")   ?: "https://havenhub.co.za/terms",
-                privacyPolicyUrl      = doc.getString("privacyPolicyUrl")    ?: "https://havenhub.co.za/privacy",
-                updatedAt             = doc.getTimestamp("updatedAt")
+                featuredPropertyIds = (doc.get("featuredPropertyIds") as? List<*>)
+                    ?.filterIsInstance<String>() ?: emptyList(),
+                announcementBanner = doc.getString("announcementBanner"),
+                supportEmail = doc.getString("supportEmail") ?: "support@havenhub.co.za",
+                termsOfServiceUrl = doc.getString("termsOfServiceUrl")
+                    ?: "https://havenhub.co.za/terms",
+                privacyPolicyUrl = doc.getString("privacyPolicyUrl")
+                    ?: "https://havenhub.co.za/privacy",
+                updatedAt = doc.getTimestamp("updatedAt")
             )
         } catch (_: Exception) {
             AppSettings()
@@ -226,7 +228,8 @@ class HomeViewModel @Inject constructor(
                 if (result is Resource.Success) {
                     _uiState.update { it.copy(favouriteIds = result.data.toSet()) }
                 }
-            } catch (_: Exception) { /* silent */ }
+            } catch (_: Exception) { /* silent */
+            }
         }
     }
 
@@ -240,10 +243,11 @@ class HomeViewModel @Inject constructor(
                     is Resource.Success -> _uiState.update {
                         it.copy(
                             favouriteProperties = result.data,
-                            favouriteIds        = result.data.map { p -> p.propertyId }.toSet(),
+                            favouriteIds = result.data.map { p -> p.propertyId }.toSet(),
                             isFavouritesLoading = false
                         )
                     }
+
                     else -> _uiState.update { it.copy(isFavouritesLoading = false) }
                 }
             } catch (_: Exception) {
@@ -259,7 +263,7 @@ class HomeViewModel @Inject constructor(
             if (isFav) {
                 _uiState.update {
                     it.copy(
-                        favouriteIds        = it.favouriteIds - propertyId,
+                        favouriteIds = it.favouriteIds - propertyId,
                         favouriteProperties = it.favouriteProperties.filter { p -> p.propertyId != propertyId }
                     )
                 }
@@ -287,7 +291,7 @@ class HomeViewModel @Inject constructor(
     private suspend fun fetchAndUpdateTenantData() {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         try {
-            val settings  = loadAppSettings()
+            val settings = loadAppSettings()
             val allResult = propertyRepository.getAllProperties()
 
             val allList: List<Property> =
@@ -296,14 +300,14 @@ class HomeViewModel @Inject constructor(
             val adminFeaturedIds = settings.featuredPropertyIds
 
             val finalFeatured: List<Property>
-            val finalNearby  : List<Property>
+            val finalNearby: List<Property>
 
             if (adminFeaturedIds.isNotEmpty()) {
                 finalFeatured = allList.filter { adminFeaturedIds.contains(it.propertyId) }
-                finalNearby   = allList.filter { !adminFeaturedIds.contains(it.propertyId) }
+                finalNearby = allList.filter { !adminFeaturedIds.contains(it.propertyId) }
             } else {
                 finalFeatured = allList.filter { it.isFeatured }
-                finalNearby   = allList.filter { !it.isFeatured }
+                finalNearby = allList.filter { !it.isFeatured }
             }
 
             val errorMsg = if (allResult is Resource.Error) allResult.message else null
@@ -311,11 +315,11 @@ class HomeViewModel @Inject constructor(
             _uiState.update { state ->
                 state.copy(
                     featuredProperties = finalFeatured,
-                    nearbyProperties   = finalNearby,
-                    allProperties      = allList,
-                    appSettings        = settings,
-                    isLoading          = false,
-                    errorMessage       = if (allList.isEmpty()) errorMsg else null
+                    nearbyProperties = finalNearby,
+                    allProperties = allList,
+                    appSettings = settings,
+                    isLoading = false,
+                    errorMessage = if (allList.isEmpty()) errorMsg else null
                 )
             }
         } catch (e: Exception) {
@@ -336,19 +340,55 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { fetchAndUpdateLandlordStats(uid) }
     }
 
+    // ✦ FIX: averageRating ab Property document se nahi,
+    //         balke actual reviews collection se real-time calculate hoti hai.
+    //
+    // PROBLEM BEFORE:
+    //   val avgRating = properties.map { it.averageRating }.average()
+    //   → Property.averageRating ek stale/manually set field thi Firestore mein
+    //   → Dashboard 4.6 dikhata tha, Reviews screen 0 dikhati thi
+    //
+    // FIX NOW:
+    //   Step 1: Landlord ki saari properties ki IDs nikalo
+    //   Step 2: Har property ke liye actual reviews collection se reviews fetch karo
+    //   Step 3: Tamaam reviews ka overall average nikalo
+    //   → Dashboard aur Reviews screen DONO same real data dikhayenge
+    // ══════════════════════════════════════════════════════════════════════════
     private suspend fun fetchAndUpdateLandlordStats(landlordId: String) {
         try {
+            // ── Step 1: Properties ────────────────────────────────────────────
             val propertiesResult = propertyRepository.getMyProperties(landlordId)
             val properties: List<Property> =
                 if (propertiesResult is Resource.Success) propertiesResult.data else emptyList()
 
             val totalProps = properties.size
-            val avgRating  = if (properties.isNotEmpty())
-                properties.map { it.averageRating }.average().toFloat()
-            else 0f
 
-            val bookings     = bookingRepository.getLandlordBookings(landlordId)
-            val activeCount  = bookings.count { it.status == BookingStatus.CONFIRMED.name }
+            // ── Step 2: Real-time average rating from reviews collection ──────
+            // ✦ FIX: Property.averageRating field IGNORE karo
+            //        Actual reviews collection se calculate karo
+            val avgRating: Float = if (properties.isNotEmpty()) {
+                try {
+                    val reviewsResult = reviewRepository.getReviewsForLandlord(landlordId)
+                    if (reviewsResult is Resource.Success && reviewsResult.data.isNotEmpty()) {
+                        val allRatings = reviewsResult.data.map { it.overallRating.toDouble() }
+                        allRatings.average().toFloat()
+                    } else {
+                        // Koi review nahi — 0 dikhao, 4.6 nahi
+                        0f
+                    }
+                } catch (e: Exception) {
+                    Log.w("HOME_VM", "avgRating fetch failed: ${e.localizedMessage}")
+                    0f
+                }
+            } else {
+                0f
+            }
+
+            Log.d("HOME_VM", "fetchAndUpdateLandlordStats: realtime avgRating=$avgRating")
+
+            // ── Step 3: Bookings ──────────────────────────────────────────────
+            val bookings = bookingRepository.getLandlordBookings(landlordId)
+            val activeCount = bookings.count { it.status == BookingStatus.CONFIRMED.name }
             val pendingCount = bookings.count { it.status == BookingStatus.PENDING.name }
 
             val activeTenantsCount = bookings
@@ -357,26 +397,31 @@ class HomeViewModel @Inject constructor(
                 .distinct()
                 .size
 
+            // ── Step 4: Revenue ───────────────────────────────────────────────
             val paymentsResult = paymentRepository.getLandlordPayments(landlordId)
             val revenue: Double =
                 if (paymentsResult is Resource.Success)
                     paymentsResult.data.sumOf { it.amountDouble }
                 else 0.0
 
+            // ── Step 5: UI update ─────────────────────────────────────────────
             _uiState.update { state ->
                 state.copy(
-                    featuredProperties   = properties,
-                    allProperties        = properties,
-                    totalProperties      = totalProps,
-                    activeBookingsCount  = activeCount,
-                    activeTenantsCount   = activeTenantsCount,
+                    featuredProperties = properties,
+                    allProperties = properties,
+                    totalProperties = totalProps,
+                    activeBookingsCount = activeCount,
+                    activeTenantsCount = activeTenantsCount,
                     pendingRequestsCount = pendingCount,
-                    totalRevenue         = revenue,
-                    averageRating        = avgRating
+                    totalRevenue = revenue,
+                    averageRating = avgRating   // ✦ Real-time value
                 )
             }
 
-        } catch (_: Exception) { /* silent — stale data stays */ }
+        } catch (e: Exception) {
+            Log.e("HOME_VM", "fetchAndUpdateLandlordStats FAIL: ${e.localizedMessage}")
+            /* silent — stale data stays */
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -406,28 +451,31 @@ class HomeViewModel @Inject constructor(
                     if (booking.tenantId.isBlank()) continue
                     try {
                         val userDoc = usersCol.document(booking.tenantId).get().await()
-                        val user    = userDoc.toObject(User::class.java) ?: continue
+                        val user = userDoc.toObject(User::class.java) ?: continue
 
                         var propTitle = booking.propertyTitle.ifBlank { "Property" }
-                        var propCity  = ""
+                        var propCity = ""
                         try {
                             val propDoc = propsCol.document(booking.propertyId).get().await()
                             propTitle = propDoc.getString("title") ?: propTitle
-                            propCity  = propDoc.getString("city")  ?: ""
+                            propCity = propDoc.getString("city") ?: ""
                         } catch (e: Exception) {
                             Log.w("HOME_VM", "Property fetch skip: ${e.localizedMessage}")
                         }
 
                         tenantInfoList.add(
                             TenantInfo(
-                                user          = user,
-                                booking       = booking,
+                                user = user,
+                                booking = booking,
                                 propertyTitle = propTitle,
-                                propertyCity  = propCity
+                                propertyCity = propCity
                             )
                         )
                     } catch (e: Exception) {
-                        Log.e("HOME_VM", "Tenant fetch fail ${booking.tenantId}: ${e.localizedMessage}")
+                        Log.e(
+                            "HOME_VM",
+                            "Tenant fetch fail ${booking.tenantId}: ${e.localizedMessage}"
+                        )
                     }
                 }
 
@@ -439,23 +487,24 @@ class HomeViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isTenantsLoading = false,
-                        tenantsError     = e.localizedMessage ?: "Failed to load tenants"
+                        tenantsError = e.localizedMessage ?: "Failed to load tenants"
                     )
                 }
             }
         }
     }
 
-    fun refreshTenants() { loadTenants() }
+    fun refreshTenants() {
+        loadTenants()
+    }
 
-    // ── FIX: user.name → user.fullName ──────────────────────────────────────
     fun filteredTenants(searchQuery: String): List<TenantInfo> {
         val q = searchQuery.lowercase().trim()
         if (q.isEmpty()) return _uiState.value.tenants
         return _uiState.value.tenants.filter {
-            it.user.fullName.lowercase().contains(q)  ||
-                    it.user.email.lowercase().contains(q)     ||
-                    it.propertyTitle.lowercase().contains(q)  ||
+            it.user.fullName.lowercase().contains(q) ||
+                    it.user.email.lowercase().contains(q) ||
+                    it.propertyTitle.lowercase().contains(q) ||
                     it.propertyCity.lowercase().contains(q)
         }
     }

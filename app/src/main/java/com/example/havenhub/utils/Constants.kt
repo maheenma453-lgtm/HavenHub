@@ -3,15 +3,16 @@ package com.example.havenhub.utils
 object Constants {
 
     // ── Firebase Collections ──────────────────────────────────────────────────
-    const val COLLECTION_USERS         = "users"
-    const val COLLECTION_PROPERTIES    = "properties"
-    const val COLLECTION_BOOKINGS      = "bookings"
-    const val COLLECTION_REVIEWS       = "reviews"
-    const val COLLECTION_PAYMENTS      = "payments"
-    const val COLLECTION_NOTIFICATIONS = "notifications"
-    const val COLLECTION_MESSAGES      = "messages"
-    const val COLLECTION_CONVERSATIONS = "conversations"
-    const val COLLECTION_VERIFICATIONS = "verifications"
+    const val COLLECTION_USERS           = "users"
+    const val COLLECTION_PROPERTIES      = "properties"
+    const val COLLECTION_BOOKINGS        = "bookings"
+    const val COLLECTION_REVIEWS         = "reviews"
+    const val COLLECTION_PAYMENTS        = "payments"
+    const val COLLECTION_NOTIFICATIONS   = "notifications"
+    const val COLLECTION_MESSAGES        = "messages"
+    const val COLLECTION_CONVERSATIONS   = "conversations"
+    const val COLLECTION_VERIFICATIONS   = "verifications"
+    const val COLLECTION_SEASONAL_ALERTS = "seasonal_alerts"  // ✦ NEW — seasonal alerts collection
 
     // ── Firebase Storage Paths ────────────────────────────────────────────────
     const val STORAGE_USERS      = "users"
@@ -21,7 +22,7 @@ object Constants {
     // ── User Roles ────────────────────────────────────────────────────────────
     const val ROLE_TENANT   = "TENANT"
     const val ROLE_LANDLORD = "LANDLORD"
-    const val ROLE_OWNER    = "OWNER"       // backward compat ke liye rakhha
+    const val ROLE_OWNER    = "OWNER"       // kept for backward compatibility
     const val ROLE_ADMIN    = "ADMIN"
 
     // ── User Status ───────────────────────────────────────────────────────────
@@ -53,17 +54,22 @@ object Constants {
     const val PROPERTY_SUSPENDED = "Suspended"
 
     // ── Notification Types (local device channel routing) ─────────────────────
+    // These strings are used in NotificationHelper to route to the correct
+    // Android notification channel. Must match the "type" field in Firestore.
     const val NOTIF_BOOKING  = "booking"
     const val NOTIF_PAYMENT  = "payment"
     const val NOTIF_MESSAGE  = "message"
     const val NOTIF_SYSTEM   = "system"
-    const val NOTIF_PROPERTY = "property"   // ✅ NEW — property approval/rejection channel
+    const val NOTIF_PROPERTY = "property"
+    const val NOTIF_SEASONAL = "seasonal"   // ✦ NEW — routes to CHANNEL_SEASONAL in NotificationHelper
 
     // ── FCM Topics ────────────────────────────────────────────────────────────
-    const val TOPIC_ADMIN    = "role_admin"      // ✅ NEW
-    const val TOPIC_LANDLORD = "role_landlord"   // ✅ NEW
-    const val TOPIC_TENANT   = "role_tenant"     // ✅ NEW
-    const val TOPIC_ALL      = "all_users"       // ✅ NEW
+    // Used in FirebaseMessagingManager.saveDeviceTokenAndSubscribe()
+    // Admin creates seasonal alerts → FCM broadcasts to these topics
+    const val TOPIC_ADMIN    = "role_admin"
+    const val TOPIC_LANDLORD = "role_landlord"
+    const val TOPIC_TENANT   = "role_tenant"
+    const val TOPIC_ALL      = "all_users"
 
     // ── Verification Status ───────────────────────────────────────────────────
     const val VERIFICATION_PENDING  = "Pending"
@@ -71,22 +77,22 @@ object Constants {
     const val VERIFICATION_REJECTED = "Rejected"
 
     // ── SharedPreferences Keys ────────────────────────────────────────────────
-    const val PREF_USER_ID       = "pref_user_id"
-    const val PREF_USER_ROLE     = "pref_user_role"
-    const val PREF_FCM_TOKEN     = "pref_fcm_token"   // ✅ NEW
-    const val PREF_IS_LOGGED_IN  = "pref_is_logged_in"
+    const val PREF_USER_ID         = "pref_user_id"
+    const val PREF_USER_ROLE       = "pref_user_role"
+    const val PREF_FCM_TOKEN       = "pref_fcm_token"
+    const val PREF_IS_LOGGED_IN    = "pref_is_logged_in"
     const val PREF_ONBOARDING_DONE = "pref_onboarding_done"
-    const val PREF_DARK_MODE     = "pref_dark_mode"
-    const val PREF_LANGUAGE      = "pref_language"
-    const val PREF_PUSH_ENABLED  = "pref_push_enabled"
-    const val PREF_NAME          = "pref_name"
+    const val PREF_DARK_MODE       = "pref_dark_mode"
+    const val PREF_LANGUAGE        = "pref_language"
+    const val PREF_PUSH_ENABLED    = "pref_push_enabled"
+    const val PREF_NAME            = "pref_name"
 
     // ── Pagination ────────────────────────────────────────────────────────────
     const val PAGE_SIZE = 20
 
     // ── Image ─────────────────────────────────────────────────────────────────
-    const val MAX_IMAGE_SIZE_KB    = 500
-    const val MAX_PROPERTY_IMAGES  = 10
+    const val MAX_IMAGE_SIZE_KB   = 500
+    const val MAX_PROPERTY_IMAGES = 10
 
     // ── Validation ────────────────────────────────────────────────────────────
     const val MIN_PASSWORD_LENGTH = 6

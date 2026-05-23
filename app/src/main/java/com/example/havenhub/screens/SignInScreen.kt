@@ -204,11 +204,13 @@ fun SignInScreen(
         end   = Offset(shineOffset * 900f + 150f, 180f)
     )
 
+    // ── ✅ FIXED: sub_admin bhi AdminDashboard pe jayega ──────────
     LaunchedEffect(uiState.isLoggedIn) {
         if (uiState.isLoggedIn) {
-            val dest = when (uiState.userRole.lowercase()) {
-                "admin" -> Screen.AdminDashboard.route
-                else    -> Screen.Home.route
+            val dest = when (uiState.userRole.lowercase().trim()) {
+                "admin",
+                "sub_admin" -> Screen.AdminDashboard.route   // ← FIXED
+                else        -> Screen.Home.route
             }
             navController.navigate(dest) { popUpTo(0) { inclusive = true } }
         }

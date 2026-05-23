@@ -52,7 +52,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.cos
 import kotlin.math.sin
 
-// ── Light Mode Colors ─────────────────────────────────────────────────────────
+// ── Light mode colors ─────────────────────────────────────────────────────────
 private val NavyBlue   = Color(0xFF1B2A4A)
 private val NavyMid    = Color(0xFF243658)
 private val NavyLight  = Color(0xFF2E4270)
@@ -63,7 +63,7 @@ private val GreenOk    = Color(0xFF27AE60)
 private val RedErr     = Color(0xFFE74C3C)
 private val OrangeWarn = Color(0xFFE67E22)
 
-// ── Dark Mode Colors ──────────────────────────────────────────────────────────
+// ── Dark mode colors ──────────────────────────────────────────────────────────
 private val D_PageBg   = Color(0xFF060D1A)
 private val D_CardBg   = Color(0xFF112038)
 private val D_NavyBlue = Color(0xFF0D1B3E)
@@ -78,7 +78,7 @@ private val D_RedErr   = Color(0xFFE74C3C)
 private val D_Orange   = Color(0xFFFFB347)
 private val D_DividerC = Color(0xFF1A2B45)
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helper: notification icon ─────────────────────────────────────────────────
 private fun notifIcon(type: String): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED.name,
     NotificationType.BOOKING_CONFIRMED.name,
@@ -97,6 +97,7 @@ private fun notifIcon(type: String): ImageVector = when (type) {
     else                                     -> Icons.Default.Notifications
 }
 
+// ── Helper: notification color ────────────────────────────────────────────────
 private fun notifColor(type: String): Color = when (type) {
     NotificationType.BOOKING_REQUESTED.name  -> Color(0xFF3498DB)
     NotificationType.BOOKING_CONFIRMED.name  -> GreenOk
@@ -115,6 +116,7 @@ private fun notifColor(type: String): Color = when (type) {
     else                                     -> Color(0xFF9B59B6)
 }
 
+// ── Helper: time ago ──────────────────────────────────────────────────────────
 private fun timeAgo(timestamp: com.google.firebase.Timestamp?): String {
     if (timestamp == null) return ""
     val diffMs = System.currentTimeMillis() - timestamp.toDate().time
@@ -126,6 +128,7 @@ private fun timeAgo(timestamp: com.google.firebase.Timestamp?): String {
     }
 }
 
+// ── Helper: booking status color ──────────────────────────────────────────────
 private fun bookingStatusColor(status: String): Color = when (status) {
     BookingStatus.CONFIRMED.name  -> GreenOk
     BookingStatus.CANCELLED.name  -> RedErr
@@ -134,10 +137,13 @@ private fun bookingStatusColor(status: String): Color = when (status) {
     else                          -> OrangeWarn
 }
 
+// ── Helper: booking status label ──────────────────────────────────────────────
 private fun bookingStatusLabel(status: String): String =
     status.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
 
-// ── PREMIUM LOGOUT DIALOG ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// LOGOUT DIALOG
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun PremiumLogoutDialog(
     isDark    : Boolean,
@@ -152,7 +158,6 @@ fun PremiumLogoutDialog(
     val textSec = if (isDark) D_TextSec  else Color(0xFF6B7280)
     val redC    = if (isDark) D_RedErr   else RedErr
 
-    // Pulse animation for icon
     val infiniteTransition = rememberInfiniteTransition(label = "logoutPulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue  = 1f,
@@ -167,7 +172,6 @@ fun PremiumLogoutDialog(
         label         = "glow"
     )
 
-    // ── FIX: Dialog ke bahar dark scrim + fillMaxSize box ────────────────────
     Dialog(
         onDismissRequest = onDismiss,
         properties       = DialogProperties(
@@ -176,18 +180,16 @@ fun PremiumLogoutDialog(
             dismissOnClickOutside   = true
         )
     ) {
-        // Scrim — poori screen cover karta hai
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.65f))
                 .clickable(
-                    indication            = null,
-                    interactionSource     = remember { MutableInteractionSource() }
+                    indication        = null,
+                    interactionSource = remember { MutableInteractionSource() }
                 ) { onDismiss() },
             contentAlignment = Alignment.Center
         ) {
-            // Dialog card — clicks consume karo taa ke scrim dismiss na ho
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -195,9 +197,8 @@ fun PremiumLogoutDialog(
                     .clickable(
                         indication        = null,
                         interactionSource = remember { MutableInteractionSource() }
-                    ) { /* consume — card ke andar click se dismiss nahi */ }
+                    ) { /* consume click so card does not dismiss */ }
             ) {
-                // Card background + content
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -212,7 +213,7 @@ fun PremiumLogoutDialog(
                         )
                         .shadow(24.dp, RoundedCornerShape(28.dp))
                 ) {
-                    // Gold accent top bar
+                    // Gold accent line at top
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -231,7 +232,7 @@ fun PremiumLogoutDialog(
                             .padding(top = 32.dp, start = 24.dp, end = 24.dp, bottom = 28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // ── Animated icon with glow rings ──
+                        // Animated icon with glow
                         Box(
                             modifier         = Modifier.size(88.dp),
                             contentAlignment = Alignment.Center
@@ -308,7 +309,7 @@ fun PremiumLogoutDialog(
 
                         Spacer(Modifier.height(28.dp))
 
-                        // Yes, Sign Out button
+                        // Sign out button
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -344,7 +345,7 @@ fun PremiumLogoutDialog(
 
                         Spacer(Modifier.height(12.dp))
 
-                        // Stay Logged In button
+                        // Stay logged in button
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -380,7 +381,9 @@ fun PremiumLogoutDialog(
     }
 }
 
-// ── MAIN SCREEN ───────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ══════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
@@ -406,19 +409,17 @@ fun AdminDashboardScreen(
     val authState by authViewModel.uiState.collectAsState()
     val stats      = uiState.stats
 
-    // ── Role resolution — priority: Firestore (loadAdminProfile) > AuthState ──
-    // Default: empty string (loading) — KABHI "super_admin" default nahi
     val resolvedRole: String = when {
         !uiState.adminUserRole.isNullOrBlank() -> uiState.adminUserRole!!.trim().lowercase()
         !authState.userRole.isNullOrBlank()    -> authState.userRole!!.trim().lowercase()
-        else                                   -> ""   // loading — kuch display mat karo
+        else                                   -> ""
     }
 
     val roleLabel: String = when (resolvedRole) {
-        "sub_admin"              -> "Sub Admin"
-        "super_admin", "admin"   -> "Super Admin"
-        ""                       -> ""     // loading state — blank
-        else                     -> resolvedRole
+        "sub_admin"            -> "Sub Admin"
+        "super_admin", "admin" -> "Super Admin"
+        ""                     -> ""
+        else                   -> resolvedRole
             .replace("_", " ")
             .split(" ")
             .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
@@ -438,7 +439,6 @@ fun AdminDashboardScreen(
     val scope            = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    // Logout Dialog
     if (showLogoutDialog) {
         PremiumLogoutDialog(
             isDark    = isDark,
@@ -519,6 +519,7 @@ fun AdminDashboardScreen(
                             }
                         }
                     }
+                    // Gold shimmer bottom line
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -634,15 +635,18 @@ fun AdminDashboardScreen(
                         isDark   = isDark
                     )
                     Spacer(Modifier.height(12.dp))
+
                     val actions = listOf(
-                        Triple(Icons.Default.CheckCircle,    "Verify Properties", Screen.VerifyProperties.route),
-                        Triple(Icons.Default.VerifiedUser,   "Verify Users",      Screen.VerifyUsers.route),
-                        Triple(Icons.Default.ManageAccounts, "Manage Users",      Screen.ManageUsers.route),
-                        Triple(Icons.Default.HomeWork,       "Manage Properties", Screen.ManageProperties.route),
-                        Triple(Icons.Default.CalendarMonth,  "Manage Bookings",   Screen.ManageBookings.route),
-                        Triple(Icons.Default.BarChart,       "View Reports",      Screen.Reports.route),
-                        Triple(Icons.Default.Payment,        "Payments",          Screen.PaymentReports.route),
+                        Triple(Icons.Default.CheckCircle,    "Verify Properties",  Screen.VerifyProperties.route),
+                        Triple(Icons.Default.VerifiedUser,   "Verify Users",       Screen.VerifyUsers.route),
+                        Triple(Icons.Default.ManageAccounts, "Manage Users",       Screen.ManageUsers.route),
+                        Triple(Icons.Default.HomeWork,       "Manage Properties",  Screen.ManageProperties.route),
+                        Triple(Icons.Default.CalendarMonth,  "Manage Bookings",    Screen.ManageBookings.route),
+                        Triple(Icons.Default.BarChart,       "View Reports",       Screen.Reports.route),
+                        Triple(Icons.Default.Payment,        "Payments",           Screen.PaymentReports.route),
+                        Triple(Icons.Default.Celebration,    "Seasonal Alerts",    Screen.ManageSeasonalAlerts.route),
                     )
+
                     Column(
                         modifier            = Modifier.padding(horizontal = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -888,7 +892,9 @@ fun AdminDashboardScreen(
     }
 }
 
-// ── ACTIVITY ROW ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// ACTIVITY ROW
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun PremiumActivityRow(notification: Notification, isDark: Boolean = false) {
     val icon     = notifIcon(notification.type)
@@ -943,7 +949,9 @@ fun PremiumActivityRow(notification: Notification, isDark: Boolean = false) {
     }
 }
 
-// ── BOOKING ROW ───────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// BOOKING ROW
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun PremiumBookingRow(booking: Booking, isDark: Boolean = false) {
     val statusColor = bookingStatusColor(booking.status)
@@ -1022,7 +1030,9 @@ fun PremiumBookingRow(booking: Booking, isDark: Boolean = false) {
     }
 }
 
-// ── HERO BANNER ───────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// HERO BANNER
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun HeroBanner(
     adminName : String  = "Admin",
@@ -1069,7 +1079,6 @@ fun HeroBanner(
                 color    = Color.White.copy(alpha = 0.70f)
             )
             Spacer(Modifier.height(14.dp))
-            // Role badge — sirf tab dikhao jab role available ho
             if (roleLabel.isNotBlank()) {
                 Row(
                     modifier = Modifier
@@ -1097,7 +1106,9 @@ fun HeroBanner(
     }
 }
 
-// ── STAT CARD ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// STAT CARD
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun ModernStatCard(
     icon    : ImageVector,
@@ -1173,7 +1184,9 @@ fun ModernStatCard(
     }
 }
 
-// ── PENDING CARD ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// PENDING CARD
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun PendingHighlightCard(
     pendingCount: Int,
@@ -1268,7 +1281,9 @@ fun PendingHighlightCard(
     }
 }
 
-// ── QUICK ACTION CARD ─────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// QUICK ACTION CARD
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun QuickActionCard(
     icon    : ImageVector,
@@ -1320,7 +1335,9 @@ fun QuickActionCard(
     }
 }
 
-// ── DRAWER ────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// DRAWER
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun AdminDrawerContent(
     navController : NavController,
@@ -1333,15 +1350,16 @@ fun AdminDrawerContent(
     onLogoutClick : () -> Unit,
     isDark        : Boolean = false
 ) {
-    val drawerBg   = if (isDark) D_NavyBlue else Color.White
-    val headerBg1  = if (isDark) D_NavyBlue else NavyBlue
-    val headerBg2  = if (isDark) D_NavyMid  else NavyMid
-    val goldC      = if (isDark) D_Gold     else Gold
-    val textPri    = if (isDark) D_TextPri  else NavyBlue
-    val textSec    = if (isDark) D_TextSec  else NavyBlue.copy(alpha = 0.65f)
-    val selectedBg = if (isDark) D_NavyMid  else NavyBlue.copy(alpha = 0.08f)
-    val greenC     = if (isDark) D_GreenOk  else GreenOk
-    val redC       = if (isDark) D_RedErr   else RedErr
+    val drawerBg   = if (isDark) D_NavyBlue        else Color.White
+    val headerBg1  = if (isDark) D_NavyBlue         else NavyBlue
+    val headerBg2  = if (isDark) D_NavyMid          else NavyMid
+    val goldC      = if (isDark) D_Gold             else Gold
+    val textPri    = if (isDark) D_TextPri          else NavyBlue
+    val textSec    = if (isDark) D_TextSec          else NavyBlue.copy(alpha = 0.65f)
+    val selectedBg = if (isDark) D_NavyMid          else NavyBlue.copy(alpha = 0.08f)
+    val greenC     = if (isDark) D_GreenOk          else GreenOk
+    val redC       = if (isDark) D_RedErr           else RedErr
+    val dividerC   = if (isDark) D_DividerC         else NavyBlue.copy(alpha = 0.08f)
 
     data class DrawerItem(
         val icon : ImageVector,
@@ -1359,192 +1377,206 @@ fun AdminDrawerContent(
         DrawerItem(Icons.Default.CalendarMonth,  "Manage Bookings",   Screen.ManageBookings.route),
         DrawerItem(Icons.Default.BarChart,       "Analytics",         Screen.Reports.route),
         DrawerItem(Icons.Default.Payment,        "Payment Reports",   Screen.PaymentReports.route),
+        DrawerItem(Icons.Default.Celebration,    "Seasonal Alerts",   Screen.ManageSeasonalAlerts.route),
         DrawerItem(Icons.Default.Notifications,  "Notifications",     Screen.Notifications.route, badge = unreadCount),
         DrawerItem(Icons.Default.Settings,       "Settings",          Screen.Settings.route),
     )
 
     val currentRoute = navController.currentBackStackEntry?.destination?.route
 
-    ModalDrawerSheet(drawerContainerColor = drawerBg, modifier = Modifier.width(290.dp)) {
+    ModalDrawerSheet(
+        drawerContainerColor = drawerBg,
+        modifier             = Modifier.width(290.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(headerBg1, headerBg2)))
-                .padding(20.dp)
-        ) {
+            // ── Header ────────────────────────────────────────────────────────
             Box(
                 modifier = Modifier
-                    .size(70.dp)
-                    .align(Alignment.TopEnd)
-                    .offset(x = 20.dp, y = (-15).dp)
-                    .clip(CircleShape)
-                    .background(goldC.copy(alpha = 0.15f))
-            )
-            Column {
-                Box(contentAlignment = Alignment.BottomEnd) {
-                    Box(
-                        modifier = Modifier
-                            .size(62.dp)
-                            .clip(CircleShape)
-                            .border(2.5.dp, goldC, CircleShape)
-                            .background(headerBg1)
-                            .clickable {
-                                navController.navigate(Screen.EditProfile.route) {
-                                    launchSingleTop = true
-                                }
-                                onClose()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!adminPhotoUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model              = adminPhotoUrl,
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(headerBg1, headerBg2)))
+                    .padding(20.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(70.dp)
+                        .align(Alignment.TopEnd)
+                        .offset(x = 20.dp, y = (-15).dp)
+                        .clip(CircleShape)
+                        .background(goldC.copy(alpha = 0.15f))
+                )
+                Column {
+                    Box(contentAlignment = Alignment.BottomEnd) {
+                        Box(
+                            modifier = Modifier
+                                .size(62.dp)
+                                .clip(CircleShape)
+                                .border(2.5.dp, goldC, CircleShape)
+                                .background(headerBg1)
+                                .clickable {
+                                    navController.navigate(Screen.EditProfile.route) {
+                                        launchSingleTop = true
+                                    }
+                                    onClose()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!adminPhotoUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model              = adminPhotoUrl,
+                                    contentDescription = null,
+                                    modifier           = Modifier.fillMaxSize().clip(CircleShape),
+                                    contentScale       = ContentScale.Crop
+                                )
+                            } else {
+                                Text(
+                                    adminInitial,
+                                    color      = goldC,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize   = 26.sp
+                                )
+                            }
+                        }
+                        Box(
+                            modifier         = Modifier.size(18.dp).clip(CircleShape).background(goldC),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Edit,
                                 contentDescription = null,
-                                modifier           = Modifier.fillMaxSize().clip(CircleShape),
-                                contentScale       = ContentScale.Crop
-                            )
-                        } else {
-                            Text(
-                                adminInitial,
-                                color      = goldC,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize   = 26.sp
+                                tint     = if (isDark) D_NavyBlue else NavyBlue,
+                                modifier = Modifier.size(10.dp)
                             )
                         }
                     }
-                    Box(
-                        modifier = Modifier.size(18.dp).clip(CircleShape).background(goldC),
-                        contentAlignment = Alignment.Center
+                    Spacer(Modifier.height(12.dp))
+                    Text(adminName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(Modifier.height(3.dp))
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = null,
-                            tint     = if (isDark) D_NavyBlue else NavyBlue,
-                            modifier = Modifier.size(10.dp)
+                        Box(Modifier.size(7.dp).clip(CircleShape).background(greenC))
+                        val displayRole = roleLabel.ifBlank { "Loading..." }
+                        Text(
+                            "$displayRole  •  Online",
+                            color    = Color.White.copy(alpha = 0.75f),
+                            fontSize = 12.sp
                         )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                Text(adminName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Spacer(Modifier.height(3.dp))
-                Row(
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Box(Modifier.size(7.dp).clip(CircleShape).background(greenC))
-                    // Role label — blank nahi hoga agar loaded hai
-                    val displayRole = roleLabel.ifBlank { "Loading..." }
-                    Text(
-                        "$displayRole  •  Online",
-                        color    = Color.White.copy(alpha = 0.75f),
-                        fontSize = 12.sp
+            }
+
+            // Gold shimmer line under header
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color.Transparent, goldC.copy(alpha = 0.6f), Color.Transparent)
+                        )
+                    )
+            )
+
+            // ── Scrollable nav items + logout sab scroll ke andar ────────────
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Spacer(Modifier.height(6.dp))
+                drawerItems.forEach { item ->
+                    val isSelected = currentRoute == item.route
+                    NavigationDrawerItem(
+                        icon = {
+                            BadgedBox(badge = {
+                                if (item.badge > 0) {
+                                    Badge(containerColor = goldC) {
+                                        Text(
+                                            if (item.badge > 99) "99+" else "${item.badge}",
+                                            fontSize   = 8.sp,
+                                            color      = if (isDark) D_NavyBlue else NavyBlue,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+                                }
+                            }) {
+                                Icon(
+                                    item.icon,
+                                    null,
+                                    tint     = if (isSelected) goldC else textSec,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
+                        label = {
+                            Text(
+                                item.label,
+                                fontSize   = 14.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color      = if (isSelected) textPri else textSec
+                            )
+                        },
+                        selected = isSelected,
+                        onClick  = {
+                            navController.navigate(item.route) {
+                                popUpTo(Screen.AdminDashboard.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState    = true
+                            }
+                            onClose()
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 1.dp),
+                        colors   = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor   = selectedBg,
+                            unselectedContainerColor = Color.Transparent
+                        )
                     )
                 }
-            }
-        }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(Color.Transparent, goldC.copy(alpha = 0.6f), Color.Transparent)
-                    )
+                // ── Divider + Logout scroll ke saath andar ───────────────────
+                Spacer(Modifier.height(4.dp))
+                HorizontalDivider(
+                    color    = dividerC,
+                    modifier = Modifier.padding(horizontal = 12.dp)
                 )
-        )
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Spacer(Modifier.height(6.dp))
-            drawerItems.forEach { item ->
-                val isSelected = currentRoute == item.route
                 NavigationDrawerItem(
                     icon = {
-                        BadgedBox(badge = {
-                            if (item.badge > 0) {
-                                Badge(containerColor = goldC) {
-                                    Text(
-                                        if (item.badge > 99) "99+" else "${item.badge}",
-                                        fontSize   = 8.sp,
-                                        color      = if (isDark) D_NavyBlue else NavyBlue,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
-                                }
-                            }
-                        }) {
+                        Box(
+                            modifier         = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(redC.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
-                                item.icon,
+                                Icons.AutoMirrored.Filled.Logout,
                                 null,
-                                tint     = if (isSelected) goldC else textSec,
-                                modifier = Modifier.size(20.dp)
+                                tint     = redC,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     },
-                    label = {
-                        Text(
-                            item.label,
-                            fontSize   = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color      = if (isSelected) textPri else textSec
-                        )
+                    label    = {
+                        Text("Logout", color = redC, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     },
-                    selected = isSelected,
-                    onClick  = {
-                        navController.navigate(item.route) {
-                            popUpTo(Screen.AdminDashboard.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState    = true
-                        }
-                        onClose()
-                    },
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 1.dp),
+                    selected = false,
+                    onClick  = onLogoutClick,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
                     colors   = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor   = selectedBg,
-                        unselectedContainerColor = Color.Transparent
+                        unselectedContainerColor = redC.copy(alpha = 0.06f)
                     )
                 )
+                Spacer(Modifier.navigationBarsPadding())
             }
         }
-
-        HorizontalDivider(
-            color    = goldC.copy(alpha = 0.2f),
-            modifier = Modifier.padding(horizontal = 12.dp)
-        )
-
-        NavigationDrawerItem(
-            icon = {
-                Box(
-                    modifier         = Modifier.size(32.dp).clip(CircleShape)
-                        .background(redC.copy(alpha = 0.10f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Logout,
-                        null,
-                        tint     = redC,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            },
-            label    = {
-                Text("Logout", color = redC, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            },
-            selected = false,
-            onClick  = onLogoutClick,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-            colors   = NavigationDrawerItemDefaults.colors(
-                unselectedContainerColor = redC.copy(alpha = 0.05f)
-            )
-        )
     }
 }
 
-// ── CHARTS ────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// CHARTS
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun UsersOverviewChart(
     points  : List<UserChartPoint>,
@@ -1892,7 +1924,9 @@ private fun DrawScope.drawDonutChart(slices: List<PropertyStatusSlice>, progress
     }
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// HELPER COMPOSABLES
+// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun LegendDot(color: Color, label: String, isDark: Boolean = false) {
     val textSec = if (isDark) D_TextSec else NavyBlue.copy(alpha = 0.5f)
@@ -1945,6 +1979,7 @@ fun DashSectionHeader(text: String, modifier: Modifier = Modifier, isDark: Boole
     }
 }
 
+// Legacy aliases — kept so other screens that call these still compile
 @Composable
 fun PremiumSectionTitle(text: String, modifier: Modifier = Modifier) =
     DashSectionHeader(text, modifier)
@@ -1965,10 +2000,3 @@ fun RealActivityRow(notification: Notification) = PremiumActivityRow(notificatio
 
 @Composable
 fun RealBookingRow(booking: Booking) = PremiumBookingRow(booking)
-
-
-
-
-
-
-

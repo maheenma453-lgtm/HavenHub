@@ -43,10 +43,11 @@ private fun normalizeRole(role: String?): String {
 
 private fun roleDisplayName(role: String?): String {
     return when (normalizeRole(role)) {
-        "tenant"   -> "Tenant"
-        "landlord" -> "Landlord"
-        "admin"    -> "Admin"
-        else       -> if (!role.isNullOrBlank()) role.trim() else "User"
+        "tenant"    -> "Tenant"
+        "landlord"  -> "Landlord"
+        "admin"     -> "Admin"
+        "sub_admin" -> "Sub Admin"
+        else        -> if (!role.isNullOrBlank()) role.trim() else "User"
     }
 }
 
@@ -82,13 +83,15 @@ fun ManageUsersScreen(
         uiState.users.mapIndexed { index, user -> Pair(index, user) }
     }
 
+    // ✅ FIX: "Admin" filter mein sub_admin bhi include karo
     val filteredIndexedUsers = remember(indexedUsers, searchQuery, selectedRole) {
         indexedUsers.filter { (_, user) ->
             val matchesSearch = searchQuery.isBlank() ||
                     user.fullName.contains(searchQuery, ignoreCase = true) ||
                     user.email.contains(searchQuery, ignoreCase = true)
             val matchesRole = selectedRole == "All" ||
-                    normalizeRole(user.role) == selectedRole.lowercase()
+                    normalizeRole(user.role) == selectedRole.lowercase() ||
+                    (selectedRole == "Admin" && normalizeRole(user.role) == "sub_admin") // ← FIX
             matchesSearch && matchesRole
         }
     }
@@ -465,7 +468,7 @@ fun ManageUsersScreen(
                             key   = { (index, user) -> stableUserKey(user, index) }
                         ) { (index, user) ->
                             val isSuperAdmin = user.email.equals(SUPER_ADMIN_EMAIL, ignoreCase = true)
-                            val isSubAdmin   = user.isAdmin && !isSuperAdmin
+                            val isSubAdmin   = user.isSubAdmin && !isSuperAdmin  // ✅ FIX: user.isSubAdmin use karo
 
                             MUPremiumUserCard(
                                 fullName     = user.fullName.ifBlank { "Unknown User" },
@@ -476,7 +479,6 @@ fun ManageUsersScreen(
                                 isSuperAdmin = isSuperAdmin,
                                 isSubAdmin   = isSubAdmin,
                                 canGrantAdmin = uiState.isSuperAdmin && !isSuperAdmin,
-                                // ← KEY FIX: sirf Super Admin delete kar sakta hai
                                 canDelete    = uiState.isSuperAdmin,
                                 primary      = primary,
                                 tertiary     = tertiary,
@@ -555,7 +557,7 @@ private fun MUPremiumUserCard(
     isSuperAdmin : Boolean,
     isSubAdmin   : Boolean,
     canGrantAdmin: Boolean,
-    canDelete    : Boolean,   // ← naya parameter: sirf Super Admin ko true milega
+    canDelete    : Boolean,
     primary      : Color,
     tertiary     : Color,
     surface      : Color,
@@ -569,22 +571,23 @@ private fun MUPremiumUserCard(
     var menuExpanded by remember { mutableStateOf(false) }
 
     val roleColor = when (role.lowercase()) {
-        "admin"    -> Color(0xFF6A1B9A)
+        "admin" -> Color(0xFF6A1B9A)
+        "sub admin" -> Color(0xFF6A1B9A)
         "landlord" -> primary
-        "tenant"   -> Color(0xFF00796B)
-        else       -> Color(0xFF546E7A)
+        "tenant" -> Color(0xFF00796B)
+        else -> Color(0xFF546E7A)
     }
 
     Card(
-        modifier  = Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .shadow(
                 4.dp, RoundedCornerShape(16.dp),
                 ambientColor = primary.copy(0.08f),
-                spotColor    = primary.copy(0.12f)
+                spotColor = primary.copy(0.12f)
             ),
-        shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
             containerColor = if (isSuperAdmin) tertiary.copy(0.05f) else surface
         ),
         elevation = CardDefaults.cardElevation(0.dp)
@@ -602,10 +605,10 @@ private fun MUPremiumUserCard(
         )
 
         Row(
-            modifier              = Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalAlignment     = Alignment.CenterVertically,
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Box(
@@ -623,60 +626,68 @@ private fun MUPremiumUserCard(
                 if (isSuperAdmin) {
                     Icon(
                         Icons.Default.Shield, null,
-                        tint     = MaterialTheme.colorScheme.onPrimary,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
                     Text(
                         fullName.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "?",
-                        fontSize   = 18.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color      = tertiary
+                        color = tertiary
                     )
                 }
             }
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(
-                    verticalAlignment     = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         fullName,
                         fontWeight = FontWeight.Bold,
-                        fontSize   = 15.sp,
-                        color      = onSurface,
-                        maxLines   = 1,
-                        overflow   = TextOverflow.Ellipsis,
-                        modifier   = Modifier.weight(1f, fill = false)
+                        fontSize = 15.sp,
+                        color = onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     if (isSuperAdmin) {
                         Surface(
-                            color    = tertiary.copy(alpha = 0.15f),
-                            shape    = RoundedCornerShape(20.dp),
-                            modifier = Modifier.border(1.dp, tertiary.copy(0.4f), RoundedCornerShape(20.dp))
+                            color = tertiary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(
+                                1.dp,
+                                tertiary.copy(0.4f),
+                                RoundedCornerShape(20.dp)
+                            )
                         ) {
                             Text(
                                 "Super Admin",
-                                fontSize   = 9.sp,
-                                color      = tertiary,
+                                fontSize = 9.sp,
+                                color = tertiary,
                                 fontWeight = FontWeight.ExtraBold,
-                                modifier   = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
                     }
                     if (isSubAdmin) {
                         Surface(
-                            color    = Color(0xFF6A1B9A).copy(alpha = 0.12f),
-                            shape    = RoundedCornerShape(20.dp),
-                            modifier = Modifier.border(1.dp, Color(0xFF6A1B9A).copy(0.35f), RoundedCornerShape(20.dp))
+                            color = Color(0xFF6A1B9A).copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(
+                                1.dp,
+                                Color(0xFF6A1B9A).copy(0.35f),
+                                RoundedCornerShape(20.dp)
+                            )
                         ) {
                             Text(
                                 "Sub-Admin",
-                                fontSize   = 9.sp,
-                                color      = Color(0xFF6A1B9A),
+                                fontSize = 9.sp,
+                                color = Color(0xFF6A1B9A),
                                 fontWeight = FontWeight.ExtraBold,
-                                modifier   = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
                     }
@@ -686,7 +697,7 @@ private fun MUPremiumUserCard(
                 Text(
                     email,
                     fontSize = 12.sp,
-                    color    = onSurface.copy(alpha = 0.5f),
+                    color = onSurface.copy(alpha = 0.5f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -694,35 +705,43 @@ private fun MUPremiumUserCard(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(
-                        color    = roleColor.copy(0.10f),
-                        shape    = RoundedCornerShape(20.dp),
-                        modifier = Modifier.border(1.dp, roleColor.copy(0.3f), RoundedCornerShape(20.dp))
+                        color = roleColor.copy(0.10f),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.border(
+                            1.dp,
+                            roleColor.copy(0.3f),
+                            RoundedCornerShape(20.dp)
+                        )
                     ) {
                         Text(
                             role.ifBlank { "User" },
-                            fontSize   = 11.sp,
-                            color      = roleColor,
+                            fontSize = 11.sp,
+                            color = roleColor,
                             fontWeight = FontWeight.SemiBold,
-                            modifier   = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                         )
                     }
 
                     val verColor = if (isVerified) GreenOk else RedErr
                     Surface(
-                        color    = verColor.copy(0.10f),
-                        shape    = RoundedCornerShape(20.dp),
-                        modifier = Modifier.border(1.dp, verColor.copy(0.3f), RoundedCornerShape(20.dp))
+                        color = verColor.copy(0.10f),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.border(
+                            1.dp,
+                            verColor.copy(0.3f),
+                            RoundedCornerShape(20.dp)
+                        )
                     ) {
                         Row(
-                            modifier              = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                            verticalAlignment     = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Box(Modifier.size(5.dp).clip(CircleShape).background(verColor))
                             Text(
                                 if (isVerified) "Verified" else "Unverified",
-                                fontSize   = 11.sp,
-                                color      = verColor,
+                                fontSize = 11.sp,
+                                color = verColor,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -731,16 +750,20 @@ private fun MUPremiumUserCard(
                     if (isBanned) {
                         val bannedColor = Color(0xFF546E7A)
                         Surface(
-                            color    = bannedColor.copy(0.10f),
-                            shape    = RoundedCornerShape(20.dp),
-                            modifier = Modifier.border(1.dp, bannedColor.copy(0.3f), RoundedCornerShape(20.dp))
+                            color = bannedColor.copy(0.10f),
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.border(
+                                1.dp,
+                                bannedColor.copy(0.3f),
+                                RoundedCornerShape(20.dp)
+                            )
                         ) {
                             Text(
                                 "Banned",
-                                fontSize   = 11.sp,
-                                color      = bannedColor,
+                                fontSize = 11.sp,
+                                color = bannedColor,
                                 fontWeight = FontWeight.SemiBold,
-                                modifier   = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                             )
                         }
                     }
@@ -750,7 +773,7 @@ private fun MUPremiumUserCard(
             if (!isSuperAdmin) {
                 Box {
                     IconButton(
-                        onClick  = { menuExpanded = true },
+                        onClick = { menuExpanded = true },
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
@@ -758,25 +781,30 @@ private fun MUPremiumUserCard(
                     ) {
                         Icon(
                             Icons.Default.MoreVert, null,
-                            tint     = onSurface,
+                            tint = onSurface,
                             modifier = Modifier.size(20.dp)
                         )
                     }
                     DropdownMenu(
-                        expanded         = menuExpanded,
+                        expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
-                        modifier         = Modifier
+                        modifier = Modifier
                             .background(surface)
                             .width(180.dp)
                     ) {
-                        // Ban / Unban — sub-admin bhi kar sakta hai
+                        // Ban / Unban
                         if (isBanned) {
                             DropdownMenuItem(
                                 leadingIcon = {
                                     Box(Modifier.size(8.dp).clip(CircleShape).background(GreenOk))
                                 },
-                                text    = {
-                                    Text("Unban User", color = GreenOk, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                text = {
+                                    Text(
+                                        "Unban User",
+                                        color = GreenOk,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
                                 },
                                 onClick = { menuExpanded = false; onUnban() }
                             )
@@ -785,8 +813,13 @@ private fun MUPremiumUserCard(
                                 leadingIcon = {
                                     Box(Modifier.size(8.dp).clip(CircleShape).background(RedErr))
                                 },
-                                text    = {
-                                    Text("Ban User", color = RedErr, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                text = {
+                                    Text(
+                                        "Ban User",
+                                        color = RedErr,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
                                 },
                                 onClick = { menuExpanded = false; onBan() }
                             )
@@ -795,27 +828,47 @@ private fun MUPremiumUserCard(
                         // Make Admin / Remove Admin — sirf Super Admin
                         if (canGrantAdmin) {
                             HorizontalDivider(
-                                modifier  = Modifier.padding(vertical = 4.dp),
+                                modifier = Modifier.padding(vertical = 4.dp),
                                 thickness = 0.5.dp,
-                                color     = onSurface.copy(alpha = 0.10f)
+                                color = onSurface.copy(alpha = 0.10f)
                             )
                             if (isSubAdmin) {
                                 DropdownMenuItem(
                                     leadingIcon = {
-                                        Icon(Icons.Default.PersonRemove, null, tint = RedErr, modifier = Modifier.size(18.dp))
+                                        Icon(
+                                            Icons.Default.PersonRemove,
+                                            null,
+                                            tint = RedErr,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     },
-                                    text    = {
-                                        Text("Remove Admin", color = RedErr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    text = {
+                                        Text(
+                                            "Remove Admin",
+                                            color = RedErr,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
                                     },
                                     onClick = { menuExpanded = false; onRemoveAdmin() }
                                 )
                             } else {
                                 DropdownMenuItem(
                                     leadingIcon = {
-                                        Icon(Icons.Default.AdminPanelSettings, null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(18.dp))
+                                        Icon(
+                                            Icons.Default.AdminPanelSettings,
+                                            null,
+                                            tint = Color(0xFF6A1B9A),
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     },
-                                    text    = {
-                                        Text("Make Admin", color = Color(0xFF6A1B9A), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    text = {
+                                        Text(
+                                            "Make Admin",
+                                            color = Color(0xFF6A1B9A),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
                                     },
                                     onClick = { menuExpanded = false; onMakeAdmin() }
                                 )
@@ -825,16 +878,26 @@ private fun MUPremiumUserCard(
                         // Delete — sirf Super Admin
                         if (canDelete) {
                             HorizontalDivider(
-                                modifier  = Modifier.padding(vertical = 4.dp),
+                                modifier = Modifier.padding(vertical = 4.dp),
                                 thickness = 0.5.dp,
-                                color     = RedErr.copy(alpha = 0.2f)
+                                color = RedErr.copy(alpha = 0.2f)
                             )
                             DropdownMenuItem(
                                 leadingIcon = {
-                                    Icon(Icons.Default.DeleteForever, null, tint = RedErr, modifier = Modifier.size(18.dp))
+                                    Icon(
+                                        Icons.Default.DeleteForever,
+                                        null,
+                                        tint = RedErr,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 },
-                                text    = {
-                                    Text("Delete User", color = RedErr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                text = {
+                                    Text(
+                                        "Delete User",
+                                        color = RedErr,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
                                 },
                                 onClick = { menuExpanded = false; onDelete() }
                             )

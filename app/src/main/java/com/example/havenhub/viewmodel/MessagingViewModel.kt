@@ -6,6 +6,7 @@ import com.example.havenhub.data.Message
 import com.example.havenhub.data.User
 import com.example.havenhub.remote.FirebaseRealtimeListener
 import com.example.havenhub.repository.MessagingRepository
+import com.example.havenhub.repository.NotificationRepository  // ✦ NEW — for message notifications
 import com.example.havenhub.utils.Resource
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,6 +19,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MessagingViewModel.kt
+//
+// Manages all chat state: conversations list, messages in a chat,
+// selection mode for delete, full chat delete, and read receipts.
+//
+// ✦ FIX — Messages notification was not being sent.
+// Root cause: sendMessage() only saved the message to Firestore but never
+// called NotificationRepository.sendNewMessageNotification() for the receiver.
+// Fix: inject NotificationRepository and call it inside sendMessage() after
+// a successful message save.
+// ══════════════════════════════════════════════════════════════════════════════
+
 data class MessagingUiState(
     val isLoading    : Boolean                = false,
     val messages     : List<Message>          = emptyList(),
@@ -27,67 +41,92 @@ data class MessagingUiState(
     val sendSuccess  : Boolean                = false,
 
     // Selected messages delete state
-    val isSelectionMode   : Boolean      = false,
-    val selectedMessageIds: Set<String>  = emptySet(),
-    val isDeleting        : Boolean      = false,
-    val deleteSuccess     : Boolean      = false,
+    val isSelectionMode   : Boolean     = false,
+    val selectedMessageIds: Set<String> = emptySet(),
+    val isDeleting        : Boolean     = false,
+    val deleteSuccess     : Boolean     = false,
 
     // Full chat delete state
-    val isChatDeleting    : Boolean      = false,
-    val chatDeleteSuccess : Boolean      = false,
+    val isChatDeleting   : Boolean = false,
+    val chatDeleteSuccess: Boolean = false,
 
-    // ✦ NEW — Other user profile (header mein profile pic + role ke liye)
-    val otherUserProfile  : User?        = null,
+    // Other user profile (for chat header — profile pic + role)
+    val otherUserProfile  : User?   = null,
 
-    // ✦ NEW — Online / Last seen presence
-    val isOtherUserOnline : Boolean      = false,
-    val otherUserLastSeen : Long         = 0L
+    // Online / Last seen presence
+    val isOtherUserOnline : Boolean = false,
+    val otherUserLastSeen : Long    = 0L
 )
 
 @HiltViewModel
 class MessagingViewModel @Inject constructor(
-    private val messagingRepository   : MessagingRepository,
+    private val messagingRepository     : MessagingRepository,
+    private val notificationRepository  : NotificationRepository,   // ✦ NEW injection
     private val firebaseRealtimeListener: FirebaseRealtimeListener,
-    private val firestore             : FirebaseFirestore
+    private val firestore               : FirebaseFirestore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MessagingUiState())
     val uiState: StateFlow<MessagingUiState> = _uiState.asStateFlow()
 
-    private var currentUserId : String = ""
-    private var currentChatId : String = ""
-    private var messageJob    : Job?   = null
-    private var convoJob      : Job?   = null
-    private var presenceJob   : Job?   = null  // ✦ NEW
+    private var currentUserId  : String = ""
+    private var currentUserName: String = ""   // ✦ NEW — needed for notification title
+    private var currentUserRole: String = ""   // ✦ NEW — needed for targetRole in notification
+    private var currentChatId  : String = ""
+    private var messageJob     : Job?   = null
+    private var convoJob       : Job?   = null
+    private var presenceJob    : Job?   = null
 
-    fun initUserId(userId: String) {
-        currentUserId = userId
-        // ✦ NEW — Apni presence online set karo
+    // ─────────────────────────────────────────────────────────────────────────
+    // initUserId
+    //
+    // Call this on ChatScreen launch. Sets the current user's ID and marks
+    // them as online in Realtime Database for presence tracking.
+    // ✦ UPDATED — now also accepts name and role for notification sending
+    // ─────────────────────────────────────────────────────────────────────────
+    fun initUserId(
+        userId  : String,
+        userName: String = "",   // ✦ NEW — shown in notification title "New Message from X"
+        userRole: String = ""    // ✦ NEW — used as targetRole in Firestore notification
+    ) {
+        currentUserId   = userId
+        currentUserName = userName
+        currentUserRole = userRole
+        // Mark this user as online in Realtime Database
         firebaseRealtimeListener.updateMyPresence(userId, isOnline = true)
     }
 
-    // ✦ NEW — App background/close hone pe call karo (MainActivity ya ChatScreen onStop mein)
+    // ─────────────────────────────────────────────────────────────────────────
+    // setOffline — call from MainActivity/ChatScreen onStop
+    // ─────────────────────────────────────────────────────────────────────────
     fun setOffline() {
         if (currentUserId.isNotEmpty()) {
             firebaseRealtimeListener.updateMyPresence(currentUserId, isOnline = false)
         }
     }
 
-    // ✦ NEW — Other user ka profile Firestore se fetch karo
+    // ─────────────────────────────────────────────────────────────────────────
+    // loadOtherUserProfile
+    //
+    // Fetches the other user's Firestore profile for the chat header
+    // (profile picture, role badge, etc.)
+    // ─────────────────────────────────────────────────────────────────────────
     fun loadOtherUserProfile(otherUserId: String) {
         if (otherUserId.isEmpty()) return
         viewModelScope.launch {
             try {
-                val doc = firestore.collection("users").document(otherUserId).get().await()
+                val doc  = firestore.collection("users").document(otherUserId).get().await()
                 val user = doc.toObject(User::class.java)
                 _uiState.update { it.copy(otherUserProfile = user) }
             } catch (e: Exception) {
-                // Profile load fail hone pe silently ignore karo — naam already ChatScreen mein hai
+                // Profile load failure is non-critical — name is already shown in header
             }
         }
     }
 
-    // ✦ NEW — Other user ki real-time presence listen karo
+    // ─────────────────────────────────────────────────────────────────────────
+    // listenToOtherUserPresence — real-time online/offline status
+    // ─────────────────────────────────────────────────────────────────────────
     private fun listenToOtherUserPresence(otherUserId: String) {
         presenceJob?.cancel()
         presenceJob = viewModelScope.launch {
@@ -102,6 +141,9 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // loadConversations — real-time conversations list with unread badge count
+    // ─────────────────────────────────────────────────────────────────────────
     fun loadConversations(userId: String) {
         if (userId.isEmpty()) return
         currentUserId = userId
@@ -112,6 +154,7 @@ class MessagingViewModel @Inject constructor(
                 when (result) {
                     is Resource.Success -> {
                         val convos = result.data ?: emptyList()
+                        // Count conversations where this user has unread messages
                         val unreadConversationCount = convos.count { convo ->
                             val perUserUnread = (convo["unreadCount_$userId"] as? Long)?.toInt() ?: 0
                             perUserUnread > 0
@@ -133,16 +176,22 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // loadChat — called when opening a specific chat
+    // Starts message listener + loads other user profile + presence
+    // ─────────────────────────────────────────────────────────────────────────
     fun loadChat(otherUserId: String, propertyId: String = "") {
         if (currentUserId.isEmpty() || otherUserId.isEmpty()) return
         val chatId = messagingRepository.generateChatId(currentUserId, otherUserId)
         currentChatId = chatId
         listenToMessages(chatId)
-        // ✦ NEW — Other user ka profile + presence load karo
         loadOtherUserProfile(otherUserId)
         listenToOtherUserPresence(otherUserId)
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // listenToMessages — real-time message stream for open chat
+    // ─────────────────────────────────────────────────────────────────────────
     private fun listenToMessages(chatId: String) {
         messageJob?.cancel()
         messageJob = viewModelScope.launch {
@@ -152,7 +201,8 @@ class MessagingViewModel @Inject constructor(
                     is Resource.Success -> {
                         val incoming = result.data ?: emptyList()
                         val selected = _uiState.value.selectedMessageIds
-                        val merged   = incoming.map { msg ->
+                        // Re-apply selection state on new messages
+                        val merged = incoming.map { msg ->
                             msg.copy(isSelected = msg.id in selected)
                         }
                         _uiState.update {
@@ -222,6 +272,9 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // deleteSelectedMessages — only sender can delete their own messages
+    // ─────────────────────────────────────────────────────────────────────────
     fun deleteSelectedMessages() {
         val chatId   = currentChatId
         val myMsgIds = _uiState.value.messages
@@ -248,7 +301,7 @@ class MessagingViewModel @Inject constructor(
                             .map    { it.copy(isSelected = false) }
                     )
                 }
-                is Resource.Error -> _uiState.update {
+                is Resource.Error   -> _uiState.update {
                     it.copy(isDeleting = false, errorMessage = result.message)
                 }
                 else -> {}
@@ -256,7 +309,7 @@ class MessagingViewModel @Inject constructor(
         }
     }
 
-    // ── Full Chat Delete ───────────────────────────────────────────────────────
+    // ── Full Chat Delete ──────────────────────────────────────────────────────
 
     fun deleteEntireChat(otherUserId: String) {
         val chatId = if (currentChatId.isNotEmpty()) currentChatId
@@ -270,7 +323,10 @@ class MessagingViewModel @Inject constructor(
                 _uiState.update { it.copy(isChatDeleting = false, chatDeleteSuccess = true) }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isChatDeleting = false, errorMessage = e.message ?: "Chat could not be deleted")
+                    it.copy(
+                        isChatDeleting = false,
+                        errorMessage   = e.message ?: "Chat could not be deleted"
+                    )
                 }
             }
         }
@@ -290,19 +346,18 @@ class MessagingViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(errorMessage = "Could not delete: ${e.message}")
-                }
+                _uiState.update { it.copy(errorMessage = "Could not delete: ${e.message}") }
             }
         }
     }
 
-    // ── Mark as Read ─────────────────────────────────────────────────────────
+    // ── Mark as Read ──────────────────────────────────────────────────────────
 
     fun markAsRead(chatId: String, userId: String) {
         viewModelScope.launch {
             messagingRepository.markMessagesAsRead(chatId, userId)
 
+            // Update local unread counter so badge clears immediately
             val updatedConvos = _uiState.value.conversations.map { convo ->
                 val cid = (convo["conversationId"] as? String)
                     ?: (convo["id"] as? String) ?: ""
@@ -311,21 +366,39 @@ class MessagingViewModel @Inject constructor(
                 else
                     convo
             }
-
             val newUnread = updatedConvos.count { convo ->
                 ((convo["unreadCount_$userId"] as? Long)?.toInt() ?: 0) > 0
             }
-
             _uiState.update { it.copy(conversations = updatedConvos, unreadCount = newUnread) }
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // sendMessage
+    //
+    // ✦ FIX — Message notification was missing.
+    //
+    // Before this fix:
+    //   sendMessage() saved the message to Firestore but never called
+    //   NotificationRepository. So the receiver never got a NEW_MESSAGE
+    //   notification in their notifications list.
+    //
+    // After this fix:
+    //   On successful message save → call sendNewMessageNotification() for
+    //   the receiver. The notification appears in their NotificationsScreen
+    //   under "New Message from <senderName>".
+    //
+    // receiverRole is needed by NotificationRepository to set targetRole
+    // correctly. It is passed in from ChatScreen where both users' roles
+    // are known. Defaults to "tenant" if not provided.
+    // ─────────────────────────────────────────────────────────────────────────
     fun sendMessage(
-        receiverId : String,
-        content    : String,
-        propertyId : String  = "",
-        messageType: String  = Message.TYPE_TEXT,
-        mediaUrl   : String? = null
+        receiverId  : String,
+        content     : String,
+        propertyId  : String  = "",
+        messageType : String  = Message.TYPE_TEXT,
+        mediaUrl    : String? = null,
+        receiverRole: String  = "tenant"    // ✦ NEW — receiver's role for notification targetRole
     ) {
         if (content.isBlank() && mediaUrl == null) return
         if (currentUserId.isEmpty()) {
@@ -335,6 +408,7 @@ class MessagingViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(sendSuccess = false) }
+
             val chatId = messagingRepository.generateChatId(currentUserId, receiverId)
             messagingRepository.createOrGetConversation(currentUserId, receiverId)
 
@@ -348,12 +422,41 @@ class MessagingViewModel @Inject constructor(
             )
 
             when (result) {
-                is Resource.Success -> _uiState.update { it.copy(sendSuccess = true) }
-                is Resource.Error   -> _uiState.update { it.copy(errorMessage = result.message) }
+                is Resource.Success -> {
+                    _uiState.update { it.copy(sendSuccess = true) }
+
+                    // ✦ FIX — Send in-app notification to the message receiver.
+                    // This saves a NEW_MESSAGE notification document in Firestore
+                    // under the receiver's notifications collection so it appears
+                    // in their NotificationsScreen with the sender's name + preview.
+                    //
+                    // messagePreview: show first 60 chars of content so notification
+                    // body is not too long. For media messages use a placeholder.
+                    val senderDisplayName = currentUserName.ifEmpty { "Someone" }
+                    val messagePreview    = when {
+                        mediaUrl != null  -> "📎 Sent an attachment"
+                        content.length > 60 -> content.take(60) + "..."
+                        else              -> content
+                    }
+
+                    notificationRepository.sendNewMessageNotification(
+                        recipientId    = receiverId,
+                        senderName     = senderDisplayName,
+                        messagePreview = messagePreview,
+                        conversationId = chatId,
+                        recipientRole  = receiverRole
+                    )
+                    // Note: notification send failure is intentionally ignored here —
+                    // message was already saved successfully. A failed notification
+                    // should not block or error the sender's UI.
+                }
+                is Resource.Error -> _uiState.update { it.copy(errorMessage = result.message) }
                 else -> {}
             }
         }
     }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
 
     fun clearError()             { _uiState.update { it.copy(errorMessage = null) } }
     fun resetSendSuccess()       { _uiState.update { it.copy(sendSuccess = false) } }
@@ -364,6 +467,6 @@ class MessagingViewModel @Inject constructor(
         super.onCleared()
         messageJob?.cancel()
         convoJob?.cancel()
-        presenceJob?.cancel()  // ✦ NEW
+        presenceJob?.cancel()
     }
 }

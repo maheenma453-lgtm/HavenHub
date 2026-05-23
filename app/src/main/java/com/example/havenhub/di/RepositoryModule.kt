@@ -14,10 +14,11 @@ import com.example.havenhub.repository.NotificationRepository
 import com.example.havenhub.repository.PaymentRepository
 import com.example.havenhub.repository.PropertyRepository
 import com.example.havenhub.repository.ReviewRepository
+import com.example.havenhub.repository.SeasonalAlertRepository   // ✦ NEW
 import com.example.havenhub.repository.SettingsRepository
 import com.example.havenhub.utils.PreferenceManager
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase       // ✦ NEW — Realtime DB
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.Module
@@ -34,9 +35,9 @@ object RepositoryModule {
     // ══════════════════════════════════════════════════════════════════════════
     // FIREBASE CORE
     //
-    // FirebaseAuth, FirebaseFirestore, FirebaseMessaging are provided here.
-    // FirebaseDatabase (Realtime DB) is provided in FirebaseModule — Hilt
-    // merges both modules automatically so it is injectable everywhere.
+    // FirebaseAuth, FirebaseFirestore, FirebaseMessaging provided here.
+    // FirebaseDatabase (Realtime DB) is provided in FirebaseModule.
+    // Hilt merges both modules automatically so all are injectable everywhere.
     // ══════════════════════════════════════════════════════════════════════════
 
     @Provides
@@ -76,15 +77,13 @@ object RepositoryModule {
         firestore: FirebaseFirestore
     ): FirebaseDataManager = FirebaseDataManager(firestore)
 
-    // ✦ UPDATED — realtimeDatabase parameter added
-    // FirebaseRealtimeListener now needs both Firestore (for messages,
-    // notifications, bookings) and Realtime Database (for user presence).
+    // FirebaseRealtimeListener needs both Firestore and Realtime DB.
     // Hilt injects FirebaseDatabase from FirebaseModule automatically.
     @Provides
     @Singleton
     fun provideFirebaseRealtimeListener(
         firestore       : FirebaseFirestore,
-        realtimeDatabase: FirebaseDatabase          // ✦ NEW — from FirebaseModule
+        realtimeDatabase: FirebaseDatabase
     ): FirebaseRealtimeListener = FirebaseRealtimeListener(firestore, realtimeDatabase)
 
     @Provides
@@ -106,9 +105,6 @@ object RepositoryModule {
 
     // ══════════════════════════════════════════════════════════════════════════
     // REPOSITORIES
-    //
-    // Each repository is constructed manually (not with @Inject constructor)
-    // so that Hilt can inject the exact instances provided above.
     // ══════════════════════════════════════════════════════════════════════════
 
     @Provides
@@ -188,4 +184,15 @@ object RepositoryModule {
         preferenceManager: PreferenceManager,
         firestore        : FirebaseFirestore
     ): SettingsRepository = SettingsRepository(preferenceManager, firestore)
+
+    // ✦ NEW ── Seasonal Alert Repository ─────────────────────────────────────
+    // Only needs Firestore — reads/writes from seasonal_alerts collection.
+    // No NotificationRepository dependency needed here because seasonal alerts
+    // are fetched directly from Firestore by the UI layer, not pushed as
+    // individual notifications to each user.
+    @Provides
+    @Singleton
+    fun provideSeasonalAlertRepository(
+        firestore: FirebaseFirestore
+    ): SeasonalAlertRepository = SeasonalAlertRepository(firestore)
 }
