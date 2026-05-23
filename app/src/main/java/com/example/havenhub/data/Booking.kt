@@ -8,19 +8,23 @@ import com.google.firebase.firestore.ServerTimestamp
 // ── Booking Status ────────────────────────────────────────────
 enum class BookingStatus {
     PENDING,
-    PENDING_APPROVAL,  // Payment ho gayi, landlord ne approve nahi kiya abhi
+    PENDING_APPROVAL,
     CONFIRMED,
+    DEPOSIT_PAID,           // ✅ ADD: Pre-booking deposit paid
     CHECKED_IN,
+    AWAITING_FINAL_PAYMENT, // ✅ ADD: Pre-booking final payment pending
     COMPLETED,
     CANCELLED;
 
     fun displayName(): String = when (this) {
-        PENDING          -> "Pending"
-        PENDING_APPROVAL -> "Awaiting Approval"
-        CONFIRMED        -> "Confirmed"
-        CHECKED_IN       -> "Checked In"
-        COMPLETED        -> "Completed"
-        CANCELLED        -> "Cancelled"
+        PENDING                -> "Pending"
+        PENDING_APPROVAL       -> "Awaiting Approval"
+        CONFIRMED              -> "Confirmed"
+        DEPOSIT_PAID           -> "Deposit Paid"          // ✅ ADD
+        CHECKED_IN             -> "Checked In"
+        AWAITING_FINAL_PAYMENT -> "Final Payment Pending" // ✅ ADD
+        COMPLETED              -> "Completed"
+        CANCELLED              -> "Cancelled"
     }
 }
 
@@ -30,7 +34,7 @@ data class Booking(
     val bookingId          : String     = "",
     val tenantId           : String     = "",
     val tenantName         : String     = "",
-    val tenantEmail        : String     = "", // ✅ FIX: Tenant ki actual email store karne ke liye
+    val tenantEmail        : String     = "",
     val landlordId         : String     = "",
     val landlordName       : String     = "",
     val propertyId         : String     = "",
@@ -46,6 +50,9 @@ data class Booking(
     val serviceFee         : Double     = 0.0,
     val securityDeposit    : Double     = 0.0,
     val totalAmount        : Double     = 0.0,
+    val depositAmount      : Double     = 0.0,  // ✅ ADD
+    val remainingAmount    : Double     = 0.0,  // ✅ ADD
+    val isPreBooking       : Boolean    = false, // ✅ ADD
     val status             : String     = BookingStatus.PENDING.name,
     val hasReview          : Boolean    = false,
     val paymentId          : String     = "",
@@ -58,10 +65,7 @@ data class Booking(
     val createdAt          : Timestamp? = null,
     val updatedAt          : Timestamp? = null
 ) {
-    // Firestore empty constructor
     constructor() : this(bookingId = "")
-
-    // ── Computed getters (@Exclude = Firestore save nahi karega) ──
 
     @get:Exclude
     val bookingStatus: BookingStatus
@@ -83,8 +87,14 @@ data class Booking(
     val formattedTotal: String
         get() = "PKR ${"%,.0f".format(totalAmount)}"
 
-    // SRS BR-3: Tenant sirf PENDING booking cancel kar sakta hai
-    // PENDING_APPROVAL aur CONFIRMED booking cancel nahi ho sakti
+    @get:Exclude
+    val formattedDeposit: String  // ✅ ADD
+        get() = "PKR ${"%,.0f".format(depositAmount)}"
+
+    @get:Exclude
+    val formattedRemaining: String  // ✅ ADD
+        get() = "PKR ${"%,.0f".format(remainingAmount)}"
+
     @get:Exclude
     val isCancellable: Boolean
         get() = bookingStatus == BookingStatus.PENDING

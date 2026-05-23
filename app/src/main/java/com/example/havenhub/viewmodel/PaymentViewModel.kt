@@ -25,7 +25,8 @@ data class PaymentUiState(
     val selectedMethod : PaymentMethod? = null,
     val defaultMethod  : PaymentMethod? = null,
     val errorMessage   : String?        = null,
-    val actionSuccess  : Boolean        = false
+    val actionSuccess  : Boolean        = false,
+    val isPreBooking   : Boolean        = false  // ✅ ADD
 )
 
 @HiltViewModel
@@ -37,7 +38,6 @@ class PaymentViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PaymentUiState())
     val uiState: StateFlow<PaymentUiState> = _uiState.asStateFlow()
 
-    // ✅ FIX Bug 3: Ab screen se userId pass karke call karo
     fun loadPaymentHistory(userId: String) {
         if (userId.isBlank()) {
             _uiState.update { it.copy(errorMessage = "User ID missing") }
@@ -63,15 +63,17 @@ class PaymentViewModel @Inject constructor(
         }
     }
 
-    // ✅ FIX Bug 1: amount String le raha hai ab — Double nahi
+    // ✅ ADD: isFinalPayment aur isPreBookingDirect parameters add kiye
     fun processPayment(
-        bookingId : String,
-        payerId   : String,
-        payeeId   : String,
-        payerName : String,
-        payeeName : String,
-        amount    : String,   // ← String
-        method    : PaymentMethod
+        bookingId          : String,
+        payerId            : String,
+        payeeId            : String,
+        payerName          : String,
+        payeeName          : String,
+        amount             : String,
+        method             : PaymentMethod,
+        isFinalPayment     : Boolean = false,  // ✅ ADD
+        isPreBookingDirect : Boolean = false   // ✅ ADD
     ) {
         val amountDouble = amount.toDoubleOrNull() ?: 0.0
         if (amountDouble <= 0.0) {
@@ -81,15 +83,28 @@ class PaymentViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
             try {
+                val bookingResult  = bookingRepository.getBookingById(bookingId)
+                val currentBooking = if (bookingResult is Resource.Success) bookingResult.data else null
+
+                // ✅ ADD: Pre-booking check
+                val isPreBooking = when {
+                    isFinalPayment -> false
+                    currentBooking?.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> false
+                    isPreBookingDirect -> true
+                    else -> {
+                        currentBooking?.isPreBooking == true ||
+                                (currentBooking?.depositAmount ?: 0.0) > 0.0
+                    }
+                }
+
                 val payment = Payment(
                     bookingId     = bookingId,
                     payerId       = payerId,
                     payerName     = payerName,
                     payeeId       = payeeId,
                     payeeName     = payeeName,
-                    amount        = amount,   // ← String as-is
+                    amount        = amount,
                     paymentMethod = method.name,
                     status        = PaymentStatus.PENDING.name,
                     type          = PaymentType.BOOKING.name
@@ -97,10 +112,22 @@ class PaymentViewModel @Inject constructor(
 
                 when (val result = paymentRepository.savePayment(payment)) {
                     is Resource.Success -> {
-                        bookingRepository.updateBookingStatus(
-                            bookingId,
-                            BookingStatus.CONFIRMED
-                        )
+
+                        // ✅ ADD: Pre-booking flow logic
+                        val newBookingStatus = when {
+                            isFinalPayment ||
+                                    currentBooking?.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> {
+                                BookingStatus.PENDING_APPROVAL
+                            }
+                            isPreBooking -> {
+                                BookingStatus.DEPOSIT_PAID
+                            }
+                            else -> {
+                                BookingStatus.PENDING_APPROVAL
+                            }
+                        }
+
+                        bookingRepository.updateBookingStatus(bookingId, newBookingStatus)
 
                         bookingRepository.updatePaymentStatusOnBooking(
                             bookingId     = bookingId,
@@ -118,7 +145,8 @@ class PaymentViewModel @Inject constructor(
                             it.copy(
                                 isLoading     = false,
                                 payment       = if (updated is Resource.Success) updated.data else null,
-                                actionSuccess = true
+                                actionSuccess = true,
+                                isPreBooking  = isPreBooking  // ✅ ADD
                             )
                         }
                     }
@@ -136,16 +164,29 @@ class PaymentViewModel @Inject constructor(
         }
     }
 
+    // ✅ ADD: isPreBooking handling in verifyPaymentStatus
     fun verifyPaymentStatus(bookingId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                when (val result = paymentRepository.getPaymentByBooking(bookingId)) {
+                val paymentResult = paymentRepository.getPaymentByBooking(bookingId)
+                val bookingResult = bookingRepository.getBookingById(bookingId)
+                val booking       = if (bookingResult is Resource.Success) bookingResult.data else null
+
+                val isPreBooking = when {
+                    booking?.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> false
+                    booking?.bookingStatus == BookingStatus.PENDING_APPROVAL       -> false
+                    booking?.bookingStatus == BookingStatus.CONFIRMED               -> false
+                    else -> booking?.isPreBooking == true ||
+                            (booking?.depositAmount ?: 0.0) > 0.0
+                }
+
+                when (paymentResult) {
                     is Resource.Success -> _uiState.update {
-                        it.copy(isLoading = false, payment = result.data)
+                        it.copy(isLoading = false, payment = paymentResult.data, isPreBooking = isPreBooking)
                     }
                     is Resource.Error -> _uiState.update {
-                        it.copy(isLoading = false, errorMessage = result.message)
+                        it.copy(isLoading = false, errorMessage = paymentResult.message)
                     }
                     Resource.Loading -> Unit
                 }

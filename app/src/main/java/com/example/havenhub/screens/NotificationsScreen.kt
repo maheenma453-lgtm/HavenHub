@@ -40,19 +40,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NotificationsScreen.kt
+// NotificationsScreen.kt  —  FIXED
 //
-// ✦ FIX — NEW_MESSAGE notification click:
-//   referenceId = conversationId = "uid1_uid2" (sorted UIDs joined by "_")
-//   generateChatId sorts [userId1, userId2] and joins with "_"
-//
-//   Fix steps:
-//   1. Split conversationId by "_" to get both UIDs
-//   2. Remove currentUserId to find otherUserId
-//   3. Fetch otherUser's name from Firestore ("name" / "fullName" field)
-//   4. Navigate to Screen.Chat with userId=otherUserId, ownerName=fetchedName
-//
-//   This opens the correct ChatScreen showing that conversation.
+// Changes from original:
+//   1. PAYMENT_RECEIVED / PAYMENT_FAILED / REFUND_ISSUED  → navigate to MyBookings
+//   2. USER_VERIFIED / USER_REJECTED / USER_VERIFICATION_PENDING → navigate to Profile
+//   3. PROPERTY_PENDING  → admin: VerifyProperties  |  landlord: MyProperties
+//   4. SEASONAL_ALERT    → no navigation needed (info only), shows Snackbar
+//   5. GENERAL / unknown → fallback: NotificationDetail screen
+//   6. NotificationDetailScreen NEW_MESSAGE bug is fixed in the other file
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,7 +72,7 @@ fun NotificationsScreen(
     var dialogNote       by remember { mutableStateOf("") }
     var dialogIsApproved by remember { mutableStateOf(true) }
 
-    // ✦ NEW — For async sender-name fetch before navigating to chat
+    // For async sender-name fetch before navigating to chat
     var isNavigatingToChat by remember { mutableStateOf(false) }
     val coroutineScope     = rememberCoroutineScope()
 
@@ -185,7 +181,7 @@ fun NotificationsScreen(
         )
     }
 
-    // ✦ Loading overlay while fetching sender name before chat navigation
+    // Loading overlay while fetching sender name before chat navigation
     if (isNavigatingToChat) {
         Box(
             modifier = Modifier
@@ -369,6 +365,7 @@ fun NotificationsScreen(
 
                                 when (enumType) {
 
+                                    // ── Property Approval / Rejection ─────────────────────
                                     NotificationType.PROPERTY_APPROVED -> {
                                         dialogTitle      = "Property Approved"
                                         dialogNote       = notification.adminNote.ifEmpty { notification.body }
@@ -383,52 +380,77 @@ fun NotificationsScreen(
                                         showNoteDialog   = true
                                     }
 
+                                    // ── FIX: Property Pending ──────────────────────────────
+                                    // Admin: VerifyProperties screen pe jao
+                                    // Landlord: MyProperties screen pe jao
+                                    NotificationType.PROPERTY_PENDING -> {
+                                        if (isAdmin) {
+                                            if (notification.referenceId.isNotEmpty()) {
+                                                navController.navigate(
+                                                    Screen.PropertyVerificationDetail.createRoute(
+                                                        notification.referenceId
+                                                    )
+                                                )
+                                            } else {
+                                                navController.navigate(Screen.VerifyProperties.route)
+                                            }
+                                        } else {
+                                            navController.navigate(Screen.MyProperties.route)
+                                        }
+                                    }
+
+                                    // ── Bookings ───────────────────────────────────────────
                                     NotificationType.BOOKING_CONFIRMED,
                                     NotificationType.BOOKING_CANCELLED,
                                     NotificationType.BOOKING_REMINDER,
                                     NotificationType.BOOKING_COMPLETED,
                                     NotificationType.BOOKING_REQUESTED -> {
                                         if (notification.referenceId.isNotEmpty()) {
-                                            if (isAdmin) navController.navigate(Screen.ManageBookings.route)
-                                            else navController.navigate(
-                                                Screen.BookingDetails.createRoute(notification.referenceId)
-                                            )
+                                            if (isAdmin) {
+                                                navController.navigate(Screen.ManageBookings.route)
+                                            } else {
+                                                navController.navigate(
+                                                    Screen.BookingDetails.createRoute(notification.referenceId)
+                                                )
+                                            }
                                         }
                                     }
 
-                                    // ══════════════════════════════════════════
-                                    // ✦ FIX — NEW_MESSAGE notification click
-                                    //
-                                    // Problem tha:
-                                    //   notification.referenceId = conversationId
-                                    //   e.g. "abc123_xyz789"  (sorted UIDs joined by "_")
-                                    //   Screen.Chat.createRoute() ko userId chahiye tha
-                                    //   isliye "Owner" show ho raha tha aur wrong screen
-                                    //
-                                    // Fix:
-                                    //   1. conversationId ko split karo "_" se
-                                    //   2. currentUserId hata ke otherUserId nikalo
-                                    //   3. Firestore se us user ka name fetch karo
-                                    //   4. Screen.Chat pe navigate karo correct params ke saath
-                                    //
-                                    // Note: generateChatId() sorted UIDs ko "_" se join karta hai.
-                                    // UIDs mein khud underscore nahi hota (Firebase UID format),
-                                    // isliye simple split("_") safe hai.
-                                    // ══════════════════════════════════════════
+                                    // ── FIX: Payments ──────────────────────────────────────
+                                    // referenceId = bookingId hai
+                                    // Tenant/Landlord: BookingDetails pe jao
+                                    // Admin: ManageBookings pe jao
+                                    NotificationType.PAYMENT_RECEIVED,
+                                    NotificationType.PAYMENT_FAILED,
+                                    NotificationType.REFUND_ISSUED -> {
+                                        if (notification.referenceId.isNotEmpty()) {
+                                            if (isAdmin) {
+                                                navController.navigate(Screen.ManageBookings.route)
+                                            } else {
+                                                navController.navigate(
+                                                    Screen.BookingDetails.createRoute(notification.referenceId)
+                                                )
+                                            }
+                                        } else {
+                                            // referenceId nahi hai — fallback MyBookings
+                                            navController.navigate(Screen.MyBookings.createRoute())
+                                        }
+                                    }
+
+                                    // ── NEW_MESSAGE ────────────────────────────────────────
+                                    // referenceId = conversationId = "uid1_uid2" (sorted UIDs)
+                                    // Fix: otherUserId nikalo → Firestore se naam fetch karo
+                                    //      → ChatScreen pe navigate karo
                                     NotificationType.NEW_MESSAGE -> {
                                         val conversationId = notification.referenceId
                                         if (conversationId.isNotEmpty() && currentUserId.isNotEmpty()) {
-
-                                            // Step 1: Extract otherUserId from conversationId
-                                            // conversationId = sorted(uid1, uid2).joinToString("_")
-                                            val parts = conversationId.split("_")
+                                            val parts       = conversationId.split("_")
                                             val otherUserId = parts.firstOrNull { it != currentUserId } ?: ""
 
                                             if (otherUserId.isNotEmpty()) {
                                                 coroutineScope.launch {
                                                     isNavigatingToChat = true
                                                     try {
-                                                        // Step 2: Fetch other user's display name
                                                         val firestore = FirebaseFirestore.getInstance()
                                                         val doc = firestore
                                                             .collection("users")
@@ -442,7 +464,6 @@ fun NotificationsScreen(
                                                                 ?: doc.getString("displayName")
                                                                 ?: "User"
                                                         } else {
-                                                            // Fallback: query by userId field
                                                             val q = firestore
                                                                 .collection("users")
                                                                 .whereEqualTo("userId", otherUserId)
@@ -456,7 +477,6 @@ fun NotificationsScreen(
                                                             } ?: "User"
                                                         }
 
-                                                        // Step 3: Navigate to ChatScreen
                                                         navController.navigate(
                                                             Screen.Chat.createRoute(
                                                                 userId    = otherUserId,
@@ -464,7 +484,6 @@ fun NotificationsScreen(
                                                             )
                                                         )
                                                     } catch (e: Exception) {
-                                                        // Fallback: navigate with just userId, no name
                                                         navController.navigate(
                                                             Screen.Chat.createRoute(
                                                                 userId    = otherUserId,
@@ -476,17 +495,16 @@ fun NotificationsScreen(
                                                     }
                                                 }
                                             } else {
-                                                // conversationId se userId nahi mila —
-                                                // fallback: MessageList screen pe jao
                                                 navController.navigate(Screen.MessageList.route)
                                             }
                                         }
                                     }
-                                    // ══════════════════════════════════════════
 
+                                    // ── Reviews ────────────────────────────────────────────
                                     NotificationType.NEW_REVIEW -> {
-                                        if (isAdmin) navController.navigate(Screen.GlobalReviews.route)
-                                        else if (notification.referenceId.isNotEmpty()) {
+                                        if (isAdmin) {
+                                            navController.navigate(Screen.GlobalReviews.route)
+                                        } else if (notification.referenceId.isNotEmpty()) {
                                             navController.navigate(
                                                 Screen.ViewReviews.createRoute(notification.referenceId)
                                             )
@@ -501,7 +519,60 @@ fun NotificationsScreen(
                                         }
                                     }
 
-                                    else -> { /* No navigation */ }
+                                    // ── FIX: User Verification ─────────────────────────────
+                                    // USER_VERIFIED / USER_REJECTED → Profile screen
+                                    // USER_VERIFICATION_PENDING →
+                                    //   Admin: UserVerificationDetail ya VerifyUsers
+                                    //   User:  Profile screen (apna status dekhne)
+                                    NotificationType.USER_VERIFIED,
+                                    NotificationType.USER_REJECTED,
+                                    NotificationType.ACCOUNT_VERIFIED -> {
+                                        navController.navigate(Screen.Profile.route)
+                                    }
+
+                                    NotificationType.USER_VERIFICATION_PENDING -> {
+                                        if (isAdmin) {
+                                            if (notification.referenceId.isNotEmpty()) {
+                                                navController.navigate(
+                                                    Screen.UserVerificationDetail.createRoute(
+                                                        notification.referenceId
+                                                    )
+                                                )
+                                            } else {
+                                                navController.navigate(Screen.VerifyUsers.route)
+                                            }
+                                        } else {
+                                            navController.navigate(Screen.Profile.route)
+                                        }
+                                    }
+
+                                    // ── FIX: Account Suspended ─────────────────────────────
+                                    NotificationType.ACCOUNT_SUSPENDED -> {
+                                        // Kuch navigate nahi karna — info only
+                                        // Snackbar already show hoga agar errorMessage aaya
+                                    }
+
+                                    // ── FIX: Seasonal Alert ────────────────────────────────
+                                    // Sirf informational — koi navigation nahi
+                                    // Admin manage karna chahey to ManageSeasonalAlerts
+                                    NotificationType.SEASONAL_ALERT -> {
+                                        if (isAdmin) {
+                                            navController.navigate(Screen.ManageSeasonalAlerts.route)
+                                        }
+                                        // Non-admin ke liye: koi navigation nahi, bas read mark ho gaya
+                                    }
+
+                                    // ── FIX: GENERAL / fallback ────────────────────────────
+                                    // NotificationDetail screen pe jao full body dekhne ke liye
+                                    NotificationType.GENERAL -> {
+                                        if (notification.notificationId.isNotEmpty()) {
+                                            navController.navigate(
+                                                Screen.NotificationDetail.createRoute(
+                                                    notification.notificationId
+                                                )
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         )
@@ -831,6 +902,9 @@ fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.USER_VERIFICATION_PENDING -> Icons.Default.PersonSearch
     NotificationType.NEW_REVIEW                -> Icons.Default.Star
     NotificationType.REVIEW_REPLY              -> Icons.Default.Reply
+    NotificationType.SEASONAL_ALERT            -> Icons.Default.Celebration
+    NotificationType.ACCOUNT_VERIFIED          -> Icons.Default.VerifiedUser
+    NotificationType.ACCOUNT_SUSPENDED         -> Icons.Default.Block
     else                                       -> Icons.Default.Notifications
 }
 
@@ -851,5 +925,8 @@ fun screenNotificationColor(type: NotificationType): Color = when (type) {
     NotificationType.USER_REJECTED -> Color(0xFFBA1A1A)
     NotificationType.NEW_REVIEW -> Color(0xFF9B7D2E)
     NotificationType.REVIEW_REPLY -> Color(0xFF2E4A9E)
+    NotificationType.SEASONAL_ALERT -> Color(0xFF9B7D2E)
+    NotificationType.ACCOUNT_VERIFIED -> Color(0xFF2ECC71)
+    NotificationType.ACCOUNT_SUSPENDED -> Color(0xFFBA1A1A)
     else -> Color(0xFF9B7D2E)
 }

@@ -31,6 +31,7 @@ import java.util.*
 // Semantic colors — intentional
 private val PSGreen = Color(0xFF22C55E)
 private val PSAmber = Color(0xFFD97706)
+private val PSBlue  = Color(0xFF3B82F6) // PULL CHANGE: New color for deposit-paid state
 
 private fun formatPayDate(date: Date?): String {
     if (date == null) return "—"
@@ -51,6 +52,12 @@ fun PaymentSuccessScreen(
         viewModel.verifyPaymentStatus(bookingId)
     }
 
+    // PULL CHANGE: Track isPreBooking to show different UI for deposit vs normal payment
+    var isPreBooking by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.isPreBooking) {
+        isPreBooking = uiState.isPreBooking
+    }
+
     val scale = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         scale.animateTo(
@@ -62,14 +69,13 @@ fun PaymentSuccessScreen(
         )
     }
 
-    val primary      = MaterialTheme.colorScheme.primary
-    val tertiary     = MaterialTheme.colorScheme.tertiary
-    val onPrimary    = MaterialTheme.colorScheme.onPrimary
-    val surface      = MaterialTheme.colorScheme.surface
-    val onSurface    = MaterialTheme.colorScheme.onSurface
-    val background   = MaterialTheme.colorScheme.background
+    val primary          = MaterialTheme.colorScheme.primary
+    val tertiary         = MaterialTheme.colorScheme.tertiary
+    val surface          = MaterialTheme.colorScheme.surface
+    val onSurface        = MaterialTheme.colorScheme.onSurface
+    val background       = MaterialTheme.colorScheme.background
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-    val error        = MaterialTheme.colorScheme.error
+    val error            = MaterialTheme.colorScheme.error
 
     Scaffold(containerColor = background) { padding ->
         Column(
@@ -103,10 +109,20 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            Text("Payment Successful!", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = onSurface)
-            Spacer(Modifier.height(6.dp))
+            // PULL CHANGE: Title changes based on whether it was a deposit or full payment
             Text(
-                "Payment receive ho gayi!\nLandlord ki approval ka intezaar karo.",
+                if (isPreBooking) "Deposit Paid!" else "Payment Successful!",
+                fontSize   = 24.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color      = onSurface
+            )
+            Spacer(Modifier.height(6.dp))
+            // PULL CHANGE: Subtitle changes based on payment type
+            Text(
+                if (isPreBooking)
+                    "Tumhara 20% deposit receive ho gaya!\nBaaki 80% arrival pe pay karna hoga."
+                else
+                    "Payment receive ho gayi!\nLandlord ki approval ka intezaar karo.",
                 fontSize   = 14.sp,
                 color      = onSurfaceVariant,
                 textAlign  = TextAlign.Center,
@@ -124,20 +140,40 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Awaiting Approval strip ───────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(PSAmber.copy(0.10f))
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(Icons.Default.HourglassEmpty, null, tint = PSAmber, modifier = Modifier.size(20.dp))
-                Column {
-                    Text("Awaiting Landlord Approval", fontWeight = FontWeight.Bold, color = PSAmber, fontSize = 13.sp)
-                    Text("Landlord approve kare ga tab booking confirmed hogi.", color = PSAmber.copy(0.75f), fontSize = 11.sp, lineHeight = 16.sp)
+            // PULL CHANGE: Status strip is different for preBooking vs normal payment
+            if (isPreBooking) {
+                // Deposit paid — show blue "Booking Secured" strip
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(PSBlue.copy(0.10f))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Default.AccountBalanceWallet, null, tint = PSBlue, modifier = Modifier.size(20.dp))
+                    Column {
+                        Text("Deposit Paid — Booking Secured", fontWeight = FontWeight.Bold, color = PSBlue, fontSize = 13.sp)
+                        Text("Remaining amount check-in pe pay karein.", color = PSBlue.copy(0.75f), fontSize = 11.sp, lineHeight = 16.sp)
+                    }
+                }
+            } else {
+                // Normal payment — show amber "Awaiting Approval" strip
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(PSAmber.copy(0.10f))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Default.HourglassEmpty, null, tint = PSAmber, modifier = Modifier.size(20.dp))
+                    Column {
+                        Text("Awaiting Landlord Approval", fontWeight = FontWeight.Bold, color = PSAmber, fontSize = 13.sp)
+                        Text("Landlord approve kare ga tab booking confirmed hogi.", color = PSAmber.copy(0.75f), fontSize = 11.sp, lineHeight = 16.sp)
+                    }
                 }
             }
 
@@ -150,7 +186,7 @@ fun PaymentSuccessScreen(
                 colors    = CardDefaults.cardColors(containerColor = surface),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Column(Modifier.padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(tertiary.copy(0.15f)),
@@ -169,14 +205,18 @@ fun PaymentSuccessScreen(
                     )
                     Spacer(Modifier.height(14.dp))
 
-                    PSDetailRow("Booking ID",      "#${bookingId.take(8).uppercase()}",          onSurface, onSurfaceVariant)
-                    PSDetailRow("Transaction ID",  uiState.payment?.gatewayTransactionId?.ifEmpty { "—" } ?: "—", onSurface, onSurfaceVariant)
-                    PSDetailRow("Date",            formatPayDate(uiState.payment?.createdAt?.toDate()), onSurface, onSurfaceVariant)
-                    PSDetailRow("Method",          uiState.payment?.paymentMethodEnum?.displayName() ?: "—", onSurface, onSurfaceVariant)
+                    PSDetailRow("Booking ID",     "#${bookingId.take(8).uppercase()}",                        onSurface, onSurfaceVariant)
+                    PSDetailRow("Transaction ID", uiState.payment?.gatewayTransactionId?.ifEmpty { "—" } ?: "—", onSurface, onSurfaceVariant)
+                    PSDetailRow("Date",           formatPayDate(uiState.payment?.createdAt?.toDate()),        onSurface, onSurfaceVariant)
+                    PSDetailRow("Method",         uiState.payment?.paymentMethodEnum?.displayName() ?: "—",  onSurface, onSurfaceVariant)
+                    // PULL CHANGE: Show payment type row only for pre-booking (deposit)
+                    if (isPreBooking) {
+                        PSDetailRow("Type", "Advance Deposit (20%)", onSurface, onSurfaceVariant)
+                    }
 
                     Spacer(Modifier.height(8.dp))
 
-                    // Payment status
+                    // Payment status — always green "Paid"
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("Payment", color = onSurfaceVariant, fontSize = 13.sp)
                         Box(Modifier.clip(RoundedCornerShape(20.dp)).background(PSGreen.copy(0.12f)).padding(horizontal = 14.dp, vertical = 5.dp)) {
@@ -189,13 +229,22 @@ fun PaymentSuccessScreen(
 
                     Spacer(Modifier.height(6.dp))
 
-                    // Booking status
+                    // PULL CHANGE: Booking status badge — blue for deposit, amber for awaiting approval
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("Booking", color = onSurfaceVariant, fontSize = 13.sp)
-                        Box(Modifier.clip(RoundedCornerShape(20.dp)).background(PSAmber.copy(0.12f)).padding(horizontal = 14.dp, vertical = 5.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(Icons.Default.HourglassEmpty, null, tint = PSAmber, modifier = Modifier.size(12.dp))
-                                Text("Awaiting Approval", color = PSAmber, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        if (isPreBooking) {
+                            Box(Modifier.clip(RoundedCornerShape(20.dp)).background(PSBlue.copy(0.12f)).padding(horizontal = 14.dp, vertical = 5.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Icon(Icons.Default.AccountBalanceWallet, null, tint = PSBlue, modifier = Modifier.size(12.dp))
+                                    Text("Deposit Paid", color = PSBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            Box(Modifier.clip(RoundedCornerShape(20.dp)).background(PSAmber.copy(0.12f)).padding(horizontal = 14.dp, vertical = 5.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Icon(Icons.Default.HourglassEmpty, null, tint = PSAmber, modifier = Modifier.size(12.dp))
+                                    Text("Awaiting Approval", color = PSAmber, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -204,10 +253,13 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // ── View Booking button ───────────────────────────────
+            // PULL CHANGE: Tab navigation is different:
+            // PreBooking deposit → tab=3 (Deposit Paid tab)
+            // Normal payment    → tab=1 (Awaiting Approval tab)
             Button(
                 onClick = {
-                    navController.navigate("my_bookings?tab=1") {
+                    val tab = if (isPreBooking) 3 else 1
+                    navController.navigate("my_bookings?tab=$tab") {
                         popUpTo("my_bookings?tab={tab}") { inclusive = true }
                         launchSingleTop = true
                     }
@@ -218,7 +270,12 @@ fun PaymentSuccessScreen(
             ) {
                 Icon(Icons.Default.BookmarkBorder, null, tint = tertiary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("View My Booking", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                // PULL CHANGE: Button text is also dynamic
+                Text(
+                    if (isPreBooking) "View Deposit Booking" else "View My Booking",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize   = 15.sp
+                )
             }
 
             Spacer(Modifier.height(12.dp))
@@ -252,18 +309,18 @@ fun PaymentSuccessScreen(
 @Composable
 private fun PSDetailRow(label: String, value: String, onSurface: Color, onSurfaceVariant: Color) {
     Row(
-        modifier              = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.Top
+        verticalAlignment = Alignment.Top
     ) {
         Text(label, color = onSurfaceVariant, fontSize = 13.sp)
         Text(
             value,
-            color      = onSurface,
-            fontSize   = 13.sp,
+            color = onSurface,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            textAlign  = TextAlign.End,
-            modifier   = Modifier.weight(1f).padding(start = 16.dp)
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f).padding(start = 16.dp)
         )
     }
 }

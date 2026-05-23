@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -50,15 +49,17 @@ fun SearchScreen(
     val uiState        by viewModel.uiState.collectAsState()
     val focusRequester  = remember { FocusRequester() }
     val focusManager    = LocalFocusManager.current
-    val isSearching     = uiState.searchQuery.isNotEmpty()
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
+    // FIX: isSearching only true when query is non-empty
+    val isSearching = uiState.searchQuery.isNotEmpty()
 
-    LaunchedEffect(Unit) {
-        viewModel.refreshSearch()
-    }
+    // FIX: showResults = true when EITHER a query is typed OR filters are active
+    // Old code only showed results when isSearching was true — so filter-only
+    // results (no text typed) were never displayed. This was the second bug.
+    val showResults = isSearching || uiState.hasActiveFilter
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit)  { viewModel.refreshSearch() }
 
     val primary          = MaterialTheme.colorScheme.primary
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
@@ -93,6 +94,7 @@ fun SearchScreen(
                             modifier   = Modifier.padding(start = 8.dp)
                         )
 
+                        // Active filter badge
                         if (uiState.hasActiveFilter) {
                             Spacer(Modifier.width(8.dp))
                             Surface(
@@ -100,7 +102,9 @@ fun SearchScreen(
                                 color = tertiary.copy(alpha = 0.9f)
                             ) {
                                 Row(
-                                    modifier          = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier          = Modifier.padding(
+                                        horizontal = 8.dp, vertical = 4.dp
+                                    ),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -111,8 +115,8 @@ fun SearchScreen(
                                     Spacer(Modifier.width(4.dp))
                                     Text(
                                         "Filtered",
-                                        color    = onPrimary,
-                                        fontSize = 11.sp,
+                                        color      = onPrimary,
+                                        fontSize   = 11.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Spacer(Modifier.width(4.dp))
@@ -128,6 +132,7 @@ fun SearchScreen(
                         }
                     }
 
+                    // Search bar
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -159,6 +164,7 @@ fun SearchScreen(
                                         )
                                     }
                                 } else {
+                                    // Filter icon — highlighted when filters are active
                                     Icon(
                                         Icons.Default.Tune, null,
                                         tint     = if (uiState.hasActiveFilter) tertiary
@@ -193,7 +199,12 @@ fun SearchScreen(
             }
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // Loading bar
             if (uiState.isLoading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
@@ -202,7 +213,11 @@ fun SearchScreen(
             }
 
             when {
-                (isSearching || uiState.hasActiveFilter) && uiState.searchResults.isNotEmpty() -> {
+                // ── Case 1: Results to show (search query OR filters active) ─
+                // FIX: was `isSearching || uiState.hasActiveFilter` in condition
+                //      but body only ran when results > 0 AND isSearching was true
+                //      Now uses showResults which covers filter-only case
+                showResults && uiState.searchResults.isNotEmpty() -> {
                     LazyColumn(
                         modifier       = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
@@ -212,7 +227,7 @@ fun SearchScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 20.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                                verticalAlignment     = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
@@ -232,8 +247,9 @@ fun SearchScreen(
                                 }
                             }
                         }
+
                         items(uiState.searchResults) { property ->
-                            ModernSearchCard(property) {
+                            ModernSearchCard(property = property) {
                                 viewModel.addToHistory(uiState.searchQuery)
                                 navController.navigate(
                                     Screen.PropertyDetail.createRoute(property.propertyId)
@@ -243,7 +259,8 @@ fun SearchScreen(
                     }
                 }
 
-                (isSearching || uiState.hasActiveFilter) && !uiState.isLoading -> {
+                // ── Case 2: Search/filter active but no results ───────────────
+                showResults && !uiState.isLoading -> {
                     EmptySearchUI(
                         query         = uiState.searchQuery,
                         hasFilter     = uiState.hasActiveFilter,
@@ -251,7 +268,8 @@ fun SearchScreen(
                     )
                 }
 
-                !isSearching && !uiState.hasActiveFilter -> {
+                // ── Case 3: Default state — show suggestions ──────────────────
+                !showResults -> {
                     Column(
                         modifier = Modifier
                             .padding(28.dp)
@@ -263,9 +281,13 @@ fun SearchScreen(
                             fontSize   = 20.sp,
                             color      = MaterialTheme.colorScheme.onBackground
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(Modifier.height(16.dp))
 
-                        val regions = listOf("Lahore", "Islamabad", "Murree", "Hunza", "Skardu", "Karachi")
+                        val regions = listOf(
+                            "Lahore", "Islamabad", "Murree",
+                            "Hunza", "Skardu", "Karachi"
+                        )
+
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(regions) { city ->
                                 Surface(
@@ -276,11 +298,15 @@ fun SearchScreen(
                                     },
                                     shape  = RoundedCornerShape(12.dp),
                                     color  = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                    border = BorderStroke(
+                                        1.dp, MaterialTheme.colorScheme.outline
+                                    )
                                 ) {
                                     Text(
                                         city,
-                                        modifier   = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                        modifier   = Modifier.padding(
+                                            horizontal = 20.dp, vertical = 10.dp
+                                        ),
                                         fontSize   = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color      = MaterialTheme.colorScheme.onSurface
@@ -289,7 +315,7 @@ fun SearchScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(Modifier.height(32.dp))
 
                         Row(
                             modifier              = Modifier.fillMaxWidth(),
@@ -341,23 +367,21 @@ fun SearchScreen(
                                             tint     = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(18.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Spacer(Modifier.width(12.dp))
                                         Text(
                                             search,
                                             color    = MaterialTheme.colorScheme.onBackground,
                                             fontSize = 16.sp
                                         )
                                     }
-
                                     IconButton(
                                         onClick  = { viewModel.removeFromHistory(search) },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
-                                            imageVector        = Icons.Default.Close,
-                                            contentDescription = "Remove",
-                                            tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier           = Modifier.size(18.dp)
+                                            Icons.Default.Close, "Remove",
+                                            tint     = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 }
@@ -373,19 +397,12 @@ fun SearchScreen(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ✅ FIXED: ModernSearchCard
+// ── Property result card ──────────────────────────────────────────────────────
 //
-// PURANA CODE (broken):
-//   Image(painter = painterResource(id = getPropertyImage(property.propertyId)), ...)
-//   → Sirf local drawables load karta tha (prop_001 .. prop_012)
-//   → Auto-ID wali properties ka koi drawable nahi → HavenHub logo dikhta tha
+// Priority 1: imageUrls.first() — ImgBB URL loaded via AsyncImage
+// Priority 2: drawableImageName  — local drawable fallback
+// Priority 3: propertyId         — getPropertyImage() fallback
 //
-// NAYA CODE (fixed):
-//   Priority 1: property.imageUrls.first() → ImgBB URL (AsyncImage se load)
-//   Priority 2: property.drawableImageName → drawable fallback
-//   Priority 3: property.propertyId       → getPropertyImage() fallback
-// ══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun ModernSearchCard(property: Property, onClick: () -> Unit) {
     val context = LocalContext.current
@@ -401,10 +418,10 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-
-            // ── Image Logic ──────────────────────────────────────────────────
-            // Priority 1: ImgBB URL (app-added / auto-ID properties)
+        Row(
+            modifier          = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (property.imageUrls.isNotEmpty()) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
@@ -415,24 +432,21 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
                     modifier           = Modifier
                         .size(100.dp)
                         .clip(RoundedCornerShape(18.dp)),
-                    contentScale  = ContentScale.Crop,
-                    // Jab tak URL load ho, drawable fallback dikhao
-                    placeholder   = painterResource(
+                    contentScale = ContentScale.Crop,
+                    placeholder  = painterResource(
                         id = getPropertyImage(
                             property.drawableImageName.ifBlank { property.propertyId }
                         )
                     ),
-                    // URL fail ho jaye tab bhi drawable fallback
-                    error         = painterResource(
+                    error = painterResource(
                         id = getPropertyImage(
                             property.drawableImageName.ifBlank { property.propertyId }
                         )
                     )
                 )
             } else {
-                // Priority 2 & 3: drawableImageName ya propertyId se drawable
                 androidx.compose.foundation.Image(
-                    painter            = painterResource(
+                    painter = painterResource(
                         id = getPropertyImage(
                             property.drawableImageName.ifBlank { property.propertyId }
                         )
@@ -444,9 +458,12 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
                     contentScale = ContentScale.Crop
                 )
             }
-            // ── End Image Logic ──────────────────────────────────────────────
 
-            Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .weight(1f)
+            ) {
                 Text(
                     property.title,
                     fontSize   = 17.sp,
@@ -479,6 +496,7 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
     }
 }
 
+// ── Empty results UI ──────────────────────────────────────────────────────────
 @Composable
 fun EmptySearchUI(
     query        : String,
@@ -488,7 +506,9 @@ fun EmptySearchUI(
     val tertiary = MaterialTheme.colorScheme.tertiary
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(40.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -508,7 +528,7 @@ fun EmptySearchUI(
         if (hasFilter) {
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "Try different filters or clear them",
+                "Try different filters or clear them",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -519,13 +539,16 @@ fun EmptySearchUI(
                 border = BorderStroke(1.dp, tertiary)
             ) {
                 Icon(
-                    Icons.Default.FilterAltOff,
-                    null,
+                    Icons.Default.FilterAltOff, null,
                     tint = tertiary,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
-                Text("Clear Filters", color = tertiary, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Clear Filters",
+                    color = tertiary,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

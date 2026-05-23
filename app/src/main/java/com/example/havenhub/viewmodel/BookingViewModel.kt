@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.havenhub.data.Booking
 import com.example.havenhub.data.BookingStatus
+import com.example.havenhub.data.PaymentStatus
 import com.example.havenhub.repository.BookingRepository
 import com.example.havenhub.utils.Resource
 import com.google.firebase.auth.FirebaseAuth
@@ -44,8 +45,6 @@ class BookingViewModel @Inject constructor(
     private var cachedRole        : String  = "tenant"
     private var isCreatingBooking : Boolean = false
 
-    // ✅ FIX: lastLoadKey guard hataya — yeh guard loading block kar raha tha
-    // Har baar LaunchedEffect fire ho toh fresh load ho
     fun loadBookings(userId: String, role: String) {
         Log.d("BOOKING_VM", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Log.d("BOOKING_VM", "loadBookings CALLED — userId='$userId' role='$role'")
@@ -55,9 +54,7 @@ class BookingViewModel @Inject constructor(
             return
         }
 
-        // ✅ FIX: role blank ho toh abort mat karo — "tenant" use karo
         val effectiveRole = role.ifBlank { "tenant" }
-
         cachedUserId = userId
         cachedRole   = effectiveRole
 
@@ -136,6 +133,75 @@ class BookingViewModel @Inject constructor(
         }
     }
 
+    // ✅ ADD: Pre-booking deposit paid hone ke baad call karo
+    fun markDepositPaid(bookingId: String, depositAmount: Double, totalAmount: Double) {
+        if (bookingId.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val remainingAmount = totalAmount - depositAmount
+                firestore.collection("bookings").document(bookingId)
+                    .update(
+                        mapOf(
+                            "status"          to BookingStatus.DEPOSIT_PAID.name,
+                            "paymentStatus"   to PaymentStatus.DEPOSIT_PAID.name,
+                            "depositAmount"   to depositAmount,
+                            "remainingAmount" to remainingAmount,
+                            "updatedAt"       to FieldValue.serverTimestamp()
+                        )
+                    ).await()
+                _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
+                Log.d("BOOKING_VM", "✅ Deposit marked paid — remaining: $remainingAmount")
+            } catch (e: Exception) {
+                Log.e("BOOKING_VM", "❌ markDepositPaid error: ${e.localizedMessage}")
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
+            }
+        }
+    }
+
+    // ✅ ADD: Landlord tenant ko check-in kare
+    fun markCheckedIn(bookingId: String) {
+        if (bookingId.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                firestore.collection("bookings").document(bookingId)
+                    .update(
+                        mapOf(
+                            "status"    to BookingStatus.AWAITING_FINAL_PAYMENT.name,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    ).await()
+                _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
+                Log.d("BOOKING_VM", "✅ Tenant checked in — final payment pending")
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
+            }
+        }
+    }
+
+    // ✅ ADD: Arrival pe remaining 80% payment complete
+    fun markFinalPaymentComplete(bookingId: String) {
+        if (bookingId.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                firestore.collection("bookings").document(bookingId)
+                    .update(
+                        mapOf(
+                            "status"        to BookingStatus.CHECKED_IN.name,
+                            "paymentStatus" to PaymentStatus.PAID.name,
+                            "updatedAt"     to FieldValue.serverTimestamp()
+                        )
+                    ).await()
+                _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
+                Log.d("BOOKING_VM", "✅ Final payment complete — checked in")
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
+            }
+        }
+    }
+
     fun cancelBooking(bookingId: String) {
         if (bookingId.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Invalid booking ID") }
@@ -152,7 +218,6 @@ class BookingViewModel @Inject constructor(
                         )
                     ).await()
 
-                // ✅ Optimistically update local list — UI turant reflect kare
                 _uiState.update { state ->
                     state.copy(
                         isLoading     = false,
@@ -163,7 +228,6 @@ class BookingViewModel @Inject constructor(
                     )
                 }
 
-                // ✅ Fresh data bhi load karo background mein
                 if (cachedUserId.isNotEmpty()) {
                     val fresh = when (cachedRole.lowercase()) {
                         "admin"    -> repository.getAllBookingsForAdmin()
@@ -188,13 +252,13 @@ class BookingViewModel @Inject constructor(
             try {
                 val currentUserId = auth.currentUser?.uid ?: throw Exception("User not logged in")
                 val msgData = hashMapOf(
-                    "fromUserId"   to currentUserId,
-                    "toUserId"     to toUserId,
-                    "bookingId"    to bookingId,
+                    "fromUserId"    to currentUserId,
+                    "toUserId"      to toUserId,
+                    "bookingId"     to bookingId,
                     "propertyTitle" to propertyTitle,
-                    "message"      to message,
-                    "isRead"       to false,
-                    "timestamp"    to FieldValue.serverTimestamp()
+                    "message"       to message,
+                    "isRead"        to false,
+                    "timestamp"     to FieldValue.serverTimestamp()
                 )
                 firestore.collection("messages").add(msgData).await()
                 _uiState.update { it.copy(isSendingMessage = false, successMessage = "Message sent successfully") }

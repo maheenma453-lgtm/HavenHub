@@ -25,7 +25,6 @@ data class SearchUiState(
     val propertyType   : PropertyType?  = null,
     val minBedrooms    : Int?           = null,
     val recentSearches : List<String>   = emptyList(),
-    // ✅ NEW: track whether any filter is currently active
     val hasActiveFilter: Boolean        = false
 )
 
@@ -54,8 +53,7 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun saveHistoryToStorage(history: List<String>) {
-        val stringToSave = history.joinToString("|")
-        sharedPrefs.edit().putString("recent_searches", stringToSave).apply()
+        sharedPrefs.edit().putString("recent_searches", history.joinToString("|")).apply()
     }
 
     @OptIn(FlowPreview::class)
@@ -76,22 +74,20 @@ class SearchViewModel @Inject constructor(
     fun addToHistory(query: String) {
         if (query.isBlank()) return
         _uiState.update { currentState ->
-            val currentList = currentState.recentSearches.toMutableList()
-            if (currentList.contains(query)) currentList.remove(query)
-            currentList.add(0, query)
-            val updatedList = currentList.take(5)
-            saveHistoryToStorage(updatedList)
-            currentState.copy(recentSearches = updatedList)
+            val list = currentState.recentSearches.toMutableList()
+            list.remove(query)
+            list.add(0, query)
+            val updated = list.take(5)
+            saveHistoryToStorage(updated)
+            currentState.copy(recentSearches = updated)
         }
     }
 
     fun removeFromHistory(query: String) {
         _uiState.update { currentState ->
-            val currentList = currentState.recentSearches.toMutableList()
-            currentList.remove(query)
-            val updatedList = currentList.toList()
-            saveHistoryToStorage(updatedList)
-            currentState.copy(recentSearches = updatedList)
+            val updated = currentState.recentSearches.filter { it != query }
+            saveHistoryToStorage(updated)
+            currentState.copy(recentSearches = updated)
         }
     }
 
@@ -100,21 +96,33 @@ class SearchViewModel @Inject constructor(
         _uiState.update { it.copy(recentSearches = emptyList()) }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // performSearch / performSearchWithState
+    //
+    // FIX (race condition):
+    //   Old code: applyFilters() called _uiState.update{} then performSearch()
+    //   Problem:  performSearch() read _uiState.value which could still be stale
+    //             due to coroutine scheduling — filters were lost
+    //   Fix:      applyFilters() builds newState explicitly, then passes it
+    //             directly to performSearchWithState(newState) — guaranteed fresh
+    // ─────────────────────────────────────────────────────────────────────────
+
     fun performSearch() {
+        performSearchWithState(_uiState.value)
+    }
+
+    private fun performSearchWithState(state: SearchUiState) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-            val result = propertyRepository.getAllProperties()
-
-            when (result) {
+            when (val result = propertyRepository.getAllProperties()) {
                 is Resource.Success -> {
-                    val currentState = _uiState.value
-                    var filteredList = result.data
+                    var list = result.data
 
-                    // Text search filter
-                    if (currentState.searchQuery.isNotBlank()) {
-                        val q = currentState.searchQuery.lowercase().trim()
-                        filteredList = filteredList.filter {
+                    // Text search
+                    if (state.searchQuery.isNotBlank()) {
+                        val q = state.searchQuery.lowercase().trim()
+                        list = list.filter {
                             it.title.lowercase().contains(q) ||
                                     it.city.lowercase().contains(q) ||
                                     it.address.lowercase().contains(q)
@@ -122,39 +130,27 @@ class SearchViewModel @Inject constructor(
                     }
 
                     // Price filters
-                    currentState.minPrice?.let { min ->
-                        filteredList = filteredList.filter { it.pricePerNight >= min }
-                    }
-                    currentState.maxPrice?.let { max ->
-                        filteredList = filteredList.filter { it.pricePerNight <= max }
+                    state.minPrice?.let { min -> list = list.filter { it.pricePerNight >= min } }
+                    state.maxPrice?.let { max -> list = list.filter { it.pricePerNight <= max } }
+
+                    // City filter — case-insensitive exact match
+                    state.selectedCity?.let { city ->
+                        list = list.filter { it.city.equals(city, ignoreCase = true) }
                     }
 
-                    // City filter
-                    currentState.selectedCity?.let { city ->
-                        filteredList = filteredList.filter {
-                            it.city.equals(city, ignoreCase = true)
-                        }
-                    }
-
-                    // ✅ BUG FIX: type.toString() → "PropertyType.HOUSE" deta tha
-                    // Firestore mein "HOUSE" store hai, isliye .name use karo
-                    currentState.propertyType?.let { type ->
-                        filteredList = filteredList.filter {
+                    // Type filter
+                    // FIX: compare using enum .name ("HOUSE", "APARTMENT" …)
+                    // so it matches however Firestore stored the string
+                    state.propertyType?.let { type ->
+                        list = list.filter {
                             it.propertyType.equals(type.name, ignoreCase = true)
                         }
                     }
 
                     // Bedrooms filter
-                    currentState.minBedrooms?.let { min ->
-                        filteredList = filteredList.filter { it.bedrooms >= min }
-                    }
+                    state.minBedrooms?.let { min -> list = list.filter { it.bedrooms >= min } }
 
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            searchResults = filteredList
-                        )
-                    }
+                    _uiState.update { it.copy(isLoading = false, searchResults = list) }
                 }
 
                 is Resource.Error -> {
@@ -179,37 +175,39 @@ class SearchViewModel @Inject constructor(
         type: PropertyType?,
         bedrooms: Int?
     ) {
-        // ✅ hasActiveFilter: track karo ke koi filter laga hai ya nahi
-        val anyFilterActive = (minPrice != null && minPrice > 0) ||
-                (maxPrice != null && maxPrice < 500000) ||
+        // FIX: hasActiveFilter correctly identifies when ANY real filter is set
+        // minPrice null  = no min filter (not "0 means no filter")
+        // maxPrice null  = no max filter (not "500000 means no filter")
+        // This matches how FilterScreen now passes null when slider is at default
+        val anyFilterActive = minPrice != null ||
+                maxPrice != null ||
                 city != null ||
                 type != null ||
                 bedrooms != null
 
-        _uiState.update {
-            it.copy(
-                minPrice = minPrice,
-                maxPrice = maxPrice,
-                selectedCity = city,
-                propertyType = type,
-                minBedrooms = bedrooms,
-                hasActiveFilter = anyFilterActive
-            )
-        }
-        performSearch()
+        // Build new state explicitly, then search with it — avoids race condition
+        val newState = _uiState.value.copy(
+            minPrice = minPrice,
+            maxPrice = maxPrice,
+            selectedCity = city,
+            propertyType = type,
+            minBedrooms = bedrooms,
+            hasActiveFilter = anyFilterActive
+        )
+        _uiState.value = newState
+        performSearchWithState(newState)
     }
 
     fun clearFilters() {
-        _uiState.update {
-            it.copy(
-                minPrice = null,
-                maxPrice = null,
-                selectedCity = null,
-                propertyType = null,
-                minBedrooms = null,
-                hasActiveFilter = false
-            )
-        }
-        performSearch()
+        val newState = _uiState.value.copy(
+            minPrice = null,
+            maxPrice = null,
+            selectedCity = null,
+            propertyType = null,
+            minBedrooms = null,
+            hasActiveFilter = false
+        )
+        _uiState.value = newState
+        performSearchWithState(newState)
     }
 }

@@ -5,7 +5,6 @@ import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 
 data class Payment(
-
     @DocumentId
     val paymentId : String = "",
 
@@ -15,7 +14,6 @@ data class Payment(
     val payeeId   : String = "",
     val payeeName : String = "",
 
-    // ✅ FIX Bug 1: String rakho — Firestore mein "5000" string hai
     val amount         : String = "0",
     val platformFee    : String = "0",
     val landlordPayout : String = "0",
@@ -28,8 +26,8 @@ data class Payment(
     val type   : String = PaymentType.BOOKING.name,
     val status : String = PaymentStatus.PENDING.name,
 
-    val originalPaymentId : String = "",
-    val refundReason      : String = "",
+    val originalPaymentId : String     = "",
+    val refundReason      : String     = "",
     val refundedAt        : Timestamp? = null,
 
     @ServerTimestamp
@@ -39,13 +37,11 @@ data class Payment(
 ) {
     constructor() : this(paymentId = "")
 
-    // ✅ FIX: String amount use kar raha hai
     val formattedAmount : String get() = "$currency $amount"
     val formattedPayout : String get() = "$currency $landlordPayout"
 
-    // ✅ Double chahiye to parse karo safely
-    val amountDouble         : Double get() = amount.toDoubleOrNull() ?: 0.0
-    val platformFeeDouble    : Double get() = platformFee.toDoubleOrNull() ?: 0.0
+    val amountDouble         : Double get() = amount.toDoubleOrNull()         ?: 0.0
+    val platformFeeDouble    : Double get() = platformFee.toDoubleOrNull()    ?: 0.0
     val landlordPayoutDouble : Double get() = landlordPayout.toDoubleOrNull() ?: 0.0
 
     val isSuccessful : Boolean get() = status == PaymentStatus.COMPLETED.name
@@ -82,7 +78,15 @@ enum class PaymentType {
 }
 
 enum class PaymentStatus {
-    PENDING, PROCESSING, COMPLETED, FAILED, REFUNDED, PARTIALLY_REFUNDED;
+    PENDING,
+    PROCESSING,
+    COMPLETED,
+    FAILED,
+    REFUNDED,
+    PARTIALLY_REFUNDED,
+    PAID,            // ✅ ADD: BookingDetailScreen ke liye
+    DEPOSIT_PAID,    // ✅ ADD: Pre-booking deposit paid
+    PARTIALLY_PAID;  // ✅ ADD: BookingDetailScreen ke liye
 
     fun displayName(): String = when (this) {
         PENDING            -> "Pending"
@@ -91,5 +95,8 @@ enum class PaymentStatus {
         FAILED             -> "Failed"
         REFUNDED           -> "Refunded"
         PARTIALLY_REFUNDED -> "Partially Refunded"
+        PAID               -> "Paid"           // ✅ ADD
+        DEPOSIT_PAID       -> "Deposit Paid"   // ✅ ADD
+        PARTIALLY_PAID     -> "Partially Paid" // ✅ ADD
     }
 }

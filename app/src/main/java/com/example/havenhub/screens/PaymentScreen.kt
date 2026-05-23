@@ -16,51 +16,57 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.example.havenhub.data.BookingStatus
 import com.example.havenhub.data.PaymentMethod
 import com.example.havenhub.navigation.Screen
-import com.example.havenhub.viewmodel.BookingViewModel
 import com.example.havenhub.viewmodel.PaymentViewModel
 
 // Semantic colors — intentional
-private val PGreen = androidx.compose.ui.graphics.Color(0xFF22C55E)
-private val PRed   = androidx.compose.ui.graphics.Color(0xFFEF4444)
+private val PGreen = Color(0xFF22C55E)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentScreen(
-    navController   : NavController,
-    bookingId       : String,
-    payerId         : String,
-    payeeId         : String,
-    payerName       : String,
-    payeeName       : String,
-    amount          : String,
-    viewModel       : PaymentViewModel = hiltViewModel(),
-    bookingViewModel: BookingViewModel = hiltViewModel()
+    navController: NavController,
+    bookingId    : String,
+    payerId      : String,
+    payeeId      : String,
+    payerName    : String,
+    payeeName    : String,
+    amount       : String, // Accurate amount from backend (20% deposit ya 80% remaining)
+    viewModel    : PaymentViewModel = hiltViewModel()
+    // NOTE (PULL CHANGE): bookingViewModel dependency removed — PaymentViewModel alone handles flow
 ) {
-    val uiState        by viewModel.uiState.collectAsState()
-    val bookingUiState by bookingViewModel.uiState.collectAsState()
-    val bookingMethod   = bookingUiState.currentBooking?.paymentMethod
+    val uiState by viewModel.uiState.collectAsState()
 
-    val primary      = MaterialTheme.colorScheme.primary
+    // PULL CHANGE: Verify payment status on load instead of loading booking separately
+    LaunchedEffect(bookingId) {
+        viewModel.verifyPaymentStatus(bookingId)
+    }
+
+    val primary          = MaterialTheme.colorScheme.primary
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
-    val tertiary     = MaterialTheme.colorScheme.tertiary
-    val onPrimary    = MaterialTheme.colorScheme.onPrimary
-    val surface      = MaterialTheme.colorScheme.surface
-    val onSurface    = MaterialTheme.colorScheme.onSurface
-    val background   = MaterialTheme.colorScheme.background
+    val tertiary         = MaterialTheme.colorScheme.tertiary
+    val onPrimary        = MaterialTheme.colorScheme.onPrimary
+    val surface          = MaterialTheme.colorScheme.surface
+    val onSurface        = MaterialTheme.colorScheme.onSurface
+    val background       = MaterialTheme.colorScheme.background
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-    val error        = MaterialTheme.colorScheme.error
+    val error            = MaterialTheme.colorScheme.error
 
+    val amountDouble = amount.toDoubleOrNull() ?: 0.0
+
+    // PULL CHANGE: Determines if this is a final payment (remaining 80%) or deposit (20%)
+    val isFinalPaymentPhase = !uiState.isPreBooking
+
+    // Navigate to success screen when payment is processed
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
-            bookingViewModel.updateStatusByAdmin(bookingId, BookingStatus.PENDING_APPROVAL)
             navController.navigate(Screen.PaymentSuccess.createRoute(bookingId)) {
                 popUpTo("payment/$bookingId/$payerId/$payeeId/$payerName/$payeeName/$amount") {
                     inclusive = true
@@ -70,31 +76,12 @@ fun PaymentScreen(
         }
     }
 
-    LaunchedEffect(bookingId) {
-        bookingViewModel.loadBookingById(bookingId)
-    }
-
     val methods = listOf(
-        Triple(PaymentMethod.JAZZCASH,      "📱", androidx.compose.ui.graphics.Color(0xFFD50000)),
-        Triple(PaymentMethod.EASYPAISA,     "💚", androidx.compose.ui.graphics.Color(0xFF2E7D32)),
-        Triple(PaymentMethod.CREDIT_CARD,   "💳", androidx.compose.ui.graphics.Color(0xFF1565C0)),
-        Triple(PaymentMethod.BANK_TRANSFER, "🏦", androidx.compose.ui.graphics.Color(0xFF4A148C))
+        Triple(PaymentMethod.JAZZCASH,      "📱", Color(0xFFD50000)),
+        Triple(PaymentMethod.EASYPAISA,     "💚", Color(0xFF2E7D32)),
+        Triple(PaymentMethod.CREDIT_CARD,   "💳", Color(0xFF1565C0)),
+        Triple(PaymentMethod.BANK_TRANSFER, "🏦", Color(0xFF4A148C))
     )
-
-    LaunchedEffect(bookingMethod) {
-        bookingMethod?.let {
-            val matched = methods.find { m ->
-                when (it) {
-                    "JazzCash"       -> m.first == PaymentMethod.JAZZCASH
-                    "EasyPaisa"      -> m.first == PaymentMethod.EASYPAISA
-                    "Bank Transfer"  -> m.first == PaymentMethod.BANK_TRANSFER
-                    "Cash on Arrival"-> m.first == PaymentMethod.CREDIT_CARD
-                    else             -> false
-                }
-            }?.first
-            matched?.let { viewModel.selectPaymentMethod(it) }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -113,7 +100,13 @@ fun PaymentScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = tertiary)
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("Complete Payment", fontWeight = FontWeight.Bold, color = onPrimary, fontSize = 17.sp)
+                        // PULL CHANGE: Dynamic title — deposit vs final payment
+                        Text(
+                            text       = if (isFinalPaymentPhase) "Complete Final Payment" else "Complete Deposit Payment",
+                            fontWeight = FontWeight.Bold,
+                            color      = onPrimary,
+                            fontSize   = 17.sp
+                        )
                         Text("Secure & encrypted", fontSize = 11.sp, color = onPrimary.copy(0.55f))
                     }
                     Box(
@@ -152,14 +145,20 @@ fun PaymentScreen(
                     }
                     Spacer(Modifier.height(14.dp))
 
-                    PaySummaryRow("Booking ID", "#${bookingId.take(8).uppercase()}", onPrimary)
-                    PaySummaryRow("From", payerName.ifBlank { "Tenant" }, onPrimary)
-                    PaySummaryRow("To",   payeeName.ifBlank { "Landlord" }, onPrimary)
+                    PaySummaryRow("Booking ID",    "#${bookingId.take(8).uppercase()}", onPrimary)
+                    PaySummaryRow("From",          payerName.ifBlank { "Tenant" },      onPrimary)
+                    PaySummaryRow("To",            payeeName.ifBlank { "Landlord" },    onPrimary)
+                    // PULL CHANGE: Shows whether this is a deposit or remaining payment
+                    PaySummaryRow(
+                        "Payment Type",
+                        if (isFinalPaymentPhase) "Remaining Amount" else "Deposit Amount",
+                        onPrimary
+                    )
 
                     Spacer(Modifier.height(8.dp))
                     Box(
                         Modifier.fillMaxWidth().height(1.dp)
-                            .background(Brush.horizontalGradient(listOf(tertiary.copy(0.6f), androidx.compose.ui.graphics.Color.Transparent)))
+                            .background(Brush.horizontalGradient(listOf(tertiary.copy(0.6f), Color.Transparent)))
                     )
                     Spacer(Modifier.height(10.dp))
 
@@ -169,18 +168,23 @@ fun PaymentScreen(
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("Total Amount", fontSize = 12.sp, color = onPrimary.copy(0.6f))
-
+                            // PULL CHANGE: Label changes based on payment phase
                             Text(
-                                "PKR ${"%,.0f".format(amount.toDoubleOrNull() ?: 0.0)}",
-                                fontSize = 24.sp,
+                                if (isFinalPaymentPhase) "Remaining Payable" else "Deposit Payable",
+                                fontSize = 12.sp,
+                                color    = onPrimary.copy(0.6f)
+                            )
+                            Text(
+                                "PKR ${"%,.0f".format(amountDouble)}",
+                                fontSize   = 24.sp,
                                 fontWeight = FontWeight.Black,
-                                color = tertiary
+                                color      = tertiary
                             )
                         }
-
                         Box(
-                            Modifier.clip(RoundedCornerShape(8.dp)).background(PGreen.copy(0.15f)).padding(horizontal = 10.dp, vertical = 6.dp)
+                            Modifier.clip(RoundedCornerShape(8.dp))
+                                .background(PGreen.copy(0.15f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Security, null, tint = PGreen, modifier = Modifier.size(12.dp))
@@ -202,6 +206,11 @@ fun PaymentScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .background(if (isSelected) primary.copy(0.07f) else surface)
+                        .border(
+                            width = if (isSelected) 1.5.dp else 0.dp,
+                            color = if (isSelected) primary.copy(0.4f) else Color.Transparent,
+                            shape = RoundedCornerShape(14.dp)
+                        )
                         .clickable { viewModel.selectPaymentMethod(method) }
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -212,12 +221,9 @@ fun PaymentScreen(
                     ) {
                         Text(icon, fontSize = 20.sp)
                     }
-
                     Spacer(Modifier.width(12.dp))
-
                     Column(Modifier.weight(1f)) {
                         Text(method.displayName(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = onSurface)
-
                         Text(
                             when (method) {
                                 PaymentMethod.JAZZCASH      -> "Pay via JazzCash mobile account"
@@ -230,7 +236,6 @@ fun PaymentScreen(
                             color    = onSurfaceVariant
                         )
                     }
-
                     RadioButton(
                         selected = isSelected,
                         onClick  = { viewModel.selectPaymentMethod(method) },
@@ -249,85 +254,52 @@ fun PaymentScreen(
             Button(
                 onClick = {
                     val selected = uiState.selectedMethod ?: return@Button
-
-                    val isMatch = when (bookingMethod) {
-                        "JazzCash"        -> selected == PaymentMethod.JAZZCASH
-                        "EasyPaisa"       -> selected == PaymentMethod.EASYPAISA
-                        "Bank Transfer"   -> selected == PaymentMethod.BANK_TRANSFER
-                        "Cash on Arrival" -> selected == PaymentMethod.CREDIT_CARD
-                        else              -> false
-                    }
-
-                    if (!isMatch) {
-                        viewModel.setError("Booking and payment method do not match")
-                        return@Button
-                    }
-
+                    // PULL CHANGE: Simplified processPayment call — method match check removed,
+                    // isFinalPayment and isPreBookingDirect flags added for ViewModel to handle logic
                     viewModel.processPayment(
-                        bookingId = bookingId,
-                        payerId = payerId,
-                        payeeId = payeeId,
-                        payerName = payerName,
-                        payeeName = payeeName,
-                        amount = amount,
-                        method = selected
+                        bookingId          = bookingId,
+                        payerId            = payerId,
+                        payeeId            = payeeId,
+                        payerName          = payerName,
+                        payeeName          = payeeName,
+                        amount             = amount,
+                        method             = selected,
+                        isFinalPayment     = isFinalPaymentPhase,
+                        isPreBookingDirect = !isFinalPaymentPhase
                     )
                 },
-
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-
-                shape = RoundedCornerShape(14.dp),
-
-                enabled = !uiState.isLoading && uiState.selectedMethod != null,
-
-                colors = ButtonDefaults.buttonColors(
+                modifier  = Modifier.fillMaxWidth().height(54.dp),
+                shape     = RoundedCornerShape(14.dp),
+                enabled   = !uiState.isLoading && uiState.selectedMethod != null,
+                colors    = ButtonDefaults.buttonColors(
                     containerColor         = primary,
                     contentColor           = onPrimary,
                     disabledContainerColor = onSurfaceVariant.copy(0.3f),
                     disabledContentColor   = onPrimary.copy(0.5f)
                 ),
-
                 elevation = ButtonDefaults.buttonElevation(4.dp)
             ) {
-
                 if (uiState.isLoading) {
-
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = onPrimary,
-                        strokeWidth = 2.dp
-                    )
-
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = onPrimary, strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
-
                     Text("Processing...", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-
                 } else {
-
-                    Icon(
-                        Icons.Default.Payment,
-                        null,
-                        tint = tertiary,
-                        modifier = Modifier.size(18.dp)
-                    )
-
+                    Icon(Icons.Default.Payment, null, tint = tertiary, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-
                     Text(
-                        "Pay PKR ${"%,.0f".format(amount.toDoubleOrNull() ?: 0.0)}",
-                        fontSize = 15.sp,
+                        "Pay PKR ${"%,.0f".format(amountDouble)}",
+                        fontSize   = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
+            // ── Hint ─────────────────────────────────────────────
             if (uiState.selectedMethod == null) {
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment     = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.Info, null, tint = onSurfaceVariant, modifier = Modifier.size(13.dp))
                     Spacer(Modifier.width(4.dp))
@@ -335,13 +307,11 @@ fun PaymentScreen(
                 }
             }
 
+            // ── Error ─────────────────────────────────────────────
             uiState.errorMessage?.let { errMsg ->
                 Row(
-                    Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(error.copy(0.08f))
-                        .padding(12.dp),
-
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .background(error.copy(0.08f)).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.Warning, null, tint = error, modifier = Modifier.size(16.dp))
@@ -350,10 +320,11 @@ fun PaymentScreen(
                 }
             }
 
+            // ── Security note ─────────────────────────────────────
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment     = Alignment.CenterVertically
             ) {
                 Icon(Icons.Default.Lock, null, tint = onSurfaceVariant, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(4.dp))
@@ -367,25 +338,20 @@ fun PaymentScreen(
 
 @Composable
 private fun PaySummaryRow(
-    label: String,
-    value: String,
-    onPrimary: androidx.compose.ui.graphics.Color
+    label    : String,
+    value    : String,
+    onPrimary: Color
 ) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, fontSize = 12.sp, color = onPrimary.copy(0.6f))
-
-        Text(
-            value,
-            fontSize = 12.sp,
-            color = onPrimary,
-            fontWeight = FontWeight.Medium
-        )
+        Text(value, fontSize = 12.sp, color = onPrimary, fontWeight = FontWeight.Medium)
     }
 }
 
+// PayRow is kept from your original code (used in other places)
 @Composable
 fun PayRow(
     label    : String,
@@ -397,21 +363,23 @@ fun PayRow(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-
-        Text(
-            label,
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
+        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             value,
             fontSize   = 13.sp,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            color      = if (highlight)
-                MaterialTheme.colorScheme.onSurface
-            else
-                MaterialTheme.colorScheme.onSurface.copy(0.8f)
+            color      = if (highlight) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurface.copy(0.8f)
         )
     }
 }
+
+
+
+
+
+
+
+
+
+
