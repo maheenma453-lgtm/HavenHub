@@ -156,6 +156,7 @@ fun EditPropertyScreen(
     val uiState           = viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Form field states — initialized once from Firebase data
     var title             by remember { mutableStateOf("") }
     var description       by remember { mutableStateOf("") }
     var propertyType      by remember { mutableStateOf("Apartment") }
@@ -167,14 +168,19 @@ fun EditPropertyScreen(
     var city              by remember { mutableStateOf("") }
     var address           by remember { mutableStateOf("") }
 
+    // Image management states
     var existingImageUrls by remember { mutableStateOf(listOf<String>()) }
     var newImageUris      by remember { mutableStateOf(listOf<Uri>()) }
     var removedImageUrls  by remember { mutableStateOf(setOf<String>()) }
 
+    // Guard to prevent re-initializing form after first load
     var isFormInitialized by remember { mutableStateOf(false) }
+
+    // Track unsaved changes to show discard confirmation dialog
     var hasUnsavedChanges by remember { mutableStateOf(false) }
     var showDiscardDialog by remember { mutableStateOf(false) }
 
+    // Show floating save bar only after scrolling down past the first item
     val listState   = rememberLazyListState()
     val showSaveBar by remember {
         derivedStateOf {
@@ -183,8 +189,12 @@ fun EditPropertyScreen(
         }
     }
 
-    LaunchedEffect(propertyId) { viewModel.loadPropertyDetail(propertyId) }
+    // Load property data when the screen opens
+    LaunchedEffect(propertyId) {
+        viewModel.loadPropertyDetail(propertyId)
+    }
 
+    // Populate form fields once property data arrives — only on first load
     LaunchedEffect(uiState.value.propertyDetail) {
         uiState.value.propertyDetail?.let { prop ->
             if (!isFormInitialized) {
@@ -206,17 +216,43 @@ fun EditPropertyScreen(
         }
     }
 
-    LaunchedEffect(uiState.value.actionSuccess, uiState.value.errorMessage) {
+    // ══════════════════════════════════════════════════════════════════════════
+    // FIX: Separated into two LaunchedEffects to prevent race condition.
+    //
+    // OLD (broken):
+    //   LaunchedEffect(actionSuccess, errorMessage) {
+    //     if (actionSuccess) {
+    //       viewModel.clearMessages()   ← this sets actionSuccess = false
+    //       navController.popBackStack() ← sometimes called, sometimes not
+    //     }
+    //   }
+    //   The problem: both keys in one effect caused clearMessages() to trigger
+    //   a second recomposition before popBackStack(), so MyPropertiesScreen's
+    //   LaunchedEffect(actionSuccess) never fired → list never refreshed.
+    //
+    // NEW (fixed):
+    //   - actionSuccess effect: navigate first, THEN clear — guarantees that
+    //     MyPropertiesScreen sees actionSuccess = true before it's reset.
+    //   - errorMessage effect: separate, handles snackbar independently.
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // Handle successful save — navigate back first, then clear state
+    LaunchedEffect(uiState.value.actionSuccess) {
         if (uiState.value.actionSuccess) {
-            viewModel.clearMessages()
-            navController.popBackStack()
+            navController.popBackStack()      // Go back to MyPropertiesScreen first
+            viewModel.clearMessages()         // Clear AFTER navigation — avoids race condition
         }
-        uiState.value.errorMessage?.let {
-            snackbarHostState.showSnackbar(it)
+    }
+
+    // Handle errors — show snackbar independently of the success flow
+    LaunchedEffect(uiState.value.errorMessage) {
+        uiState.value.errorMessage?.let { errorMsg ->
+            snackbarHostState.showSnackbar(errorMsg)
             viewModel.clearMessages()
         }
     }
 
+    // Discard changes confirmation dialog
     if (showDiscardDialog) {
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
@@ -247,8 +283,10 @@ fun EditPropertyScreen(
         )
     }
 
+    // Save handler — builds updated Property object and calls ViewModel
     val onSave: () -> Unit = {
         uiState.value.propertyDetail?.let { currentProp ->
+            // Map display name back to PropertyType enum string
             val propTypeString = PropertyType.entries
                 .find { it.displayName() == propertyType }
                 ?.name ?: currentProp.propertyType
@@ -264,8 +302,10 @@ fun EditPropertyScreen(
                 amenities     = selectedAmenities.toList(),
                 city          = city,
                 address       = address,
+                // Pass only the images that have NOT been removed by the user
                 imageUrls     = existingImageUrls.filterNot { it in removedImageUrls }
             )
+            // newImageUris are the newly picked images — ViewModel will upload them
             viewModel.updateProperty(updatedProperty, newImageUris)
         }
     }
@@ -284,6 +324,7 @@ fun EditPropertyScreen(
                                 fontSize   = 17.sp,
                                 color      = Color.White
                             )
+                            // Show "Unsaved changes" subtitle when form is dirty
                             AnimatedVisibility(
                                 visible = hasUnsavedChanges,
                                 enter   = fadeIn(),
@@ -291,29 +332,30 @@ fun EditPropertyScreen(
                             ) {
                                 Text(
                                     "Unsaved changes",
-                                    fontSize = 11.sp,
-                                    color    = EPR.GoldLight.copy(alpha = 0.8f),
+                                    fontSize   = 11.sp,
+                                    color      = EPR.GoldLight.copy(alpha = 0.8f),
                                     fontWeight = FontWeight.Medium
                                 )
                             }
                         }
                         Spacer(Modifier.width(10.dp))
+                        // Pill badge showing unsaved state
                         AnimatedVisibility(
                             visible = hasUnsavedChanges,
                             enter   = fadeIn() + scaleIn(),
                             exit    = fadeOut() + scaleOut()
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = EPR.GoldAccent.copy(alpha = 0.2f),
+                                shape          = RoundedCornerShape(20.dp),
+                                color          = EPR.GoldAccent.copy(alpha = 0.2f),
                                 tonalElevation = 0.dp
                             ) {
                                 Text(
                                     "● Unsaved",
-                                    modifier   = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                                    fontSize   = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color      = EPR.GoldLight,
+                                    modifier      = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                                    fontSize      = 10.sp,
+                                    fontWeight    = FontWeight.Bold,
+                                    color         = EPR.GoldLight,
                                     letterSpacing = 0.3.sp
                                 )
                             }
@@ -321,6 +363,7 @@ fun EditPropertyScreen(
                     }
                 },
                 navigationIcon = {
+                    // Show discard dialog if there are unsaved changes, else just go back
                     IconButton(onClick = {
                         if (hasUnsavedChanges) showDiscardDialog = true
                         else navController.popBackStack()
@@ -355,15 +398,14 @@ fun EditPropertyScreen(
                 )
             )
         },
-        // Gold accent line under topbar
         bottomBar = {
             Column {
-                // Gold top-line on topbar bottom
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(0.dp)
                 )
+                // Floating save bar — animates up from bottom when user scrolls down
                 AnimatedVisibility(
                     visible = showSaveBar,
                     enter   = slideInVertically(
@@ -385,6 +427,7 @@ fun EditPropertyScreen(
         }
     ) { paddingValues ->
 
+        // Show full-screen loader only during initial data fetch (before form is populated)
         if (uiState.value.isLoading && !isFormInitialized) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = EPR.GoldAccent)
@@ -392,12 +435,12 @@ fun EditPropertyScreen(
             return@Scaffold
         }
 
-        // Gold line below topbar
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Gold accent line below the top bar
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -452,7 +495,6 @@ fun EditPropertyScreen(
                                             )
                                         },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            // Selected: gold bg + navy text — premium look
                                             selectedContainerColor = EPR.GoldAccent,
                                             selectedLabelColor     = EPR.NavyDark,
                                             containerColor         = if (isDark) EPR.DarkChipBg else EPR.LightChipBg,
@@ -587,6 +629,7 @@ fun EditPropertyScreen(
                                             )
                                         )
                                     }
+                                    // Fill empty slots in last row so alignment stays consistent
                                     repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
@@ -617,7 +660,7 @@ fun EditPropertyScreen(
 // COMPONENTS
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── Text Field ────────────────────────────────────────────────────────────────
+// ── Outlined text field with navy/gold theming ────────────────────────────────
 @Composable
 private fun EPRTextField(
     value          : String,
@@ -654,7 +697,7 @@ private fun EPRTextField(
     )
 }
 
-// ── Section Card — gold outline border ────────────────────────────────────────
+// ── Section card with gold outline border and navy icon header ─────────────────
 @Composable
 private fun EPRSectionCard(
     title  : String,
@@ -669,7 +712,6 @@ private fun EPRSectionCard(
     Card(
         modifier  = Modifier
             .fillMaxWidth()
-            // ── GOLD OUTLINE ── this is the premium border on every card
             .border(
                 width = 1.5.dp,
                 color = EPR.GoldAccent.copy(alpha = if (isDark) 0.55f else 0.45f),
@@ -677,10 +719,10 @@ private fun EPRSectionCard(
             ),
         shape     = RoundedCornerShape(16.dp),
         colors    = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // no shadow — border does the work
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column {
-            // ── Card header with navy icon bg + gold icon
+            // Card header: navy icon box + section title
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier          = Modifier
@@ -697,7 +739,7 @@ private fun EPRSectionCard(
                     Icon(
                         icon,
                         contentDescription = null,
-                        tint               = EPR.GoldAccent,   // gold icon on navy bg
+                        tint               = EPR.GoldAccent,
                         modifier           = Modifier.size(17.dp)
                     )
                 }
@@ -710,14 +752,14 @@ private fun EPRSectionCard(
                     letterSpacing = 0.2.sp
                 )
             }
-            // ── Gold divider line between header and body
+            // Gold divider line separating header from card body
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height(1.dp)
                     .background(EPR.GoldAccent.copy(alpha = if (isDark) 0.35f else 0.25f))
             )
-            // ── Card body
+            // Card body content
             Column(Modifier.padding(16.dp)) {
                 content()
             }
@@ -725,7 +767,7 @@ private fun EPRSectionCard(
     }
 }
 
-// ── Photo section ─────────────────────────────────────────────────────────────
+// ── Photo management section ───────────────────────────────────────────────────
 @Composable
 private fun EPRPhotoSection(
     existing   : List<String>,
@@ -736,28 +778,34 @@ private fun EPRPhotoSection(
     onRemoveNew: (Uri) -> Unit,
     isDark     : Boolean = false
 ) {
+    // Multi-image picker launcher
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
-    ) { onAddNew(it) }
+    ) { uris -> onAddNew(uris) }
 
+    // Only show existing images that haven't been marked for removal
     val activeOld = existing.filterNot { it in removed }
 
     EPRSectionCard("Photos", Icons.Default.PhotoLibrary, isDark) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Show existing (Firebase) images that are still active
                 items(activeOld) { url -> EPRImageThumb(model = url) { onRemoveOld(url) } }
+                // Show newly picked local images
                 items(new)       { uri -> EPRImageThumb(model = uri) { onRemoveNew(uri) } }
             }
             OutlinedButton(
                 onClick  = { launcher.launch("image/*") },
-                modifier = Modifier.fillMaxWidth().height(46.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
                 shape    = RoundedCornerShape(10.dp),
                 colors   = ButtonDefaults.outlinedButtonColors(
                     contentColor = EPR.NavyPrimary
                 ),
                 border = androidx.compose.foundation.BorderStroke(
                     width = 1.5.dp,
-                    color = EPR.GoldAccent.copy(alpha = 0.5f)   // gold border on add button too
+                    color = EPR.GoldAccent.copy(alpha = 0.5f)
                 )
             ) {
                 Icon(
@@ -779,7 +827,7 @@ private fun EPRPhotoSection(
     }
 }
 
-// ── Image thumbnail ───────────────────────────────────────────────────────────
+// ── Single image thumbnail with remove button ──────────────────────────────────
 @Composable
 private fun EPRImageThumb(model: Any?, onRemove: () -> Unit) {
     Box(
@@ -794,6 +842,7 @@ private fun EPRImageThumb(model: Any?, onRemove: () -> Unit) {
             contentScale       = ContentScale.Crop,
             modifier           = Modifier.fillMaxSize()
         )
+        // Remove button overlaid on top-right corner
         IconButton(
             onClick  = onRemove,
             modifier = Modifier
@@ -812,7 +861,7 @@ private fun EPRImageThumb(model: Any?, onRemove: () -> Unit) {
     }
 }
 
-// ── Bottom Save Bar ───────────────────────────────────────────────────────────
+// ── Sticky bottom save bar (visible after scroll) ──────────────────────────────
 @Composable
 private fun EPRBottomSaveBar(
     isLoading: Boolean,
@@ -820,8 +869,8 @@ private fun EPRBottomSaveBar(
     onSave   : () -> Unit
 ) {
     Surface(
-        color           = if (isDark) EPR.DarkNavyBar else EPR.LightCard,
-        tonalElevation  = 0.dp,
+        color = if (isDark) EPR.DarkNavyBar else EPR.LightCard,
+        tonalElevation = 0.dp,
         shadowElevation = 16.dp
     ) {
         Column {
@@ -833,52 +882,53 @@ private fun EPRBottomSaveBar(
                     .background(EPR.GoldAccent)
             )
             Button(
-                onClick   = onSave,
-                enabled   = !isLoading,
-                modifier  = Modifier
+                onClick = onSave,
+                enabled = !isLoading,
+                modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp)
                     .height(52.dp),
-                shape     = RoundedCornerShape(13.dp),
-                colors    = ButtonDefaults.buttonColors(
-                    containerColor         = EPR.NavyPrimary,
-                    contentColor           = Color.White,
+                shape = RoundedCornerShape(13.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = EPR.NavyPrimary,
+                    contentColor = Color.White,
                     disabledContainerColor = EPR.NavyPrimary.copy(alpha = 0.45f)
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
             ) {
                 if (isLoading) {
+                    // Show spinner while saving
                     CircularProgressIndicator(
-                        modifier    = Modifier.size(22.dp),
-                        color       = EPR.GoldAccent,
+                        modifier = Modifier.size(22.dp),
+                        color = EPR.GoldAccent,
                         strokeWidth = 2.5.dp
                     )
                 } else {
                     Icon(
                         Icons.Default.Save,
                         contentDescription = null,
-                        tint               = EPR.GoldAccent,
-                        modifier           = Modifier.size(20.dp)
+                        tint = EPR.GoldAccent,
+                        modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
                         "Save Changes",
-                        fontSize      = 15.sp,
-                        fontWeight    = FontWeight.Bold,
-                        color         = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
                         letterSpacing = 0.3.sp
                     )
                 }
             }
             Text(
                 "Changes will be saved to your listing",
-                modifier  = Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 10.dp),
-                fontSize  = 10.sp,
-                color     = if (isDark) EPR.DarkTextSec else EPR.LightTextHnt,
+                fontSize = 10.sp,
+                color = if (isDark) EPR.DarkTextSec else EPR.LightTextHnt,
                 fontWeight = FontWeight.Medium,
-                textAlign  = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
     }

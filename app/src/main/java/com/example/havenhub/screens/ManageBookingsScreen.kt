@@ -218,7 +218,6 @@ fun ManageBookingsScreen(
                     contentPadding      = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Count banner
                     item {
                         Box(
                             modifier = Modifier
@@ -298,7 +297,6 @@ private fun PremiumBookingCard(
         label = "shimmer"
     )
 
-    // ── Theme-aware card colors ───────────────────────────────────────────────
     val cardBg = if (isDark) NavyPrime else Color.White
     val cardBgEnd = if (isDark) NavyDeep else Color(0xFFF9FAFB)
     val titleColor = if (isDark) Color.White else Color(0xFF111827)
@@ -308,27 +306,18 @@ private fun PremiumBookingCard(
     val iconBg = if (isDark) GoldPrime.copy(0.15f) else Color(0xFFF3F4F6)
     val amountBg = if (isDark) GoldPrime.copy(0.12f) else Color(0xFFFEF9EC)
     val amountBorder = if (isDark) GoldBorder else Brush.horizontalGradient(
-        listOf(
-            GoldPrime.copy(0.5f),
-            GoldLight.copy(0.4f),
-            GoldPrime.copy(0.5f)
-        )
+        listOf(GoldPrime.copy(0.5f), GoldLight.copy(0.4f), GoldPrime.copy(0.5f))
     )
     val cardBorder = if (isDark) GoldBorder else Brush.horizontalGradient(
-        listOf(
-            GoldPrime.copy(0.6f),
-            GoldLight.copy(0.3f),
-            GoldPrime.copy(0.6f)
-        )
+        listOf(GoldPrime.copy(0.6f), GoldLight.copy(0.3f), GoldPrime.copy(0.6f))
     )
-
     val cardGradient = Brush.verticalGradient(listOf(cardBg, cardBgEnd))
 
-    // ── Dialogs ───────────────────────────────────────────────────────────────
     val dialogContainerColor = if (isDark) NavyPrime else Color.White
     val dialogTextColor = if (isDark) Color.White else Color(0xFF111827)
     val dialogSubtextColor = if (isDark) Color.White.copy(0.6f) else Color(0xFF6B7280)
 
+    // ── Approve Dialog ────────────────────────────────────────────────────────
     if (showApproveDialog) {
         AlertDialog(
             onDismissRequest = { showApproveDialog = false },
@@ -358,8 +347,9 @@ private fun PremiumBookingCard(
                 )
             },
             text = {
+                // ✅ FIXED: English text
                 Text(
-                    "Tenant ki booking confirm kar doge?\nPayment already receive ho chuki hai.",
+                    "Tenant's payment has been received.\nDo you want to confirm this booking?",
                     fontSize = 13.sp, color = dialogSubtextColor, lineHeight = 20.sp
                 )
             },
@@ -386,6 +376,7 @@ private fun PremiumBookingCard(
         )
     }
 
+    // ── Reject Dialog ─────────────────────────────────────────────────────────
     if (showRejectDialog) {
         AlertDialog(
             onDismissRequest = { showRejectDialog = false },
@@ -415,8 +406,9 @@ private fun PremiumBookingCard(
                 )
             },
             text = {
+                // ✅ FIXED: English text
                 Text(
-                    "Kya aap yeh booking reject karna chahte ho?\nTenant ko refund process karna hoga.",
+                    "Are you sure you want to reject this booking?\nA refund will need to be processed for the tenant.",
                     fontSize = 13.sp, color = dialogSubtextColor, lineHeight = 20.sp
                 )
             },
@@ -482,7 +474,6 @@ private fun PremiumBookingCard(
         )
     }
 
-    // Shadow color differs per theme
     val shadowAmb = if (isDark) GoldPrime.copy(0.15f) else Color(0x1A000000)
     val shadowSpt = if (isDark) GoldPrime.copy(0.20f) else Color(0x26000000)
 
@@ -507,26 +498,19 @@ private fun PremiumBookingCard(
                 indication = null
             ) { isPressed = true }
     ) {
-        // Top accent bar
-        Box(
-            Modifier.fillMaxWidth().height(3.dp)
-                .background(GoldBorder)
-                .align(Alignment.TopCenter)
-        )
+        Box(Modifier.fillMaxWidth().height(3.dp).background(GoldBorder).align(Alignment.TopCenter))
 
-        // Press shimmer overlay
         if (shimmerAlpha > 0f) {
             Box(
-                Modifier.fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                GoldPrime.copy(0f),
-                                GoldPrime.copy(0.06f * shimmerAlpha),
-                                GoldPrime.copy(0f)
-                            )
+                Modifier.fillMaxSize().background(
+                    Brush.linearGradient(
+                        listOf(
+                            GoldPrime.copy(0f),
+                            GoldPrime.copy(0.06f * shimmerAlpha),
+                            GoldPrime.copy(0f)
                         )
                     )
+                )
             )
         }
 
@@ -537,11 +521,8 @@ private fun PremiumBookingCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Property image
                 Box(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                    modifier = Modifier.size(60.dp).clip(RoundedCornerShape(14.dp))
                         .background(if (isDark) NavyMid else Color(0xFFEEF2FF))
                         .border(1.5.dp, cardBorder, RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
@@ -578,7 +559,6 @@ private fun PremiumBookingCard(
 
                 Spacer(Modifier.width(12.dp))
 
-                // Title + tenant
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         propertyTitle,
@@ -591,7 +571,8 @@ private fun PremiumBookingCard(
                     Spacer(Modifier.height(3.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Default.Person, null,
+                            Icons.Default.Person,
+                            null,
                             tint = GoldPrime.copy(0.7f),
                             modifier = Modifier.size(12.dp)
                         )
@@ -608,13 +589,14 @@ private fun PremiumBookingCard(
 
                 Spacer(Modifier.width(8.dp))
 
-                // Status badge
                 Surface(
                     color = statusBg,
                     shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier
-                        .border(1.dp, statusColor.copy(0.35f), RoundedCornerShape(20.dp))
-                        .widthIn(min = 80.dp)
+                    modifier = Modifier.border(
+                        1.dp,
+                        statusColor.copy(0.35f),
+                        RoundedCornerShape(20.dp)
+                    ).widthIn(min = 80.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -632,21 +614,19 @@ private fun PremiumBookingCard(
                     }
                 }
 
-                // 3-dots cancel menu
                 if (isCancellable) {
                     Spacer(Modifier.width(6.dp))
                     Box {
                         Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
+                            modifier = Modifier.size(34.dp).clip(CircleShape)
                                 .background(GoldPrime.copy(0.12f))
                                 .border(1.dp, GoldBorder, CircleShape)
                                 .clickable { menuExpanded = true },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.Default.MoreVert, null,
+                                Icons.Default.MoreVert,
+                                null,
                                 tint = GoldPrime,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -661,7 +641,9 @@ private fun PremiumBookingCard(
                         ) {
                             DropdownMenuItem(
                                 leadingIcon = {
-                                    Box(Modifier.size(8.dp).clip(CircleShape).background(ErrorRed))
+                                    Box(
+                                        Modifier.size(8.dp).clip(CircleShape).background(ErrorRed)
+                                    )
                                 },
                                 text = {
                                     Text(
@@ -682,7 +664,7 @@ private fun PremiumBookingCard(
             HorizontalDivider(color = dividerColor)
             Spacer(Modifier.height(12.dp))
 
-            // Date + amount row
+            // ── Date + amount row ─────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -704,8 +686,7 @@ private fun PremiumBookingCard(
                     Text(dateRange, fontSize = 12.sp, color = dateColor)
                 }
                 Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp))
                         .background(amountBg)
                         .border(1.dp, amountBorder, RoundedCornerShape(10.dp))
                         .padding(horizontal = 12.dp, vertical = 5.dp)
@@ -719,7 +700,7 @@ private fun PremiumBookingCard(
                 }
             }
 
-            // Pending approval section
+            // ── Pending approval section ──────────────────────────────────────
             if (isPendingApproval) {
                 Spacer(Modifier.height(14.dp))
                 HorizontalDivider(color = dividerColor)
@@ -743,8 +724,9 @@ private fun PremiumBookingCard(
                             tint = WarningAmber,
                             modifier = Modifier.size(15.dp)
                         )
+                        // ✅ FIXED: English text
                         Text(
-                            "Tenant ne payment kar di hai. Approve ya reject karo.",
+                            "Tenant has made the payment. Please approve or reject the booking.",
                             fontSize = 11.sp,
                             color = WarningAmber,
                             lineHeight = 16.sp

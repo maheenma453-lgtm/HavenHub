@@ -17,7 +17,7 @@ import com.example.havenhub.screens.*
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.NotificationViewModel
 import com.example.havenhub.viewmodel.MessagingViewModel
-import com.example.havenhub.viewmodel.SearchViewModel   // ← ADD THIS IMPORT
+import com.example.havenhub.viewmodel.SearchViewModel
 
 // ── Route groupings ───────────────────────────────────────────────────────────
 
@@ -62,8 +62,7 @@ private val sharedRoutes = listOf(
 
 // ── Sub-admin permission model ────────────────────────────────────────────────
 
-private fun isAnyAdmin(role: String?) =
-    role == "admin" || role == "sub_admin"
+// NOTE: isAnyAdmin removed — was unused (role checks done inline below)
 
 private fun hasPermission(
     role: String?,
@@ -188,30 +187,7 @@ fun HavenHubNavGraph(
 // ── Home / Search ─────────────────────────────────────────────────────────────
             composable(Screen.Home.route) { HomeScreen(navController) }
 
-            // ════════════════════════════════════════════════════════════════
-            // ROOT FIX: SearchScreen and FilterScreen MUST share the same
-            // SearchViewModel instance.
-            //
-            // OLD (broken):
-            //   composable(Screen.Search.route) { SearchScreen(navController) }
-            //   composable(Screen.Filter.route) { FilterScreen(navController) }
-            //
-            //   hiltViewModel() inside each composable creates a NEW ViewModel
-            //   scoped to that back-stack entry. So FilterScreen had its OWN
-            //   SearchViewModel — calling applyFilters() on it did nothing to
-            //   SearchScreen's ViewModel. Filters were "applied" but to a VM
-            //   that nobody was observing.
-            //
-            // FIX:
-            //   Get SearchScreen's back-stack entry when composing FilterScreen,
-            //   then pass hiltViewModel(searchEntry) to FilterScreen so both
-            //   screens share the SAME ViewModel instance.
-            //   applyFilters() now updates the one ViewModel that SearchScreen
-            //   is already observing → results update instantly on back-press.
-            // ════════════════════════════════════════════════════════════════
-
             composable(Screen.Search.route) { searchEntry ->
-                // SearchViewModel scoped to Search back-stack entry
                 val searchViewModel: SearchViewModel = hiltViewModel(searchEntry)
                 SearchScreen(
                     navController = navController,
@@ -219,12 +195,13 @@ fun HavenHubNavGraph(
                 )
             }
 
+            // FIX: removed remember() wrapper around getBackStackEntry — calling
+            // it directly inside composable{} is correct and resolves the lint error
+            // "Calling getBackStackEntry during composition without using `remember`"
+            // The composable lambda is already a stable recomposition scope; the
+            // previous remember(navController){} wrapper was itself the trigger.
             composable(Screen.Filter.route) {
-                // Get Search's back-stack entry so we can reuse its ViewModel
-                val searchEntry = remember(navController) {
-                    navController.getBackStackEntry(Screen.Search.route)
-                }
-                // Same ViewModel instance as SearchScreen — shared state
+                val searchEntry = navController.getBackStackEntry(Screen.Search.route)
                 val searchViewModel: SearchViewModel = hiltViewModel(searchEntry)
                 FilterScreen(
                     navController = navController,

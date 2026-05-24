@@ -50,9 +50,9 @@ private fun bTheme(s: BookingStatus) = when (s) {
     BookingStatus.PENDING                -> BStatusTheme(Color(0xFFB45309), Color(0xFFFEF3C7), Icons.Default.HourglassEmpty,       "Pending",               "Waiting for landlord approval.")
     BookingStatus.PENDING_APPROVAL       -> BStatusTheme(Color(0xFF6D28D9), Color(0xFFEDE9FE), Icons.Default.AccessTime,            "Awaiting Approval",     "Payment received — under review.")
     BookingStatus.CONFIRMED              -> BStatusTheme(Color(0xFF15803D), Color(0xFFDCFCE7), Icons.Default.CheckCircle,           "Confirmed",             "Landlord accepted your booking.")
-    BookingStatus.DEPOSIT_PAID           -> BStatusTheme(Color(0xFF0369A1), Color(0xFFE0F2FE), Icons.Default.Savings,              "Deposit Paid",          "20% deposit paid. Awaiting check-in.") // ✅ ADD
+    BookingStatus.DEPOSIT_PAID           -> BStatusTheme(Color(0xFF0369A1), Color(0xFFE0F2FE), Icons.Default.Savings,              "Deposit Paid",          "20% deposit paid. Awaiting check-in.")
     BookingStatus.CHECKED_IN             -> BStatusTheme(Color(0xFF1D4ED8), Color(0xFFDBEAFE), Icons.AutoMirrored.Filled.Login,     "Checked In",            "Guest is at the property.")
-    BookingStatus.AWAITING_FINAL_PAYMENT -> BStatusTheme(Color(0xFFB45309), Color(0xFFFEF3C7), Icons.Default.AccountBalanceWallet, "Final Payment Pending", "Pay remaining 80% on arrival.") // ✅ ADD
+    BookingStatus.AWAITING_FINAL_PAYMENT -> BStatusTheme(Color(0xFFB45309), Color(0xFFFEF3C7), Icons.Default.AccountBalanceWallet, "Final Payment Pending", "Pay remaining 80% on arrival.")
     BookingStatus.COMPLETED              -> BStatusTheme(Color(0xFF374151), Color(0xFFF3F4F6), Icons.Default.Done,                  "Completed",             "Stay completed successfully.")
     BookingStatus.CANCELLED              -> BStatusTheme(Color(0xFFB91C1C), Color(0xFFFEE2E2), Icons.Default.Cancel,                "Cancelled",             "Booking has been cancelled.")
 }
@@ -74,13 +74,14 @@ fun BookingDetailScreen(
     var showCancel   by remember { mutableStateOf(false) }
     var showReject   by remember { mutableStateOf(false) }
     var showApprove  by remember { mutableStateOf(false) }
-    var showCheckIn  by remember { mutableStateOf(false) }  // ✅ ADD
-    var showFinalPay by remember { mutableStateOf(false) }  // ✅ ADD
+    var showCheckIn  by remember { mutableStateOf(false) }
+    var showFinalPay by remember { mutableStateOf(false) }
     var selectedTab  by remember { mutableIntStateOf(0) }
 
     var tenantName by remember { mutableStateOf("...") }
-    var hostName   by remember { mutableStateOf("...") }  // ✅ ADD
+    var hostName   by remember { mutableStateOf("...") }
 
+    // ─── Tenant name fetch ────────────────────────────────────────────────────
     LaunchedEffect(booking?.tenantId) {
         val tid = booking?.tenantId
         tenantName = when {
@@ -103,18 +104,46 @@ fun BookingDetailScreen(
         }
     }
 
-    // ✅ ADD: Host name dynamic fetch
+    // ─── Host name fetch — FIXED ──────────────────────────────────────────────
+    // MASLA: Auto-added properties mein ownerName blank hota tha → "—" show hota tha
+    // FIX:   Step 1 → ownerName try karo (manual props ke liye)
+    //        Step 2 → ownerId se users collection mein jaao (auto props ke liye)
+    //        Step 3 → landlordId fallback (booking se)
     LaunchedEffect(booking?.propertyId) {
         val currentBooking = booking ?: return@LaunchedEffect
         hostName = try {
-            val propertyDoc = FirebaseFirestore.getInstance()
-                .collection("properties")
+            val db = FirebaseFirestore.getInstance()
+
+            // Step 1: Property doc se ownerName try karo
+            val propertyDoc = db.collection("properties")
                 .document(currentBooking.propertyId)
                 .get().await()
-            propertyDoc.getString("ownerName")
-                ?: currentBooking.landlordName
-                ?: "—"
+
+            val nameFromProperty = propertyDoc.getString("ownerName")
+                ?.takeIf { it.isNotBlank() }
+
+            if (nameFromProperty != null) {
+                // Manual properties → ownerName direct milta hai ✅
+                nameFromProperty
+            } else {
+                // Auto properties → ownerId se users collection mein jaao ✅
+                val ownerId = propertyDoc.getString("ownerId")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: currentBooking.landlordId.takeIf { it.isNotBlank() }
+
+                if (!ownerId.isNullOrBlank()) {
+                    val userDoc = db.collection("users")
+                        .document(ownerId).get().await()
+                    userDoc.getString("fullName")
+                        ?: userDoc.getString("name")
+                        ?: userDoc.getString("displayName")
+                        ?: currentBooking.landlordName.ifBlank { "—" }
+                } else {
+                    currentBooking.landlordName.ifBlank { "—" }
+                }
+            }
         } catch (e: Exception) {
+            // Exception pe landlordName fallback
             currentBooking.landlordName.ifBlank { "—" }
         }
     }
@@ -147,7 +176,6 @@ fun BookingDetailScreen(
         Color(0xFFDCFCE7), Color(0xFF16A34A),
         onConfirm = {
             booking?.bookingId?.let { bid ->
-                // ✅ ADD: Pre-booking approve → DEPOSIT_PAID, normal → CONFIRMED
                 val newStatus = if (booking.isPreBooking) BookingStatus.DEPOSIT_PAID
                 else BookingStatus.CONFIRMED
                 viewModel.updateStatusByAdmin(bid, newStatus)
@@ -156,7 +184,6 @@ fun BookingDetailScreen(
         },
         onDismiss = { showApprove = false }
     )
-    // ✅ ADD: Check-in dialog
     if (showCheckIn) BDialog(
         "Mark Checked In", "Confirm tenant has arrived? Remaining payment will be due.",
         "Mark Checked In", Color(0xFF1D4ED8), Icons.Default.Home,
@@ -164,7 +191,6 @@ fun BookingDetailScreen(
         onConfirm = { booking?.bookingId?.let { viewModel.markCheckedIn(it) }; showCheckIn = false },
         onDismiss = { showCheckIn = false }
     )
-    // ✅ ADD: Final payment dialog
     if (showFinalPay) BDialog(
         "Final Payment Received", "Confirm remaining 80% payment received from tenant?",
         "Confirm Payment", Color(0xFF16A34A), Icons.Default.Payments,
@@ -187,14 +213,13 @@ fun BookingDetailScreen(
             else -> {
                 val t            = bTheme(booking.bookingStatus)
                 val isPending    = booking.bookingStatus == BookingStatus.PENDING
-                // ✅ ADD: isPreBooking check
                 val isPreBooking = booking.isPreBooking ||
                         booking.bookingStatus == BookingStatus.DEPOSIT_PAID ||
                         booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT
 
                 Column(Modifier.fillMaxSize()) {
 
-                    // TOP BAR
+                    // ── TOP BAR ───────────────────────────────────────────────
                     Column(Modifier.fillMaxWidth().background(BN).statusBarsPadding()) {
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
@@ -207,7 +232,6 @@ fun BookingDetailScreen(
                                 Text("Booking Details", fontWeight = FontWeight.SemiBold, color = BW, fontSize = 16.sp)
                                 Text("#${booking.bookingId.take(8).uppercase()}", color = BW.copy(alpha = 0.4f), fontSize = 11.sp)
                             }
-                            // ✅ ADD: Pre-Booking badge
                             if (isPreBooking) {
                                 Box(
                                     Modifier.clip(RoundedCornerShape(20.dp)).background(BG.copy(0.2f)).padding(horizontal = 8.dp, vertical = 4.dp)
@@ -246,14 +270,14 @@ fun BookingDetailScreen(
                         }
                     }
 
-                    // TAB CONTENT
+                    // ── TAB CONTENT ───────────────────────────────────────────
                     Column(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         when (selectedTab) {
 
-                            // TAB 0: Details
+                            // ── TAB 0: Details ────────────────────────────────
                             0 -> {
                                 BStrip(t.icon, t.desc, t.fg, t.bg)
                                 BCard("Property", Icons.Default.Apartment) {
@@ -287,9 +311,8 @@ fun BookingDetailScreen(
                                 }
                             }
 
-                            // TAB 1: Payment
+                            // ── TAB 1: Payment ────────────────────────────────
                             1 -> {
-                                // ✅ ADD: Pre-booking vs normal payment tab
                                 if (isPreBooking) {
                                     BCard("Pre-Booking Payment", Icons.Default.AccountBalanceWallet) {
                                         val totalCost    = booking.subtotal
@@ -303,7 +326,6 @@ fun BookingDetailScreen(
                                         HorizontalDivider(color = BL)
                                         Spacer(Modifier.height(8.dp))
 
-                                        // Deposit paid box
                                         Box(
                                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFDCFCE7)).padding(12.dp)
                                         ) {
@@ -320,7 +342,6 @@ fun BookingDetailScreen(
 
                                         val isRemainPaid = booking.paymentStatusEnum == PaymentStatus.PAID ||
                                                 booking.bookingStatus == BookingStatus.COMPLETED
-                                        // Remaining box
                                         Box(
                                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                                                 .background(when {
@@ -388,8 +409,8 @@ fun BookingDetailScreen(
                                             }
                                         }
 
-                                        // ✅ ADD: Landlord check-in button
                                         if (isCurrentUserLandlord && booking.bookingStatus == BookingStatus.DEPOSIT_PAID) {
+                                            Spacer(Modifier.height(12.dp))
                                             Button(
                                                 onClick  = { showCheckIn = true },
                                                 modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -402,8 +423,8 @@ fun BookingDetailScreen(
                                             }
                                         }
 
-                                        // ✅ ADD: Landlord final payment button
                                         if (isCurrentUserLandlord && booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT) {
+                                            Spacer(Modifier.height(12.dp))
                                             Button(
                                                 onClick  = { showFinalPay = true },
                                                 modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -417,7 +438,6 @@ fun BookingDetailScreen(
                                         }
                                     }
                                 } else {
-                                    // Normal booking payment tab (tumhara original)
                                     BCard("Payment Breakdown", Icons.Default.Receipt) {
                                         BPayRow("Price / Night",    "PKR ${booking.pricePerNight.toInt()}")
                                         BPayRow("Subtotal",         "PKR ${booking.subtotal.toInt()}")
@@ -471,13 +491,15 @@ fun BookingDetailScreen(
                                 }
                             }
 
-                            // TAB 2: Info
+                            // ── TAB 2: Info ───────────────────────────────────
                             2 -> {
                                 BCard("Booking Info", Icons.Default.Info) {
-                                    BRow("Tenant",         booking.tenantEmail.ifBlank { tenantName })
-                                    BRow("Host",           hostName)  // ✅ ADD: dynamic host name
+                                    // Tenant: pehle tenantName (fetched), fallback email
+                                    BRow("Tenant", tenantName.ifBlank { booking.tenantEmail.ifBlank { "—" } })
+                                    // Host: FIXED — ab auto properties mein bhi naam aayega ✅
+                                    BRow("Host", hostName)
                                     BRow("Payment Method", if (isPreBooking) "Partial / Cash on Arrival" else booking.paymentMethod.ifBlank { "—" })
-                                    BRow("Booked On",      bfmt(booking.createdAt?.toDate()))
+                                    BRow("Booked On", bfmt(booking.createdAt?.toDate()))
                                 }
 
                                 if (!isCurrentUserLandlord && isPending) {
@@ -598,7 +620,7 @@ private fun BDialog(title: String, message: String, confirmLabel: String, confir
     )
 }
 
-// ── Public aliases (tumhari original — touch nahi ki) ─────────────────────────
+// ── Public aliases ────────────────────────────────────────────────────────────
 @Composable fun BDCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) = BCard(title, icon, content)
 @Composable fun BDField(label: String, value: String) = BRow(label, value)
 @Composable fun BDPayRow(label: String, value: String) = BPayRow(label, value)

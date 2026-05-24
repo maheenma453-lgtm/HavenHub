@@ -36,17 +36,14 @@ class PaymentRepository @Inject constructor(
 
     // ── READ ──────────────────────────────────────────────────────────────────
 
-    // ✅ FIX: orderBy hata diya — payments index abhi build ho raha hai
-    // Client-side sort se same result milega
     suspend fun getUserPayments(userId: String): Resource<List<Payment>> {
         return try {
             val snapshot = paymentsCollection
                 .whereEqualTo("payerId", userId)
-                // orderBy removed — composite index required tha jo nahi tha
                 .get().await()
             Resource.Success(
                 snapshot.toObjects(Payment::class.java)
-                    .sortedByDescending { it.createdAt }  // client-side sort
+                    .sortedByDescending { it.createdAt }
             )
         } catch (e: Exception) {
             Log.e("PAYMENT_REPO", "getUserPayments FAIL: ${e.localizedMessage}")
@@ -66,16 +63,14 @@ class PaymentRepository @Inject constructor(
         }
     }
 
-    // ✅ FIX: orderBy hata diya — landlord payments bhi same issue tha
     suspend fun getLandlordPayments(landlordId: String): Resource<List<Payment>> {
         return try {
             val snapshot = paymentsCollection
                 .whereEqualTo("payeeId", landlordId)
-                // orderBy removed — composite index required tha jo nahi tha
                 .get().await()
             Resource.Success(
                 snapshot.toObjects(Payment::class.java)
-                    .sortedByDescending { it.createdAt }  // client-side sort
+                    .sortedByDescending { it.createdAt }
             )
         } catch (e: Exception) {
             Log.e("PAYMENT_REPO", "getLandlordPayments FAIL: ${e.localizedMessage}")
@@ -104,34 +99,34 @@ class PaymentRepository @Inject constructor(
             val propertyTitle = fetchPropertyTitle(payment.bookingId)
             val bookingId     = payment.bookingId
 
-            // 1. Tenant ko confirm karo
+            // 1. Tenant confirmation
             if (payment.payerId.isNotBlank()) {
                 notificationRepository.sendNotification(
                     recipientId = payment.payerId,
                     type        = NotificationType.PAYMENT_RECEIVED,
                     title       = "Payment Successful! 💚",
-                    body        = "Rs. $amountInt \"$propertyTitle\" ke liye payment confirm ho gayi.",
+                    body        = "Rs. $amountInt payment for \"$propertyTitle\" has been confirmed.",
                     referenceId = bookingId,
                     targetRole  = "tenant"
                 )
                 Log.d("PAYMENT_REPO", "✅ Tenant payment notification sent to ${payment.payerId}")
             }
 
-            // 2. Landlord ko batao
+            // 2. Landlord notification
             val landlordId = resolvePayeeId(payment)
             if (landlordId.isNotBlank()) {
                 notificationRepository.sendNotification(
                     recipientId = landlordId,
                     type        = NotificationType.PAYMENT_RECEIVED,
                     title       = "Payment Received! 💰",
-                    body        = "Rs. $amountInt \"$propertyTitle\" ke liye receive hua.",
+                    body        = "Rs. $amountInt payment received for \"$propertyTitle\".",
                     referenceId = bookingId,
                     targetRole  = "landlord"
                 )
                 Log.d("PAYMENT_REPO", "✅ Landlord payment notification sent to $landlordId")
             }
 
-            // 3. Admin ko inform karo
+            // 3. Admin notification
             sendPaymentNotificationToAdmins(amountInt, propertyTitle, bookingId)
 
         } catch (e: Exception) {
@@ -177,7 +172,7 @@ class PaymentRepository @Inject constructor(
                     recipientId = doc.id,
                     type        = NotificationType.PAYMENT_RECEIVED,
                     title       = "Payment Received (Admin)",
-                    body        = "Rs. $amountInt \"$propertyTitle\" ke liye receive hua.",
+                    body        = "Rs. $amountInt payment received for \"$propertyTitle\".",
                     referenceId = bookingId,
                     targetRole  = "admin"
                 )
@@ -187,18 +182,3 @@ class PaymentRepository @Inject constructor(
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

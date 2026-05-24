@@ -2,7 +2,7 @@ package com.example.havenhub.utils
 
 object Constants {
 
-    // ── Firebase Collections ──────────────────────────────────────────────────
+    // ── Firebase Collections ─────────────────────────────────────────────────
     const val COLLECTION_USERS           = "users"
     const val COLLECTION_PROPERTIES      = "properties"
     const val COLLECTION_BOOKINGS        = "bookings"
