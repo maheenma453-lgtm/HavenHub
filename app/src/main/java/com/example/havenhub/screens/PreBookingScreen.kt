@@ -26,12 +26,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,24 +40,24 @@ import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.VacationViewModel
 
 // ─── Color Palette ────────────────────────────────────────────────────────────
-private val PB_NavyDeep    = Color(0xFF060E20)
-private val PB_NavyPrime   = Color(0xFF0D1B3E)
-private val PB_NavyMid     = Color(0xFF1A3A6B)
-private val PB_NavyLight   = Color(0xFF2A4E8A)
-private val PB_Gold        = Color(0xFFD4AF37)
-private val PB_GoldLight   = Color(0xFFF5D060)
-private val PB_GoldDim     = Color(0xFFB8962E)
-private val PB_GoldFaint   = Color(0xFFFFF8E1)
-private val PB_Success     = Color(0xFF16A34A)
-private val PB_SuccessLight= Color(0xFFDCFCE7)
-private val PB_Warning     = Color(0xFFD97706)
-private val PB_WarningLight= Color(0xFFFEF3C7)
-private val PB_CardBg      = Color(0xFFFFFFFF)
-private val PB_PageBg      = Color(0xFFF2F5FB)
-private val PB_TextDark    = Color(0xFF1A2744)
-private val PB_TextMuted   = Color(0xFF8899AA)
-private val PB_TextLight   = Color(0xFFBBCCDD)
-private val PB_Divider     = Color(0xFFE8EEF5)
+private val PB_NavyDeep     = Color(0xFF060E20)
+private val PB_NavyPrime    = Color(0xFF0D1B3E)
+private val PB_NavyMid      = Color(0xFF1A3A6B)
+private val PB_NavyLight    = Color(0xFF2A4E8A)
+private val PB_Gold         = Color(0xFFD4AF37)
+private val PB_GoldLight    = Color(0xFFF5D060)
+private val PB_GoldDim      = Color(0xFFB8962E)
+private val PB_GoldFaint    = Color(0xFFFFF8E1)
+private val PB_Success      = Color(0xFF16A34A)
+private val PB_SuccessLight = Color(0xFFDCFCE7)
+private val PB_Warning      = Color(0xFFD97706)
+private val PB_WarningLight = Color(0xFFFEF3C7)
+private val PB_CardBg       = Color(0xFFFFFFFF)
+private val PB_PageBg       = Color(0xFFF2F5FB)
+private val PB_TextDark     = Color(0xFF1A2744)
+private val PB_TextMuted    = Color(0xFF8899AA)
+private val PB_TextLight    = Color(0xFFBBCCDD)
+private val PB_Divider      = Color(0xFFE8EEF5)
 
 private val GoldGradient = Brush.horizontalGradient(
     listOf(PB_Gold.copy(0.9f), PB_GoldLight.copy(0.6f), PB_Gold.copy(0.9f))
@@ -66,21 +65,27 @@ private val GoldGradient = Brush.horizontalGradient(
 private val GoldBorder = Brush.horizontalGradient(
     listOf(PB_Gold.copy(0.85f), PB_GoldLight.copy(0.5f), PB_Gold.copy(0.85f))
 )
-private val NavyGradient = Brush.linearGradient(listOf(PB_NavyDeep, PB_NavyMid))
+private val NavyGradient     = Brush.linearGradient(listOf(PB_NavyDeep, PB_NavyMid))
 private val NavySoftGradient = Brush.linearGradient(listOf(PB_NavyPrime, PB_NavyLight))
 
-// ─── Responsive Sizes ─────────────────────────────────────────────────────────
+// ─── Fully Responsive Size System ─────────────────────────────────────────────
 private data class PBSizes(
-    val hPad       : Dp,
-    val vPad       : Dp,
+    val hPad        : Dp,
+    val vPad        : Dp,
     val cardRadius  : Dp,
-    val titleSp    : Float,
-    val bodySp     : Float,
-    val captionSp  : Float,
-    val iconSize   : Dp,
-    val avatarSize : Dp,
-    val chipHeight : Dp,
-    val btnHeight  : Dp
+    val titleSp     : Float,
+    val bodySp      : Float,
+    val captionSp   : Float,
+    val iconSize    : Dp,
+    val avatarSize  : Dp,
+    val chipHeight  : Dp,
+    val btnHeight   : Dp,
+    val sectionGap  : Dp,
+    val cardPad     : Dp,
+    val priceSize   : Float,    // large price font
+    val depositSize : Float,    // bottom bar deposit font
+    val checkSize   : Dp,
+    val bannerIcon  : Dp,
 )
 
 @Composable
@@ -88,12 +93,62 @@ private fun rememberPBSizes(): PBSizes {
     val w = LocalConfiguration.current.screenWidthDp
     return remember(w) {
         when {
-            w < 340  -> PBSizes(12.dp, 10.dp, 12.dp, 12f, 10.5f, 9.5f, 14.dp, 38.dp, 28.dp, 44.dp)
-            w < 360  -> PBSizes(14.dp, 12.dp, 14.dp, 13f, 11f,   10f,  15.dp, 40.dp, 30.dp, 46.dp)
-            w < 400  -> PBSizes(16.dp, 14.dp, 16.dp, 14f, 11.5f, 10.5f,16.dp, 42.dp, 32.dp, 48.dp)
-            w < 480  -> PBSizes(20.dp, 16.dp, 18.dp, 15f, 12f,   11f,  17.dp, 44.dp, 34.dp, 50.dp)
-            w < 600  -> PBSizes(22.dp, 18.dp, 20.dp, 16f, 13f,   11.5f,18.dp, 46.dp, 36.dp, 52.dp)
-            else     -> PBSizes(28.dp, 20.dp, 22.dp, 17f, 14f,   12f,  20.dp, 50.dp, 38.dp, 56.dp)
+            w < 320 -> PBSizes(
+                hPad = 10.dp, vPad = 8.dp, cardRadius = 10.dp,
+                titleSp = 11f, bodySp = 9.5f, captionSp = 8.5f,
+                iconSize = 13.dp, avatarSize = 32.dp, chipHeight = 24.dp,
+                btnHeight = 40.dp, sectionGap = 10.dp, cardPad = 10.dp,
+                priceSize = 18f, depositSize = 17f,
+                checkSize = 14.dp, bannerIcon = 36.dp
+            )
+            w < 360 -> PBSizes(
+                hPad = 12.dp, vPad = 10.dp, cardRadius = 12.dp,
+                titleSp = 12f, bodySp = 10.5f, captionSp = 9f,
+                iconSize = 14.dp, avatarSize = 34.dp, chipHeight = 26.dp,
+                btnHeight = 44.dp, sectionGap = 12.dp, cardPad = 12.dp,
+                priceSize = 20f, depositSize = 19f,
+                checkSize = 15.dp, bannerIcon = 38.dp
+            )
+            w < 390 -> PBSizes(
+                hPad = 14.dp, vPad = 12.dp, cardRadius = 14.dp,
+                titleSp = 13f, bodySp = 11f, captionSp = 9.5f,
+                iconSize = 15.dp, avatarSize = 36.dp, chipHeight = 28.dp,
+                btnHeight = 46.dp, sectionGap = 14.dp, cardPad = 14.dp,
+                priceSize = 21f, depositSize = 20f,
+                checkSize = 16.dp, bannerIcon = 40.dp
+            )
+            w < 430 -> PBSizes(
+                hPad = 16.dp, vPad = 14.dp, cardRadius = 16.dp,
+                titleSp = 14f, bodySp = 11.5f, captionSp = 10f,
+                iconSize = 16.dp, avatarSize = 38.dp, chipHeight = 30.dp,
+                btnHeight = 48.dp, sectionGap = 16.dp, cardPad = 16.dp,
+                priceSize = 22f, depositSize = 21f,
+                checkSize = 18.dp, bannerIcon = 42.dp
+            )
+            w < 480 -> PBSizes(
+                hPad = 18.dp, vPad = 15.dp, cardRadius = 17.dp,
+                titleSp = 15f, bodySp = 12f, captionSp = 10.5f,
+                iconSize = 17.dp, avatarSize = 40.dp, chipHeight = 32.dp,
+                btnHeight = 50.dp, sectionGap = 17.dp, cardPad = 17.dp,
+                priceSize = 23f, depositSize = 22f,
+                checkSize = 19.dp, bannerIcon = 44.dp
+            )
+            w < 600 -> PBSizes(
+                hPad = 20.dp, vPad = 16.dp, cardRadius = 18.dp,
+                titleSp = 16f, bodySp = 13f, captionSp = 11f,
+                iconSize = 18.dp, avatarSize = 42.dp, chipHeight = 34.dp,
+                btnHeight = 52.dp, sectionGap = 18.dp, cardPad = 18.dp,
+                priceSize = 24f, depositSize = 23f,
+                checkSize = 20.dp, bannerIcon = 46.dp
+            )
+            else -> PBSizes(
+                hPad = 26.dp, vPad = 20.dp, cardRadius = 20.dp,
+                titleSp = 17f, bodySp = 14f, captionSp = 12f,
+                iconSize = 20.dp, avatarSize = 46.dp, chipHeight = 38.dp,
+                btnHeight = 56.dp, sectionGap = 20.dp, cardPad = 20.dp,
+                priceSize = 26f, depositSize = 25f,
+                checkSize = 22.dp, bannerIcon = 50.dp
+            )
         }
     }
 }
@@ -126,7 +181,6 @@ fun PreBookingScreen(
     val depositAmount = viewModel.calculateDepositAmount()
 
     Scaffold(
-        // ── TOP BAR ──────────────────────────────────────────────────────────
         topBar = {
             PBTopBar(
                 propertyId    = propertyId,
@@ -135,10 +189,7 @@ fun PreBookingScreen(
                 onBack        = { navController.popBackStack() }
             )
         },
-
         containerColor = PB_PageBg,
-
-        // ── BOTTOM BAR ───────────────────────────────────────────────────────
         bottomBar = {
             AnimatedVisibility(
                 visible = selectedPkg != null,
@@ -151,7 +202,7 @@ fun PreBookingScreen(
                         totalAmount   = totalAmount,
                         isLoading     = uiState.isLoading,
                         sz            = sz,
-                        onPay = {
+                        onPay         = {
                             navController.navigate(
                                 Screen.Booking.createRoute(
                                     propertyId.ifEmpty { selectedPkg.propertyId }
@@ -162,7 +213,6 @@ fun PreBookingScreen(
                 }
             }
         }
-
     ) { paddingValues ->
 
         LazyColumn(
@@ -174,19 +224,19 @@ fun PreBookingScreen(
 
             // ── Advance Booking Banner ────────────────────────────────────────
             item {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(sz.sectionGap))
                 PBAdvanceBanner(sz)
             }
 
             // ── Section Header ────────────────────────────────────────────────
             item {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(sz.sectionGap + 4.dp))
                 PBSectionHeader(
                     title      = "Available Packages",
                     badgeCount = if (packages.isNotEmpty()) packages.size else null,
                     sz         = sz
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(sz.vPad - 4.dp))
             }
 
             // ── Loading State ─────────────────────────────────────────────────
@@ -211,9 +261,9 @@ fun PreBookingScreen(
                 }
             }
 
-            // ── Guest Count ───────────────────────────────────────────────────
+            // ── Guest Counter ─────────────────────────────────────────────────
             item {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(sz.sectionGap - 4.dp))
                 PBGuestCounter(
                     guestCount = uiState.guestCount,
                     sz         = sz,
@@ -235,7 +285,7 @@ fun PreBookingScreen(
                                 (uiState.checkOutDay - uiState.checkInDay).coerceAtLeast(1)
                             else -> selectedPkg.minNights.coerceAtLeast(1)
                         }
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(sz.sectionGap - 4.dp))
                         PBPaymentSummary(
                             pkg           = selectedPkg,
                             nights        = nights,
@@ -251,12 +301,12 @@ fun PreBookingScreen(
             // ── Error Message ─────────────────────────────────────────────────
             if (uiState.errorMessage != null) {
                 item {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(sz.vPad - 4.dp))
                     PBErrorCard(message = uiState.errorMessage ?: "", sz = sz)
                 }
             }
 
-            item { Spacer(Modifier.height(12.dp)) }
+            item { Spacer(Modifier.height(sz.sectionGap)) }
         }
     }
 }
@@ -276,20 +326,20 @@ private fun PBTopBar(
             .fillMaxWidth()
             .background(NavyGradient)
     ) {
-        // Subtle decorative circles
+        // Decorative circles
         Box(
             Modifier
-                .size(130.dp)
+                .size((sz.avatarSize.value * 3.2f).dp)
                 .align(Alignment.TopEnd)
-                .offset(x = 45.dp, y = (-45).dp)
+                .offset(x = (sz.avatarSize.value * 1.2f).dp, y = -(sz.avatarSize.value * 1.2f).dp)
                 .clip(CircleShape)
                 .background(PB_Gold.copy(0.06f))
         )
         Box(
             Modifier
-                .size(70.dp)
+                .size((sz.avatarSize.value * 1.7f).dp)
                 .align(Alignment.BottomStart)
-                .offset(x = (-20).dp, y = 20.dp)
+                .offset(x = -(sz.avatarSize.value * 0.5f).dp, y = (sz.avatarSize.value * 0.5f).dp)
                 .clip(CircleShape)
                 .background(PB_Gold.copy(0.04f))
         )
@@ -306,7 +356,7 @@ private fun PBTopBar(
         Row(
             modifier          = Modifier
                 .statusBarsPadding()
-                .padding(horizontal = sz.hPad, vertical = 14.dp),
+                .padding(horizontal = sz.hPad, vertical = sz.vPad),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Back button
@@ -330,19 +380,19 @@ private fun PBTopBar(
                 )
             }
 
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(sz.hPad - 4.dp))
 
             Column(Modifier.weight(1f)) {
                 Text(
                     "PRE-BOOKING",
                     color         = PB_Gold,
-                    fontSize      = (sz.titleSp + 1).sp,
+                    fontSize      = (sz.titleSp + 1f).sp,
                     fontWeight    = FontWeight.Black,
                     letterSpacing = 2.sp
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text     = when {
+                    text = when {
                         propertyTitle.isNotEmpty() -> propertyTitle
                         propertyId.isNotEmpty()    -> propertyId
                         else                       -> "Select a Package"
@@ -354,19 +404,19 @@ private fun PBTopBar(
                 )
             }
 
-            // Decorative gold badge
+            // 20% OFF badge
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape((sz.cardRadius.value * 0.55f).dp))
                     .background(PB_Gold.copy(0.12f))
-                    .border(1.dp, GoldBorder, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .border(1.dp, GoldBorder, RoundedCornerShape((sz.cardRadius.value * 0.55f).dp))
+                    .padding(horizontal = sz.hPad - 6.dp, vertical = sz.vPad - 8.dp)
             ) {
                 Text(
                     "20% OFF",
-                    color      = PB_Gold,
-                    fontSize   = sz.captionSp.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    color         = PB_Gold,
+                    fontSize      = sz.captionSp.sp,
+                    fontWeight    = FontWeight.ExtraBold,
                     letterSpacing = 0.5.sp
                 )
             }
@@ -404,38 +454,42 @@ private fun PBBottomBar(
             modifier              = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = sz.hPad, vertical = 14.dp),
+                .padding(horizontal = sz.hPad, vertical = sz.vPad - 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Column {
+            Column(Modifier.weight(1f).padding(end = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(7.dp)
                             .clip(CircleShape)
                             .background(PB_Success)
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(5.dp))
                     Text(
                         "Deposit Required (20%)",
-                        color    = PB_TextMuted,
-                        fontSize = sz.captionSp.sp,
-                        fontWeight = FontWeight.Medium
+                        color      = PB_TextMuted,
+                        fontSize   = sz.captionSp.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis
                     )
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "PKR ${"%,.0f".format(depositAmount)}",
-                    color      = PB_NavyDeep,
-                    fontWeight = FontWeight.Black,
-                    fontSize   = (sz.titleSp + 5).sp,
-                    letterSpacing = (-0.5).sp
+                    color         = PB_NavyDeep,
+                    fontWeight    = FontWeight.Black,
+                    fontSize      = sz.depositSize.sp,
+                    letterSpacing = (-0.5).sp,
+                    maxLines      = 1
                 )
                 Text(
                     "Total: PKR ${"%,.0f".format(totalAmount)}",
                     color    = PB_TextMuted,
-                    fontSize = sz.captionSp.sp
+                    fontSize = sz.captionSp.sp,
+                    maxLines = 1
                 )
             }
 
@@ -443,39 +497,39 @@ private fun PBBottomBar(
             Box(
                 modifier = Modifier
                     .height(sz.btnHeight)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape((sz.cardRadius.value * 0.85f).dp))
                     .background(NavyGradient)
-                    .border(1.5.dp, GoldBorder, RoundedCornerShape(14.dp))
+                    .border(1.5.dp, GoldBorder, RoundedCornerShape((sz.cardRadius.value * 0.85f).dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication        = null,
                         enabled           = !isLoading
                     ) { onPay() }
-                    .padding(horizontal = 22.dp),
+                    .padding(horizontal = sz.hPad + 4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
-                        color     = PB_Gold,
-                        modifier  = Modifier.size(20.dp),
+                        color       = PB_Gold,
+                        modifier    = Modifier.size(sz.iconSize + 4.dp),
                         strokeWidth = 2.5.dp
                     )
                 } else {
                     Row(
                         verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Icon(
                             Icons.Default.Lock,
                             contentDescription = null,
                             tint     = PB_Gold,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(sz.iconSize - 2.dp)
                         )
                         Text(
                             "Pay Deposit",
-                            color      = PB_Gold,
-                            fontWeight = FontWeight.Black,
-                            fontSize   = sz.titleSp.sp,
+                            color         = PB_Gold,
+                            fontWeight    = FontWeight.Black,
+                            fontSize      = sz.titleSp.sp,
                             letterSpacing = 0.3.sp
                         )
                     }
@@ -508,7 +562,6 @@ private fun PBAdvanceBanner(sz: PBSizes) {
             )
             .border(1.dp, GoldBorder, RoundedCornerShape(sz.cardRadius))
     ) {
-        // Subtle pattern overlay
         Box(
             Modifier
                 .fillMaxWidth()
@@ -518,20 +571,20 @@ private fun PBAdvanceBanner(sz: PBSizes) {
         )
 
         Row(
-            modifier          = Modifier.padding(horizontal = sz.hPad, vertical = 16.dp),
+            modifier          = Modifier.padding(horizontal = sz.hPad, vertical = sz.vPad),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 Modifier
-                    .size(sz.avatarSize + 6.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(sz.bannerIcon)
+                    .clip(RoundedCornerShape((sz.cardRadius.value * 0.7f).dp))
                     .background(PB_Gold.copy(0.15f))
-                    .border(1.dp, GoldBorder, RoundedCornerShape(12.dp)),
+                    .border(1.dp, GoldBorder, RoundedCornerShape((sz.cardRadius.value * 0.7f).dp)),
                 Alignment.Center
             ) {
-                Text("📅", fontSize = (sz.titleSp + 6).sp)
+                Text("📅", fontSize = (sz.titleSp + 5f).sp)
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(sz.hPad - 4.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     "Advance Booking",
@@ -545,7 +598,7 @@ private fun PBAdvanceBanner(sz: PBSizes) {
                     "Pay only 20% deposit now to secure your stay. Remaining amount due on arrival.",
                     fontSize   = sz.captionSp.sp,
                     color      = Color.White.copy(0.65f),
-                    lineHeight = (sz.captionSp + 5).sp
+                    lineHeight = (sz.captionSp + 5f).sp
                 )
             }
         }
@@ -566,16 +619,16 @@ private fun PBSectionHeader(title: String, badgeCount: Int?, sz: PBSizes) {
         Box(
             Modifier
                 .width(4.dp)
-                .height(24.dp)
+                .height((sz.titleSp + 8f).dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(GoldGradient)
         )
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(sz.hPad - 6.dp))
         Text(
             title,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize   = (sz.titleSp + 2).sp,
-            color      = PB_TextDark,
+            fontWeight    = FontWeight.ExtraBold,
+            fontSize      = (sz.titleSp + 2f).sp,
+            color         = PB_TextDark,
             letterSpacing = 0.2.sp
         )
         Spacer(Modifier.weight(1f))
@@ -583,9 +636,9 @@ private fun PBSectionHeader(title: String, badgeCount: Int?, sz: PBSizes) {
             Box(
                 Modifier
                     .clip(RoundedCornerShape(20.dp))
-                    .background(PB_NavyDeep.copy(0.08f))
+                    .background(PB_NavyDeep.copy(0.07f))
                     .border(1.dp, GoldBorder, RoundedCornerShape(20.dp))
-                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                    .padding(horizontal = sz.hPad - 4.dp, vertical = 5.dp)
             ) {
                 Text(
                     "$badgeCount Deals",
@@ -606,16 +659,16 @@ private fun PBLoadingState(sz: PBSizes) {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(220.dp),
+            .height(200.dp),
         Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(
                 color       = PB_Gold,
                 strokeWidth = 3.dp,
-                modifier    = Modifier.size(44.dp)
+                modifier    = Modifier.size(sz.bannerIcon)
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(sz.vPad))
             Text(
                 "Packages load ho rahe hain...",
                 color    = PB_TextMuted,
@@ -637,21 +690,25 @@ private fun PBEmptyState(propertyId: String, sz: PBSizes) {
             .clip(RoundedCornerShape(sz.cardRadius))
             .background(PB_CardBg)
             .border(1.5.dp, GoldBorder, RoundedCornerShape(sz.cardRadius))
-            .padding(40.dp),
+            .padding(sz.hPad + sz.vPad),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 Modifier
-                    .size(64.dp)
+                    .size(sz.bannerIcon + 20.dp)
                     .clip(CircleShape)
                     .background(PB_Gold.copy(0.1f))
                     .border(1.5.dp, GoldBorder, CircleShape),
                 Alignment.Center
             ) {
-                Icon(Icons.Default.Inventory2, null, tint = PB_GoldDim, modifier = Modifier.size(28.dp))
+                Icon(
+                    Icons.Default.Inventory2, null,
+                    tint     = PB_GoldDim,
+                    modifier = Modifier.size(sz.iconSize + 8.dp)
+                )
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(sz.vPad))
             Text(
                 "No packages available",
                 color      = PB_TextDark,
@@ -665,6 +722,292 @@ private fun PBEmptyState(propertyId: String, sz: PBSizes) {
                 fontSize   = sz.bodySp.sp,
                 fontWeight = if (propertyId.isEmpty()) FontWeight.Bold else FontWeight.Normal
             )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PACKAGE CARD
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun PBPackageCard(
+    pkg       : RentalPackage,
+    isSelected: Boolean,
+    sz        : PBSizes,
+    onClick   : () -> Unit
+) {
+    val animatedElevation by animateDpAsState(
+        targetValue   = if (isSelected) 12.dp else 4.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label         = "cardElevation"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = sz.hPad, vertical = (sz.vPad.value * 0.45f).dp)
+            .shadow(
+                elevation    = animatedElevation,
+                shape        = RoundedCornerShape(sz.cardRadius),
+                ambientColor = if (isSelected) PB_Gold.copy(0.3f) else PB_TextMuted.copy(0.1f),
+                spotColor    = if (isSelected) PB_Gold.copy(0.2f) else Color.Transparent
+            )
+            .clip(RoundedCornerShape(sz.cardRadius))
+            .background(
+                if (isSelected)
+                    Brush.linearGradient(listOf(PB_NavyDeep.copy(0.04f), PB_Gold.copy(0.03f), PB_CardBg))
+                else
+                    Brush.linearGradient(listOf(PB_CardBg, PB_CardBg))
+            )
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                brush = if (isSelected) GoldBorder
+                else Brush.horizontalGradient(listOf(PB_Divider, PB_Divider)),
+                shape = RoundedCornerShape(sz.cardRadius)
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication        = null
+            ) { onClick() }
+    ) {
+        // Gold top stripe when selected
+        if (isSelected) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .align(Alignment.TopCenter)
+                    .background(GoldBorder)
+            )
+        }
+
+        Column(Modifier.padding(horizontal = sz.cardPad, vertical = sz.vPad + 4.dp)) {
+
+            // ── Header row ────────────────────────────────────────────────────
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.Top
+            ) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(end = sz.hPad - 4.dp)
+                ) {
+                    if (pkg.badgeLabel.isNotEmpty()) {
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape((sz.cardRadius.value * 0.55f).dp))
+                                .background(PB_Gold.copy(0.12f))
+                                .border(1.dp, GoldBorder, RoundedCornerShape((sz.cardRadius.value * 0.55f).dp))
+                                .padding(horizontal = sz.hPad - 6.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                pkg.badgeLabel,
+                                color         = PB_GoldDim,
+                                fontSize      = sz.captionSp.sp,
+                                fontWeight    = FontWeight.ExtraBold,
+                                letterSpacing = 0.3.sp
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(
+                        pkg.packageName,
+                        fontWeight    = FontWeight.ExtraBold,
+                        fontSize      = (sz.titleSp + 2f).sp,
+                        color         = PB_TextDark,
+                        letterSpacing = 0.1.sp
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        pkg.propertyTitle,
+                        color    = PB_TextMuted,
+                        fontSize = sz.bodySp.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Selected checkmark
+                AnimatedVisibility(
+                    visible = isSelected,
+                    enter   = scaleIn() + fadeIn(),
+                    exit    = scaleOut() + fadeOut()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(sz.checkSize + 16.dp)
+                            .clip(CircleShape)
+                            .background(NavyGradient)
+                            .border(1.5.dp, GoldBorder, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint     = PB_Gold,
+                            modifier = Modifier.size(sz.checkSize)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(sz.vPad))
+
+            // ── Price row ─────────────────────────────────────────────────────
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier          = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    pkg.formattedDiscountedPrice,
+                    fontWeight    = FontWeight.Black,
+                    fontSize      = sz.priceSize.sp,
+                    color         = PB_TextDark,
+                    letterSpacing = (-1).sp
+                )
+                Text(
+                    "/night",
+                    color    = PB_TextMuted,
+                    fontSize = sz.bodySp.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 3.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    pkg.formattedOriginalPrice,
+                    color          = PB_TextMuted,
+                    fontSize       = sz.bodySp.sp,
+                    textDecoration = TextDecoration.LineThrough,
+                    modifier       = Modifier.padding(bottom = 3.dp)
+                )
+                if (pkg.savingsLabel.isNotEmpty()) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(PB_SuccessLight)
+                            .padding(horizontal = 7.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            pkg.savingsLabel,
+                            color      = PB_Success,
+                            fontSize   = sz.captionSp.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(sz.vPad))
+
+            // ── Info Chips ────────────────────────────────────────────────────
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier              = Modifier.fillMaxWidth()
+            ) {
+                PBInfoChip(Icons.Default.NightsStay, "Min ${pkg.minNights}N", PB_TextMuted, sz)
+                if (pkg.maxNights != null)
+                    PBInfoChip(Icons.Default.EventAvailable, "Max ${pkg.maxNights}N", PB_TextMuted, sz)
+                if (pkg.remainingSlots != null) {
+                    val isLow = (pkg.remainingSlots ?: 0) <= 2
+                    PBInfoChip(
+                        icon  = Icons.Default.ConfirmationNumber,
+                        label = "${pkg.remainingSlots} slots left",
+                        tint  = if (isLow) MaterialTheme.colorScheme.error else PB_Success,
+                        sz    = sz
+                    )
+                }
+            }
+
+            // ── Inclusions ────────────────────────────────────────────────────
+            if (pkg.inclusions.isNotEmpty()) {
+                Spacer(Modifier.height(sz.vPad))
+                Divider(color = PB_Divider)
+                Spacer(Modifier.height(sz.vPad - 4.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .width(3.dp)
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(GoldGradient)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Includes",
+                        color      = PB_TextDark,
+                        fontSize   = sz.bodySp.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+                Spacer(Modifier.height(sz.vPad - 4.dp))
+
+                // Inclusions grid — 2 per row
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pkg.inclusions.take(4).chunked(2).forEach { rowItems ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowItems.forEach { item ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape((sz.cardRadius.value * 0.65f).dp))
+                                        .background(PB_Gold.copy(0.05f))
+                                        .border(1.dp, GoldBorder, RoundedCornerShape((sz.cardRadius.value * 0.65f).dp))
+                                        .padding(horizontal = sz.hPad - 6.dp, vertical = sz.vPad - 6.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            Modifier
+                                                .size(sz.iconSize + 2.dp)
+                                                .clip(CircleShape)
+                                                .background(PB_SuccessLight),
+                                            Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint     = PB_Success,
+                                                modifier = Modifier.size(sz.iconSize - 4.dp)
+                                            )
+                                        }
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            item,
+                                            fontSize   = sz.captionSp.sp,
+                                            color      = PB_TextDark,
+                                            maxLines   = 1,
+                                            overflow   = TextOverflow.Ellipsis,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                            if (rowItems.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INFO CHIP
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun PBInfoChip(icon: ImageVector, label: String, tint: Color, sz: PBSizes) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(tint.copy(0.07f))
+            .padding(horizontal = sz.hPad - 7.dp, vertical = sz.vPad - 9.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(sz.iconSize - 3.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(label, color = tint, fontSize = sz.captionSp.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -688,7 +1031,7 @@ private fun PBGuestCounter(
             .background(PB_CardBg)
             .border(1.5.dp, GoldBorder, RoundedCornerShape(sz.cardRadius))
     ) {
-        // Subtle gold left accent bar
+        // Gold left accent bar
         Box(
             Modifier
                 .width(4.dp)
@@ -700,11 +1043,14 @@ private fun PBGuestCounter(
         Row(
             modifier              = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = sz.hPad + 6.dp, vertical = 16.dp),
+                .padding(horizontal = sz.cardPad + 6.dp, vertical = sz.vPad + 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier          = Modifier.weight(1f).padding(end = 8.dp)
+            ) {
                 Box(
                     Modifier
                         .size(sz.avatarSize)
@@ -720,7 +1066,7 @@ private fun PBGuestCounter(
                         modifier = Modifier.size(sz.iconSize)
                     )
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(sz.hPad - 4.dp))
                 Column {
                     Text(
                         "Number of Guests",
@@ -738,7 +1084,7 @@ private fun PBGuestCounter(
 
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(sz.hPad - 6.dp)
             ) {
                 PBCounterButton(
                     symbol  = "−",
@@ -748,11 +1094,11 @@ private fun PBGuestCounter(
                 )
                 Text(
                     "$guestCount",
-                    fontSize   = (sz.titleSp + 6).sp,
+                    fontSize  = (sz.titleSp + 6f).sp,
                     fontWeight = FontWeight.Black,
-                    color      = PB_TextDark,
-                    modifier   = Modifier.widthIn(min = 32.dp),
-                    textAlign  = androidx.compose.ui.text.style.TextAlign.Center
+                    color     = PB_TextDark,
+                    modifier  = Modifier.widthIn(min = (sz.avatarSize.value * 0.9f).dp),
+                    textAlign = TextAlign.Center
                 )
                 PBCounterButton(
                     symbol  = "+",
@@ -791,9 +1137,9 @@ private fun PBCounterButton(symbol: String, enabled: Boolean, onClick: () -> Uni
         Text(
             symbol,
             color      = if (enabled) PB_Gold else PB_TextMuted,
-            fontSize   = (sz.titleSp + 3).sp,
+            fontSize   = (sz.titleSp + 3f).sp,
             fontWeight = FontWeight.Bold,
-            lineHeight = (sz.titleSp + 3).sp
+            lineHeight = (sz.titleSp + 3f).sp
         )
     }
 }
@@ -833,27 +1179,26 @@ private fun PBPaymentSummary(
                 .background(GoldBorder)
         )
 
-        Column(Modifier.padding(horizontal = sz.hPad, vertical = 20.dp)) {
+        Column(Modifier.padding(horizontal = sz.cardPad, vertical = sz.vPad + 4.dp)) {
 
-            // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
                         .size(sz.avatarSize)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape((sz.cardRadius.value * 0.65f).dp))
                         .background(PB_NavyDeep.copy(0.06f))
-                        .border(1.dp, GoldBorder, RoundedCornerShape(10.dp)),
+                        .border(1.dp, GoldBorder, RoundedCornerShape((sz.cardRadius.value * 0.65f).dp)),
                     Alignment.Center
                 ) {
                     Icon(Icons.Default.Receipt, null, tint = PB_NavyMid, modifier = Modifier.size(sz.iconSize))
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(sz.hPad - 4.dp))
                 Column {
                     Text(
                         "Payment Summary",
                         fontWeight    = FontWeight.ExtraBold,
                         color         = PB_TextDark,
-                        fontSize      = (sz.titleSp + 1).sp,
+                        fontSize      = (sz.titleSp + 1f).sp,
                         letterSpacing = 0.2.sp
                     )
                     Text(
@@ -864,20 +1209,19 @@ private fun PBPaymentSummary(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(sz.vPad))
             Divider(color = PB_Divider)
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(sz.vPad - 2.dp))
 
             PBSummaryRow("Package",    pkg.packageName,                sz)
             PBSummaryRow("Rate/Night", pkg.formattedDiscountedPrice,    sz, strikethrough = pkg.formattedOriginalPrice)
             PBSummaryRow("Duration",   "$nights nights",                sz)
             PBSummaryRow("Guests",     "$guestCount guests",            sz)
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(sz.vPad - 2.dp))
             Divider(color = PB_Divider)
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(sz.vPad - 2.dp))
 
-            // Total
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -888,43 +1232,41 @@ private fun PBPaymentSummary(
                     "PKR ${"%,.0f".format(totalAmount)}",
                     fontWeight = FontWeight.Black,
                     color      = PB_TextDark,
-                    fontSize   = (sz.titleSp + 1).sp
+                    fontSize   = (sz.titleSp + 1f).sp
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(sz.vPad - 2.dp))
 
             // Deposit Highlight Box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape((sz.cardRadius.value * 0.75f).dp))
                     .background(
-                        Brush.linearGradient(
-                            listOf(PB_WarningLight, PB_GoldFaint)
-                        )
+                        Brush.linearGradient(listOf(PB_WarningLight, PB_GoldFaint))
                     )
                     .border(
                         1.5.dp,
                         Brush.horizontalGradient(
                             listOf(PB_Warning.copy(0.6f), PB_Gold.copy(0.5f), PB_Warning.copy(0.6f))
                         ),
-                        RoundedCornerShape(12.dp)
+                        RoundedCornerShape((sz.cardRadius.value * 0.75f).dp)
                     )
-                    .padding(horizontal = sz.hPad, vertical = 14.dp)
+                    .padding(horizontal = sz.cardPad, vertical = sz.vPad)
             ) {
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 Icons.Default.Lock,
                                 contentDescription = null,
                                 tint     = PB_Warning,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(sz.iconSize - 3.dp)
                             )
                             Spacer(Modifier.width(5.dp))
                             Text(
@@ -943,9 +1285,9 @@ private fun PBPaymentSummary(
                     }
                     Text(
                         "PKR ${"%,.0f".format(depositAmount)}",
-                        fontWeight = FontWeight.Black,
-                        color      = PB_Warning,
-                        fontSize   = (sz.titleSp + 4).sp,
+                        fontWeight    = FontWeight.Black,
+                        color         = PB_Warning,
+                        fontSize      = (sz.titleSp + 4f).sp,
                         letterSpacing = (-0.5).sp
                     )
                 }
@@ -966,7 +1308,7 @@ private fun PBErrorCard(message: String, sz: PBSizes) {
             .clip(RoundedCornerShape(sz.cardRadius))
             .background(MaterialTheme.colorScheme.error.copy(0.06f))
             .border(1.dp, MaterialTheme.colorScheme.error.copy(0.3f), RoundedCornerShape(sz.cardRadius))
-            .padding(14.dp)
+            .padding(sz.hPad - 2.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -986,302 +1328,19 @@ private fun PBErrorCard(message: String, sz: PBSizes) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PACKAGE CARD
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun PBPackageCard(
-    pkg       : RentalPackage,
-    isSelected: Boolean,
-    sz        : PBSizes,
-    onClick   : () -> Unit
-) {
-    val animatedElevation by animateDpAsState(
-        targetValue = if (isSelected) 12.dp else 4.dp,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "cardElevation"
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = sz.hPad, vertical = 7.dp)
-            .shadow(
-                elevation    = animatedElevation,
-                shape        = RoundedCornerShape(sz.cardRadius),
-                ambientColor = if (isSelected) PB_Gold.copy(0.3f) else PB_TextMuted.copy(0.1f),
-                spotColor    = if (isSelected) PB_Gold.copy(0.2f) else Color.Transparent
-            )
-            .clip(RoundedCornerShape(sz.cardRadius))
-            .background(
-                if (isSelected)
-                    Brush.linearGradient(listOf(PB_NavyDeep.copy(0.04f), PB_Gold.copy(0.03f), PB_CardBg))
-                else
-                    Brush.linearGradient(listOf(PB_CardBg, PB_CardBg))
-            )
-            .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                brush = if (isSelected) GoldBorder
-                else Brush.horizontalGradient(listOf(PB_Divider, PB_Divider)),
-                shape = RoundedCornerShape(sz.cardRadius)
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication        = null
-            ) { onClick() }
-    ) {
-        // Gold top stripe when selected
-        if (isSelected) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .align(Alignment.TopCenter)
-                    .background(GoldBorder)
-            )
-        }
-
-        Column(Modifier.padding(horizontal = sz.hPad, vertical = 18.dp)) {
-
-            // ── Header row ────────────────────────────────────────────────────
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.Top
-            ) {
-                Column(Modifier.weight(1f).padding(end = 10.dp)) {
-                    if (pkg.badgeLabel.isNotEmpty()) {
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(PB_Gold.copy(0.12f))
-                                .border(1.dp, GoldBorder, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                pkg.badgeLabel,
-                                color      = PB_GoldDim,
-                                fontSize   = sz.captionSp.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 0.3.sp
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    Text(
-                        pkg.packageName,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize   = (sz.titleSp + 2).sp,
-                        color      = PB_TextDark,
-                        letterSpacing = 0.1.sp
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        pkg.propertyTitle,
-                        color    = PB_TextMuted,
-                        fontSize = sz.bodySp.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                // Selected checkmark
-                AnimatedVisibility(
-                    visible = isSelected,
-                    enter   = scaleIn() + fadeIn(),
-                    exit    = scaleOut() + fadeOut()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(NavyGradient)
-                            .border(1.5.dp, GoldBorder, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            tint     = PB_Gold,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // ── Price row ─────────────────────────────────────────────────────
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                modifier          = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    pkg.formattedDiscountedPrice,
-                    fontWeight    = FontWeight.Black,
-                    fontSize      = (sz.titleSp + 8).sp,
-                    color         = PB_TextDark,
-                    letterSpacing = (-1).sp
-                )
-                Text(
-                    "/night",
-                    color    = PB_TextMuted,
-                    fontSize = sz.bodySp.sp,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 3.dp)
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    pkg.formattedOriginalPrice,
-                    color           = PB_TextMuted,
-                    fontSize        = sz.bodySp.sp,
-                    textDecoration  = TextDecoration.LineThrough,
-                    modifier        = Modifier.padding(bottom = 3.dp)
-                )
-                if (pkg.savingsLabel.isNotEmpty()) {
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(PB_SuccessLight)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            pkg.savingsLabel,
-                            color      = PB_Success,
-                            fontSize   = sz.captionSp.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            // ── Info Chips ────────────────────────────────────────────────────
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier              = Modifier.fillMaxWidth()
-            ) {
-                PBInfoChip(Icons.Default.NightsStay, "Min ${pkg.minNights}N", PB_TextMuted, sz)
-                if (pkg.maxNights != null)
-                    PBInfoChip(Icons.Default.EventAvailable, "Max ${pkg.maxNights}N", PB_TextMuted, sz)
-                if (pkg.remainingSlots != null) {
-                    val isLow = (pkg.remainingSlots ?: 0) <= 2
-                    PBInfoChip(
-                        icon  = Icons.Default.ConfirmationNumber,
-                        label = "${pkg.remainingSlots} slots left",
-                        tint  = if (isLow) MaterialTheme.colorScheme.error else PB_Success,
-                        sz    = sz
-                    )
-                }
-            }
-
-            // ── Inclusions ────────────────────────────────────────────────────
-            if (pkg.inclusions.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                Divider(color = PB_Divider)
-                Spacer(Modifier.height(12.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .width(3.dp)
-                            .height(16.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(GoldGradient)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Includes",
-                        color      = PB_TextDark,
-                        fontSize   = sz.bodySp.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-
-                // Inclusions grid — 2 per row
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    pkg.inclusions.take(4).chunked(2).forEach { rowItems ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rowItems.forEach { item ->
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(PB_Gold.copy(0.05f))
-                                        .border(1.dp, GoldBorder, RoundedCornerShape(10.dp))
-                                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            Modifier
-                                                .size(18.dp)
-                                                .clip(CircleShape)
-                                                .background(PB_SuccessLight),
-                                            Alignment.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint     = PB_Success,
-                                                modifier = Modifier.size(11.dp)
-                                            )
-                                        }
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            item,
-                                            fontSize = sz.captionSp.sp,
-                                            color    = PB_TextDark,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
-                                }
-                            }
-                            // Fill empty slot if odd number
-                            if (rowItems.size == 1) Spacer(Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// INFO CHIP
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun PBInfoChip(icon: ImageVector, label: String, tint: Color, sz: PBSizes) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(tint.copy(0.07f))
-            .padding(horizontal = 9.dp, vertical = 5.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(11.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(label, color = tint, fontSize = sz.captionSp.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // SUMMARY ROW
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBSummaryRow(
-    label       : String,
-    value       : String,
-    sz          : PBSizes,
+    label        : String,
+    value        : String,
+    sz           : PBSizes,
     strikethrough: String? = null
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = (sz.vPad.value * 0.28f).dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {

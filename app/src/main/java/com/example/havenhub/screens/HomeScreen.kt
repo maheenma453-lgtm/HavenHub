@@ -160,7 +160,12 @@ private data class ResponsiveValues(
     val sectionTitleSize   : Float,
     val bodyTextSize       : Float,
     val chipPaddingH       : Dp,
-    val chipPaddingV       : Dp
+    val chipPaddingV       : Dp,
+    // ✦ NEW — search button sizing tokens
+    val searchBtnPaddingH  : Dp,
+    val searchBtnPaddingV  : Dp,
+    val searchBtnFontSize  : Float,
+    val searchBarHeight    : Dp
 )
 
 @Composable
@@ -169,80 +174,96 @@ private fun rememberResponsive(): ResponsiveValues {
     val sw     = config.screenWidthDp.dp
     return when {
         sw < 360.dp -> ResponsiveValues(
-            screenWidth       = sw,
-            horizontalPadding = 14.dp,
-            headerTitleSize   = 22f,
-            headerSubSize     = 10f,
-            statCardIconSize  = 36.dp,
-            statCardValueSize = 18f,
-            statCardLabelSize = 8f,
-            statCardPadding   = 6.dp,
-            revenueFontSize   = 28f,
-            avatarSize        = 40.dp,
-            featCardWidth     = 220.dp,
-            featCardImgHeight = 130.dp,
-            nearbyImgSize     = 88.dp,
-            sectionTitleSize  = 16f,
-            bodyTextSize      = 11f,
-            chipPaddingH      = 12.dp,
-            chipPaddingV      = 8.dp
+            screenWidth        = sw,
+            horizontalPadding  = 14.dp,
+            headerTitleSize    = 22f,
+            headerSubSize      = 10f,
+            statCardIconSize   = 36.dp,
+            statCardValueSize  = 18f,
+            statCardLabelSize  = 8f,
+            statCardPadding    = 6.dp,
+            revenueFontSize    = 28f,
+            avatarSize         = 40.dp,
+            featCardWidth      = 220.dp,
+            featCardImgHeight  = 130.dp,
+            nearbyImgSize      = 88.dp,
+            sectionTitleSize   = 16f,
+            bodyTextSize       = 11f,
+            chipPaddingH       = 12.dp,
+            chipPaddingV       = 8.dp,
+            searchBtnPaddingH  = 10.dp,
+            searchBtnPaddingV  = 6.dp,
+            searchBtnFontSize  = 11f,
+            searchBarHeight    = 50.dp
         )
         sw < 400.dp -> ResponsiveValues(
-            screenWidth       = sw,
-            horizontalPadding = 16.dp,
-            headerTitleSize   = 24f,
-            headerSubSize     = 11f,
-            statCardIconSize  = 40.dp,
-            statCardValueSize = 20f,
-            statCardLabelSize = 9f,
-            statCardPadding   = 8.dp,
-            revenueFontSize   = 32f,
-            avatarSize        = 44.dp,
-            featCardWidth     = 248.dp,
-            featCardImgHeight = 148.dp,
-            nearbyImgSize     = 96.dp,
-            sectionTitleSize  = 17f,
-            bodyTextSize      = 12f,
-            chipPaddingH      = 14.dp,
-            chipPaddingV      = 9.dp
+            screenWidth        = sw,
+            horizontalPadding  = 16.dp,
+            headerTitleSize    = 24f,
+            headerSubSize      = 11f,
+            statCardIconSize   = 40.dp,
+            statCardValueSize  = 20f,
+            statCardLabelSize  = 9f,
+            statCardPadding    = 8.dp,
+            revenueFontSize    = 32f,
+            avatarSize         = 44.dp,
+            featCardWidth      = 248.dp,
+            featCardImgHeight  = 148.dp,
+            nearbyImgSize      = 96.dp,
+            sectionTitleSize   = 17f,
+            bodyTextSize       = 12f,
+            chipPaddingH       = 14.dp,
+            chipPaddingV       = 9.dp,
+            searchBtnPaddingH  = 12.dp,
+            searchBtnPaddingV  = 7.dp,
+            searchBtnFontSize  = 12f,
+            searchBarHeight    = 52.dp
         )
         sw < 480.dp -> ResponsiveValues(
-            screenWidth       = sw,
-            horizontalPadding = 20.dp,
-            headerTitleSize   = 26f,
-            headerSubSize     = 12f,
-            statCardIconSize  = 42.dp,
-            statCardValueSize = 21f,
-            statCardLabelSize = 9f,
-            statCardPadding   = 8.dp,
-            revenueFontSize   = 34f,
-            avatarSize        = 46.dp,
-            featCardWidth     = 265.dp,
-            featCardImgHeight = 158.dp,
-            nearbyImgSize     = 104.dp,
-            sectionTitleSize  = 18f,
-            bodyTextSize      = 12f,
-            chipPaddingH      = 18.dp,
-            chipPaddingV      = 10.dp
+            screenWidth        = sw,
+            horizontalPadding  = 20.dp,
+            headerTitleSize    = 26f,
+            headerSubSize      = 12f,
+            statCardIconSize   = 42.dp,
+            statCardValueSize  = 21f,
+            statCardLabelSize  = 9f,
+            statCardPadding    = 8.dp,
+            revenueFontSize    = 34f,
+            avatarSize         = 46.dp,
+            featCardWidth      = 265.dp,
+            featCardImgHeight  = 158.dp,
+            nearbyImgSize      = 104.dp,
+            sectionTitleSize   = 18f,
+            bodyTextSize       = 12f,
+            chipPaddingH       = 18.dp,
+            chipPaddingV       = 10.dp,
+            searchBtnPaddingH  = 14.dp,
+            searchBtnPaddingV  = 8.dp,
+            searchBtnFontSize  = 12f,
+            searchBarHeight    = 54.dp
         )
         else -> ResponsiveValues(
-            screenWidth       = sw,
-            horizontalPadding = 24.dp,
-            headerTitleSize   = 28f,
-            headerSubSize     = 13f,
-            statCardIconSize  = 46.dp,
-            statCardValueSize = 23f,
-            statCardLabelSize = 10f,
-            statCardPadding   = 10.dp,
-            revenueFontSize   = 36f,
-            avatarSize        = 50.dp,
-            featCardWidth     = 285.dp,
-            featCardImgHeight = 170.dp,
-            nearbyImgSize     = 112.dp,
-            sectionTitleSize  = 19f,
-            bodyTextSize      = 13f,
-            chipPaddingH      = 20.dp,
-            chipPaddingV      = 11.dp
+            screenWidth        = sw,
+            horizontalPadding  = 24.dp,
+            headerTitleSize    = 28f,
+            headerSubSize      = 13f,
+            statCardIconSize   = 46.dp,
+            statCardValueSize  = 23f,
+            statCardLabelSize  = 10f,
+            statCardPadding    = 10.dp,
+            revenueFontSize    = 36f,
+            avatarSize         = 50.dp,
+            featCardWidth      = 285.dp,
+            featCardImgHeight  = 170.dp,
+            nearbyImgSize      = 112.dp,
+            sectionTitleSize   = 19f,
+            bodyTextSize       = 13f,
+            chipPaddingH       = 20.dp,
+            chipPaddingV       = 11.dp,
+            searchBtnPaddingH  = 16.dp,
+            searchBtnPaddingV  = 9.dp,
+            searchBtnFontSize  = 13f,
+            searchBarHeight    = 56.dp
         )
     }
 }
@@ -312,15 +333,7 @@ private fun ProfileAvatarButton(
 }
 
 // =============================================================================
-// ✦ NEW — SEASONAL HOME BANNER
-//
-// Shown just below the header in both Tenant and Landlord home screens.
-// Displays the first active seasonal alert as a compact dismissible banner.
-// Tapping "View All" navigates to NotificationsScreen where full alert list
-// is shown.
-//
-// Design: golden gradient card with emoji, title, and a subtle "View All" link.
-// Only shown when at least one active alert exists for the current role.
+// SEASONAL HOME BANNER
 // =============================================================================
 @Composable
 private fun SeasonalHomeBanner(
@@ -343,7 +356,6 @@ private fun SeasonalHomeBanner(
             .background(bannerBg)
             .border(1.5.dp, bannerBorder, RoundedCornerShape(14.dp))
     ) {
-        // Left golden accent line
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -352,7 +364,6 @@ private fun SeasonalHomeBanner(
                 .clip(RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp))
                 .background(goldAccent)
         )
-
         Row(
             modifier              = Modifier
                 .fillMaxWidth()
@@ -360,7 +371,6 @@ private fun SeasonalHomeBanner(
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Emoji bubble
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -368,13 +378,8 @@ private fun SeasonalHomeBanner(
                     .background(goldAccent.copy(0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text     = alert.iconEmoji.ifEmpty { "🎉" },
-                    fontSize = 18.sp
-                )
+                Text(text = alert.iconEmoji.ifEmpty { "🎉" }, fontSize = 18.sp)
             }
-
-            // Text content
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text       = alert.title,
@@ -392,8 +397,6 @@ private fun SeasonalHomeBanner(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            // "View All" button
             Text(
                 text       = "View All",
                 fontSize   = 11.sp,
@@ -419,14 +422,13 @@ fun HomeScreen(
     authViewModel        : AuthViewModel            = hiltViewModel(),
     vacationViewModel    : VacationViewModel        = hiltViewModel(),
     notificationViewModel: NotificationViewModel    = hiltViewModel(),
-    // ✦ NEW — inject SeasonalAlertViewModel
     seasonalViewModel    : SeasonalAlertViewModel   = hiltViewModel()
 ) {
     val uiState       by viewModel.uiState.collectAsState()
     val authState     by authViewModel.uiState.collectAsState()
     val vacUiState    by vacationViewModel.uiState.collectAsState()
     val notifState    by notificationViewModel.uiState.collectAsState()
-    val seasonalState by seasonalViewModel.uiState.collectAsState()   // ✦ NEW
+    val seasonalState by seasonalViewModel.uiState.collectAsState()
     val isDark        by MainActivity.darkModeFlow.collectAsState()
 
     if (!authState.isAuthReady) {
@@ -451,7 +453,6 @@ fun HomeScreen(
         if (userId.isNotEmpty()) notificationViewModel.startListening(userId)
     }
 
-    // ✦ NEW — Load seasonal alerts once role is known (skip admin)
     LaunchedEffect(userRole) {
         if (userRole.isNotEmpty() && userRole != "admin" && userRole != "sub_admin") {
             seasonalViewModel.loadAlertsForRole(userRole)
@@ -471,7 +472,6 @@ fun HomeScreen(
         }
     }
 
-    // ✦ NEW — Pass the first active alert to both home screens as a banner
     val firstActiveAlert = seasonalState.alerts.firstOrNull()
 
     when (userRole) {
@@ -480,7 +480,7 @@ fun HomeScreen(
             uiState          = uiState,
             unreadCount      = notifState.unreadCount,
             isDark           = isDark,
-            seasonalAlert    = firstActiveAlert        // ✦ NEW
+            seasonalAlert    = firstActiveAlert
         )
         else -> TenantHomeScreen(
             navController     = navController,
@@ -490,7 +490,7 @@ fun HomeScreen(
             isVacationLoading = vacUiState.isLoading,
             unreadCount       = notifState.unreadCount,
             isDark            = isDark,
-            seasonalAlert     = firstActiveAlert       // ✦ NEW
+            seasonalAlert     = firstActiveAlert
         )
     }
 }
@@ -530,7 +530,6 @@ private fun PropertyImage(
 
 // =============================================================================
 // LANDLORD HOME SCREEN
-// ✦ CHANGE: seasonalAlert parameter added, banner shown below header
 // =============================================================================
 @Composable
 private fun LandlordHomeScreen(
@@ -538,7 +537,7 @@ private fun LandlordHomeScreen(
     uiState       : HomeUiState,
     unreadCount   : Int          = 0,
     isDark        : Boolean      = false,
-    seasonalAlert : SeasonalAlert? = null   // ✦ NEW
+    seasonalAlert : SeasonalAlert? = null
 ) {
     val tk  = resolveTokens(isDark)
     val res = rememberResponsive()
@@ -563,7 +562,6 @@ private fun LandlordHomeScreen(
         modifier       = Modifier.fillMaxSize().background(tk.pageBg),
         contentPadding = PaddingValues(bottom = 90.dp)
     ) {
-        // 1. HEADER
         item {
             Box(modifier = Modifier.fillMaxWidth().background(tk.navyGradient)) {
                 Box(Modifier.size(200.dp).align(Alignment.TopEnd).offset(x = 70.dp, y = (-70).dp).clip(CircleShape).background(tk.goldPrime.copy(0.06f)))
@@ -664,8 +662,6 @@ private fun LandlordHomeScreen(
             }
         }
 
-        // ✦ NEW — Seasonal Banner (landlords see rent-related tips)
-        // Shown between header and revenue card so it's immediately visible
         if (seasonalAlert != null) {
             item {
                 Spacer(Modifier.height(14.dp))
@@ -678,7 +674,6 @@ private fun LandlordHomeScreen(
             }
         }
 
-        // 2. REVENUE CARD
         item {
             Spacer(Modifier.height(20.dp))
             var revenuePressed by remember { mutableStateOf(false) }
@@ -776,7 +771,6 @@ private fun LandlordHomeScreen(
             }
         }
 
-        // 3. QUICK ACTIONS
         item {
             Spacer(Modifier.height(30.dp))
             Row(
@@ -924,7 +918,6 @@ private fun LandlordHomeScreen(
             }
         }
 
-        // 4. MY PROPERTIES LIST
         item {
             Spacer(Modifier.height(30.dp))
             Row(
@@ -1040,10 +1033,10 @@ private fun LandlordStatCard(
     Box(
         modifier = modifier
             .shadow(
-                elevation   = if (isDark) 0.dp else 6.dp,
-                shape       = RoundedCornerShape(18.dp),
+                elevation    = if (isDark) 0.dp else 6.dp,
+                shape        = RoundedCornerShape(18.dp),
                 ambientColor = L_GoldPrime.copy(0.15f),
-                spotColor   = L_GoldPrime.copy(0.18f)
+                spotColor    = L_GoldPrime.copy(0.18f)
             )
             .clip(RoundedCornerShape(18.dp))
             .background(
@@ -1215,7 +1208,7 @@ private fun PremiumLandlordPropertyCard(
 
 // =============================================================================
 // TENANT HOME SCREEN
-// ✦ CHANGE: seasonalAlert parameter added, banner shown below header section
+// ✦ FIX: seasonalAlert banner added
 // =============================================================================
 @Composable
 private fun TenantHomeScreen(
@@ -1226,7 +1219,7 @@ private fun TenantHomeScreen(
     isVacationLoading : Boolean      = false,
     unreadCount       : Int          = 0,
     isDark            : Boolean      = false,
-    seasonalAlert     : SeasonalAlert? = null   // ✦ NEW
+    seasonalAlert     : SeasonalAlert? = null
 ) {
     val categories       = listOf("All", "Premium", "House", "Apartment", "Room", "Villa", "Studio")
     var selectedCategory by remember { mutableStateOf("All") }
@@ -1294,8 +1287,6 @@ private fun TenantHomeScreen(
             )
         }
 
-        // ✦ NEW — Seasonal Banner for tenants (shown right after header)
-        // Compact single-line banner with emoji, title, and "View All" link
         if (seasonalAlert != null) {
             item {
                 Spacer(Modifier.height(12.dp))
@@ -1538,7 +1529,14 @@ private fun TenantHomeScreen(
             }
         }
 
-        // Vacation Hub
+        // =====================================================================
+        // VACATION HUB
+        // ✦ FIX: Arrow button moved OUTSIDE the decorative circles so it's
+        //   always visible and clickable on all screen sizes. The Box containing
+        //   the circles used offset() which pushed them off-screen and sometimes
+        //   covered the arrow. Now the arrow is a sibling inside the top Row,
+        //   not a child of the bubble Box.
+        // =====================================================================
         item {
             Spacer(Modifier.height(24.dp))
             Box(
@@ -1548,27 +1546,53 @@ private fun TenantHomeScreen(
                     .background(tk.navyLinear)
                     .border(2.dp, tk.goldBorder, RoundedCornerShape(26.dp))
             ) {
-                Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopCenter).background(tk.goldBorder))
+                // Decorative top gold line
                 Box(
-                    Modifier.size(160.dp).align(Alignment.TopEnd).offset(x = 50.dp, y = (-50).dp)
-                        .clip(CircleShape).background(tk.goldPrime.copy(0.07f))
+                    Modifier.fillMaxWidth().height(3.dp)
+                        .align(Alignment.TopCenter)
+                        .background(tk.goldBorder)
                 )
-                Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter).background(tk.goldBorder))
+                // Decorative bubble — kept small so it never covers content
+                Box(
+                    Modifier.size(100.dp)
+                        .align(Alignment.TopEnd)
+                        .offset(x = 30.dp, y = (-30).dp)
+                        .clip(CircleShape)
+                        .background(tk.goldPrime.copy(0.07f))
+                )
+                // Decorative bottom gold line
+                Box(
+                    Modifier.fillMaxWidth().height(2.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(tk.goldBorder)
+                )
 
                 Column(Modifier.fillMaxWidth().padding(22.dp)) {
+                    // ── Top row: icon+text  |  arrow button ──────────────────
                     Row(
-                        Modifier.fillMaxWidth(),
+                        modifier              = Modifier.fillMaxWidth(),
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
+                        // Left: mountain emoji + labels
                         Row(
                             verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier              = Modifier.weight(1f)
                         ) {
                             Box(
-                                Modifier.size(56.dp).clip(CircleShape)
-                                    .background(Brush.radialGradient(listOf(tk.goldPrime.copy(0.28f), tk.goldPrime.copy(0.05f)))),
-                                Alignment.Center
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(
+                                                tk.goldPrime.copy(0.28f),
+                                                tk.goldPrime.copy(0.05f)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Text("🏔️", fontSize = 28.sp)
                             }
@@ -1595,28 +1619,43 @@ private fun TenantHomeScreen(
                                 )
                             }
                         }
+
+                        // ✦ FIX: Arrow button — plain sibling in the Row,
+                        //   NOT inside a Box with conflicting offset/size.
+                        //   Uses wrapContentSize so it's never 0×0.
                         Box(
-                            Modifier.size(52.dp).clip(CircleShape)
-                                .background(Color.Transparent)
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
                                 .border(2.dp, tk.goldBorder, CircleShape)
                                 .clickable { navController.navigate(Screen.VacationRentals.route) },
-                            Alignment.Center
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowForward,
-                                null,
-                                tint     = tk.goldPrime,
-                                modifier = Modifier.size(24.dp)
+                                imageVector        = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Go to Vacation Rentals",
+                                tint               = tk.goldPrime,
+                                modifier           = Modifier.size(22.dp)
                             )
                         }
                     }
+
                     Spacer(Modifier.height(20.dp))
                     Box(
                         Modifier.fillMaxWidth().height(1.dp)
-                            .background(Brush.horizontalGradient(listOf(tk.goldPrime.copy(0.45f), Color.Transparent)))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(tk.goldPrime.copy(0.45f), Color.Transparent)
+                                )
+                            )
                     )
                     Spacer(Modifier.height(18.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+
+                    // ── Stats row ─────────────────────────────────────────────
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
                         VacationMiniStat(vacCountLabel, "Stays",   "🏠", tk.goldPrime)
                         VacationMiniStat("PT-1",        "Verified","✅", tk.goldPrime)
                         VacationMiniStat("4.8★",        "Rating",  "⭐", tk.goldPrime)
@@ -1709,6 +1748,7 @@ private fun TenantHomeScreen(
 
 // =============================================================================
 // HOME HEADER — Tenant
+// ✦ FIX: Search button fully responsive — uses res tokens, no text clipping
 // =============================================================================
 @Composable
 fun HomeHeaderSection(
@@ -1720,9 +1760,9 @@ fun HomeHeaderSection(
     profileInitials    : String     = "",
     isDark             : Boolean    = false
 ) {
-    val tk        = resolveTokens(isDark)
-    val res       = rememberResponsive()
-    val searchBg  = if (isDark) D_BgCard else L_CardBg
+    val tk       = resolveTokens(isDark)
+    val res      = rememberResponsive()
+    val searchBg = if (isDark) D_BgCard else L_CardBg
     val searchBtn = if (isDark) D_BgSecondary else L_NavyPrime
 
     Box(modifier = Modifier.fillMaxWidth().background(tk.navyGradient)) {
@@ -1767,32 +1807,71 @@ fun HomeHeaderSection(
                     )
                 }
             }
+
             Spacer(Modifier.height(22.dp))
+
+            // ✦ FIX: Search bar — button uses wrapContentWidth + responsive
+            //   padding so text never clips on small screens. Hint text uses
+            //   weight(1f) so it never pushes the button off-screen.
             Box(
-                Modifier.fillMaxWidth().height(54.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(res.searchBarHeight)
                     .clip(RoundedCornerShape(16.dp))
                     .background(searchBg)
                     .border(1.5.dp, tk.goldBorder, RoundedCornerShape(16.dp))
                     .clickable { onSearchClick() }
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 Row(
-                    Modifier.fillMaxWidth(),
+                    modifier              = Modifier.fillMaxWidth(),
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Search, null, tint = tk.goldPrime, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text("Search city, property type...", color = tk.textMuted, fontSize = 14.sp)
-                    }
-                    Box(
-                        Modifier.clip(RoundedCornerShape(10.dp))
-                            .background(searchBtn)
-                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    // Left: search icon + hint text — takes remaining space
+                    Row(
+                        modifier         = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Search", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint     = tk.goldPrime,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text     = "Search city, property type...",
+                            color    = tk.textMuted,
+                            fontSize = res.bodyTextSize.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    // ✦ FIX: Button uses wrapContentWidth so it never clips.
+                    //   Responsive padding & font from res tokens.
+                    Box(
+                        modifier = Modifier
+                            .wrapContentWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(searchBtn)
+                            .padding(
+                                horizontal = res.searchBtnPaddingH,
+                                vertical   = res.searchBtnPaddingV
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text       = "Search",
+                            fontSize   = res.searchBtnFontSize.sp,
+                            color      = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            maxLines   = 1
+                        )
                     }
                 }
             }
@@ -2079,9 +2158,9 @@ private fun VacationMiniStat(value: String, label: String, emoji: String, goldCo
 fun LoadingShimmer(isDark: Boolean = false) {
     Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(
-            color       = if (isDark) D_GoldPrimary else L_GoldPrime,
+            color = if (isDark) D_GoldPrimary else L_GoldPrime,
             strokeWidth = 3.dp,
-            modifier    = Modifier.size(42.dp)
+            modifier = Modifier.size(42.dp)
         )
     }
 }

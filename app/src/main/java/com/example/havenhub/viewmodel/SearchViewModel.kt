@@ -40,7 +40,12 @@ class SearchViewModel @Inject constructor(
 
     init {
         loadSavedHistory()
-        performSearch()
+        // BUG FIX: removed performSearch() from init.
+        // Previously, performSearch() here caused a race with applyFilters():
+        // FilterScreen sets filters then pops back → SearchScreen's
+        // LaunchedEffect(Unit) fired refreshSearch() → overwrote filters with
+        // a clean state. Filters appeared to do nothing.
+        // Now the initial load is triggered only by SearchScreen's first composition.
         setupAutoSearch()
     }
 
@@ -96,16 +101,14 @@ class SearchViewModel @Inject constructor(
         _uiState.update { it.copy(recentSearches = emptyList()) }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     // performSearch / performSearchWithState
     //
     // FIX (race condition):
-    //   Old code: applyFilters() called _uiState.update{} then performSearch()
-    //   Problem:  performSearch() read _uiState.value which could still be stale
-    //             due to coroutine scheduling — filters were lost
-    //   Fix:      applyFilters() builds newState explicitly, then passes it
-    //             directly to performSearchWithState(newState) — guaranteed fresh
-    // ─────────────────────────────────────────────────────────────────────────
+    // applyFilters() builds newState explicitly and passes it directly to
+    // performSearchWithState(newState) — guaranteed to use fresh filter values,
+    // not whatever _uiState.value might be at coroutine scheduling time.
+    // -------------------------------------------------------------------------
 
     fun performSearch() {
         performSearchWithState(_uiState.value)
@@ -119,7 +122,7 @@ class SearchViewModel @Inject constructor(
                 is Resource.Success -> {
                     var list = result.data
 
-                    // Text search
+                    // Text search filter
                     if (state.searchQuery.isNotBlank()) {
                         val q = state.searchQuery.lowercase().trim()
                         list = list.filter {
@@ -129,7 +132,7 @@ class SearchViewModel @Inject constructor(
                         }
                     }
 
-                    // Price filters
+                    // Price range filter
                     state.minPrice?.let { min -> list = list.filter { it.pricePerNight >= min } }
                     state.maxPrice?.let { max -> list = list.filter { it.pricePerNight <= max } }
 
@@ -138,9 +141,8 @@ class SearchViewModel @Inject constructor(
                         list = list.filter { it.city.equals(city, ignoreCase = true) }
                     }
 
-                    // Type filter
-                    // FIX: compare using enum .name ("HOUSE", "APARTMENT" …)
-                    // so it matches however Firestore stored the string
+                    // Property type filter — compare by enum .name ("HOUSE", "APARTMENT" …)
+                    // so it matches however Firestore stored the string value
                     state.propertyType?.let { type ->
                         list = list.filter {
                             it.propertyType.equals(type.name, ignoreCase = true)
@@ -164,8 +166,16 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    fun refreshSearch() {
-        performSearch()
+    // Called ONCE by SearchScreen's LaunchedEffect on first composition only.
+    // Does NOT re-run when navigating back from FilterScreen because
+    // LaunchedEffect(Unit) only runs on initial entry to the composition — but
+    // since SearchScreen stays in the back stack while FilterScreen is open,
+    // the LaunchedEffect does NOT re-fire on pop. This is correct behavior.
+    fun initialLoad() {
+        // Only trigger if we have no results yet (truly first visit)
+        if (_uiState.value.searchResults.isEmpty() && !_uiState.value.isLoading) {
+            performSearch()
+        }
     }
 
     fun applyFilters(
@@ -175,17 +185,15 @@ class SearchViewModel @Inject constructor(
         type: PropertyType?,
         bedrooms: Int?
     ) {
-        // FIX: hasActiveFilter correctly identifies when ANY real filter is set
-        // minPrice null  = no min filter (not "0 means no filter")
-        // maxPrice null  = no max filter (not "500000 means no filter")
-        // This matches how FilterScreen now passes null when slider is at default
+        // hasActiveFilter is true when ANY real filter param is set
         val anyFilterActive = minPrice != null ||
                 maxPrice != null ||
                 city != null ||
                 type != null ||
                 bedrooms != null
 
-        // Build new state explicitly, then search with it — avoids race condition
+        // Build new state explicitly first, then search with it.
+        // Avoids the race condition where performSearch() reads stale _uiState.value.
         val newState = _uiState.value.copy(
             minPrice = minPrice,
             maxPrice = maxPrice,

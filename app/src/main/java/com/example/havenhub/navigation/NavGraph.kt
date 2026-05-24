@@ -17,6 +17,7 @@ import com.example.havenhub.screens.*
 import com.example.havenhub.viewmodel.AuthViewModel
 import com.example.havenhub.viewmodel.NotificationViewModel
 import com.example.havenhub.viewmodel.MessagingViewModel
+import com.example.havenhub.viewmodel.SearchViewModel   // ← ADD THIS IMPORT
 
 // ── Route groupings ───────────────────────────────────────────────────────────
 
@@ -40,8 +41,8 @@ private val strictAdminRoutes = listOf(
     Screen.UserVerificationDetail.route,
     Screen.Reports.route,
     Screen.PaymentReports.route,
-    Screen.ManageSeasonalAlerts.route,   // ✦ NEW
-    Screen.CreateSeasonalAlert.route,    // ✦ NEW
+    Screen.ManageSeasonalAlerts.route,
+    Screen.CreateSeasonalAlert.route,
 )
 
 private val sharedRoutes = listOf(
@@ -185,9 +186,51 @@ fun HavenHubNavGraph(
             composable(Screen.ForgotPassword.route) { ForgotPasswordScreen(navController) }
 
 // ── Home / Search ─────────────────────────────────────────────────────────────
-            composable(Screen.Home.route)   { HomeScreen(navController) }
-            composable(Screen.Search.route) { SearchScreen(navController) }
-            composable(Screen.Filter.route) { FilterScreen(navController) }
+            composable(Screen.Home.route) { HomeScreen(navController) }
+
+            // ════════════════════════════════════════════════════════════════
+            // ROOT FIX: SearchScreen and FilterScreen MUST share the same
+            // SearchViewModel instance.
+            //
+            // OLD (broken):
+            //   composable(Screen.Search.route) { SearchScreen(navController) }
+            //   composable(Screen.Filter.route) { FilterScreen(navController) }
+            //
+            //   hiltViewModel() inside each composable creates a NEW ViewModel
+            //   scoped to that back-stack entry. So FilterScreen had its OWN
+            //   SearchViewModel — calling applyFilters() on it did nothing to
+            //   SearchScreen's ViewModel. Filters were "applied" but to a VM
+            //   that nobody was observing.
+            //
+            // FIX:
+            //   Get SearchScreen's back-stack entry when composing FilterScreen,
+            //   then pass hiltViewModel(searchEntry) to FilterScreen so both
+            //   screens share the SAME ViewModel instance.
+            //   applyFilters() now updates the one ViewModel that SearchScreen
+            //   is already observing → results update instantly on back-press.
+            // ════════════════════════════════════════════════════════════════
+
+            composable(Screen.Search.route) { searchEntry ->
+                // SearchViewModel scoped to Search back-stack entry
+                val searchViewModel: SearchViewModel = hiltViewModel(searchEntry)
+                SearchScreen(
+                    navController = navController,
+                    viewModel     = searchViewModel
+                )
+            }
+
+            composable(Screen.Filter.route) {
+                // Get Search's back-stack entry so we can reuse its ViewModel
+                val searchEntry = remember(navController) {
+                    navController.getBackStackEntry(Screen.Search.route)
+                }
+                // Same ViewModel instance as SearchScreen — shared state
+                val searchViewModel: SearchViewModel = hiltViewModel(searchEntry)
+                FilterScreen(
+                    navController = navController,
+                    viewModel     = searchViewModel
+                )
+            }
 
 // ── Explore Map ───────────────────────────────────────────────────────────────
             composable(Screen.ExploreMap.route) {
@@ -432,7 +475,7 @@ fun HavenHubNavGraph(
                 )
             }
 
-// ── ✦ NEW — Tenants (landlord only) ──────────────────────────────────────────
+// ── Tenants (landlord only) ───────────────────────────────────────────────────
             composable(Screen.Tenants.route) {
                 if (isCurrentUserLandlord) {
                     TenantsScreen(navController = navController)
@@ -501,7 +544,7 @@ fun HavenHubNavGraph(
                 when { canViewPaymentReports -> PaymentReportsScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
             }
 
-// ── ✦ NEW — Seasonal Alerts (admin only) ─────────────────────────────────────
+// ── Seasonal Alerts (admin only) ──────────────────────────────────────────────
             composable(Screen.ManageSeasonalAlerts.route) {
                 if (isCurrentUserAnyAdmin) ManageSeasonalAlertsScreen(navController)
                 else LaunchedEffect(Unit) { navController.popBackStack() }

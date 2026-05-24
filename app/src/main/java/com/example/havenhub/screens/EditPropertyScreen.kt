@@ -4,19 +4,75 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,7 +87,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.havenhub.data.PropertyType
-import com.example.havenhub.ui.theme.*
 import com.example.havenhub.viewmodel.PropertyViewModel
 
 private val EDIT_PROPERTY_TYPES = PropertyType.entries.map { it.displayName() }
@@ -41,16 +96,47 @@ private val EDIT_AMENITIES_LIST = listOf(
     "Laundry", "Garden", "Furnished", "Kitchen", "Balcony"
 )
 
-// ── Dark theme tokens for EditProperty ───────────────────────────────────────
-private val EPR_DarkBg      = Color(0xFF060D1A)   // page background
-private val EPR_DarkCard    = Color(0xFF112038)   // card surface
-private val EPR_DarkNavy    = Color(0xFF0D1B3E)   // top bar / icon bg
-private val EPR_DarkGold    = Color(0xFFD4AF37)   // primary accent
-private val EPR_DarkTextPri = Color(0xFFF0F4FF)   // primary text
-private val EPR_DarkTextSec = Color(0xFF8899BB)   // secondary text
-private val EPR_DarkBorder  = Color(0xFF1E2E50)   // subtle borders
-private val EPR_DarkError   = Color(0xFFE74C3C)   // error red
+// ══════════════════════════════════════════════════════════════════════════════
+// COLOR TOKENS — Logo navy + gold palette
+// ══════════════════════════════════════════════════════════════════════════════
+private object EPR {
+    val NavyPrimary  = Color(0xFF1B2B5B)
+    val NavyDark     = Color(0xFF0F1F45)
+    val NavyMid      = Color(0xFF253672)
+    val GoldAccent   = Color(0xFFD4AF37)   // logo gold — card borders, focus, accents
+    val GoldLight    = Color(0xFFF0D060)
+    val GoldDim      = Color(0xFFB8962E)
 
+    // Light theme
+    val LightBg      = Color(0xFFEEF1F8)
+    val LightCard    = Color(0xFFFFFFFF)
+    val LightHead    = Color(0xFFFAFBFE)   // card header bg
+    val LightBorder  = Color(0xFFE2E6F0)
+    val LightText    = Color(0xFF0F1933)
+    val LightTextSec = Color(0xFF5A6480)
+    val LightTextHnt = Color(0xFF9AA3BB)
+    val LightIconBg  = Color(0xFF1B2B5B)   // navy icon bg
+    val LightChipBg  = Color(0xFFF4F6FC)
+    val LightInputBg = Color(0xFFF7F8FC)
+
+    // Dark theme
+    val DarkBg       = Color(0xFF060D1A)
+    val DarkCard     = Color(0xFF0F1E3A)
+    val DarkHead     = Color(0xFF0B1830)
+    val DarkNavyBar  = Color(0xFF0D1B3E)
+    val DarkBorder   = Color(0xFF1E2E50)
+    val DarkTextPri  = Color(0xFFF0F4FF)
+    val DarkTextSec  = Color(0xFF8899BB)
+    val DarkIconBg   = Color(0xFF1B2B5B)
+    val DarkChipBg   = Color(0xFF1A2A50)
+    val DarkInputBg  = Color(0xFF0D1B3E)
+
+    val ErrorRed     = Color(0xFFE74C3C)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ══════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditPropertyScreen(
@@ -58,20 +144,16 @@ fun EditPropertyScreen(
     navController : NavController,
     viewModel     : PropertyViewModel = hiltViewModel()
 ) {
-    // ── Dark theme detection ──────────────────────────────────────────────────
     val isDark = isSystemInDarkTheme()
 
-    // ── Theme-aware aliases ───────────────────────────────────────────────────
-    val pageBg   = if (isDark) EPR_DarkBg    else Color(0xFFF4F6FA)
-    val cardBg   = if (isDark) EPR_DarkCard  else BackgroundWhite
-    val topBarBg = if (isDark) EPR_DarkNavy  else PrimaryBlue
-    val goldC    = if (isDark) EPR_DarkGold  else PrimaryBlue
-    val textPri  = if (isDark) EPR_DarkTextPri else Color.Black
-    val textSec  = if (isDark) EPR_DarkTextSec else Color.Gray
-    val borderC  = if (isDark) EPR_DarkBorder  else Color(0xFFBDBDBD)
-    val redC     = if (isDark) EPR_DarkError   else ErrorRed
+    val pageBg   = if (isDark) EPR.DarkBg      else EPR.LightBg
+    val cardBg   = if (isDark) EPR.DarkCard    else EPR.LightCard
+    val topBarBg = if (isDark) EPR.DarkNavyBar  else EPR.NavyPrimary
+    val accentC  = if (isDark) EPR.GoldAccent   else EPR.NavyPrimary
+    val textSec  = if (isDark) EPR.DarkTextSec  else EPR.LightTextSec
+    val borderC  = if (isDark) EPR.DarkBorder   else EPR.LightBorder
 
-    val uiState = viewModel.uiState.collectAsState()
+    val uiState           = viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var title             by remember { mutableStateOf("") }
@@ -93,9 +175,15 @@ fun EditPropertyScreen(
     var hasUnsavedChanges by remember { mutableStateOf(false) }
     var showDiscardDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(propertyId) {
-        viewModel.loadPropertyDetail(propertyId)
+    val listState   = rememberLazyListState()
+    val showSaveBar by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 ||
+                    listState.firstVisibleItemScrollOffset > 80
+        }
     }
+
+    LaunchedEffect(propertyId) { viewModel.loadPropertyDetail(propertyId) }
 
     LaunchedEffect(uiState.value.propertyDetail) {
         uiState.value.propertyDetail?.let { prop ->
@@ -104,7 +192,7 @@ fun EditPropertyScreen(
                 description       = prop.description
                 propertyType      = try {
                     PropertyType.valueOf(prop.propertyType).displayName()
-                } catch (e: Exception) { "Apartment" }
+                } catch (_: Exception) { "Apartment" }
                 pricePerNight     = prop.pricePerNight.toString()
                 bedrooms          = prop.bedrooms.toString()
                 bathrooms         = prop.bathrooms.toString()
@@ -129,127 +217,254 @@ fun EditPropertyScreen(
         }
     }
 
-    // Discard changes dialog
     if (showDiscardDialog) {
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
             containerColor   = cardBg,
-            title = { Text("Discard Changes?", color = textPri) },
-            text  = { Text("You have unsaved changes. Are you sure you want to go back?", color = textSec) },
+            title = {
+                Text(
+                    "Discard Changes?",
+                    color      = if (isDark) EPR.DarkTextPri else EPR.LightText,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "You have unsaved changes. Are you sure you want to go back?",
+                    color = textSec
+                )
+            },
             confirmButton = {
                 TextButton(onClick = { navController.popBackStack() }) {
-                    Text("Discard", color = redC)
+                    Text("Discard", color = EPR.ErrorRed, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDiscardDialog = false }) {
-                    Text("Cancel", color = if (isDark) EPR_DarkTextSec else Color.Gray)
+                    Text("Keep Editing", color = accentC)
                 }
             }
         )
     }
 
+    val onSave: () -> Unit = {
+        uiState.value.propertyDetail?.let { currentProp ->
+            val propTypeString = PropertyType.entries
+                .find { it.displayName() == propertyType }
+                ?.name ?: currentProp.propertyType
+
+            val updatedProperty = currentProp.copy(
+                title         = title,
+                description   = description,
+                propertyType  = propTypeString,
+                pricePerNight = pricePerNight.toDoubleOrNull() ?: currentProp.pricePerNight,
+                bedrooms      = bedrooms.toIntOrNull()         ?: currentProp.bedrooms,
+                bathrooms     = bathrooms.toIntOrNull()        ?: currentProp.bathrooms,
+                areaSqFt      = area.toDoubleOrNull(),
+                amenities     = selectedAmenities.toList(),
+                city          = city,
+                address       = address,
+                imageUrls     = existingImageUrls.filterNot { it in removedImageUrls }
+            )
+            viewModel.updateProperty(updatedProperty, newImageUris)
+        }
+    }
+
     Scaffold(
-        containerColor = pageBg,                                // dark: deep navy bg
+        containerColor = pageBg,
         snackbarHost   = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Edit Property", fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text(
+                                "Edit Property",
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 17.sp,
+                                color      = Color.White
+                            )
+                            AnimatedVisibility(
+                                visible = hasUnsavedChanges,
+                                enter   = fadeIn(),
+                                exit    = fadeOut()
+                            ) {
+                                Text(
+                                    "Unsaved changes",
+                                    fontSize = 11.sp,
+                                    color    = EPR.GoldLight.copy(alpha = 0.8f),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        AnimatedVisibility(
+                            visible = hasUnsavedChanges,
+                            enter   = fadeIn() + scaleIn(),
+                            exit    = fadeOut() + scaleOut()
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = EPR.GoldAccent.copy(alpha = 0.2f),
+                                tonalElevation = 0.dp
+                            ) {
+                                Text(
+                                    "● Unsaved",
+                                    modifier   = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                                    fontSize   = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = EPR.GoldLight,
+                                    letterSpacing = 0.3.sp
+                                )
+                            }
+                        }
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (hasUnsavedChanges) showDiscardDialog = true else navController.popBackStack()
+                        if (hasUnsavedChanges) showDiscardDialog = true
+                        else navController.popBackStack()
                     }) {
-                        Icon(Icons.Default.ArrowBack, null)
+                        Box(
+                            modifier         = Modifier
+                                .size(36.dp)
+                                .background(
+                                    EPR.GoldAccent.copy(alpha = 0.15f),
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    EPR.GoldAccent.copy(alpha = 0.3f),
+                                    RoundedCornerShape(10.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint               = EPR.GoldAccent,
+                                modifier           = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = topBarBg,      // dark: deep navy
+                    containerColor             = topBarBg,
                     titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
         },
+        // Gold accent line under topbar
         bottomBar = {
-            EditPropertyBottomBar(
-                isLoading = uiState.value.isLoading,
-                isDark    = isDark
-            ) {
-                uiState.value.propertyDetail?.let { currentProp ->
-                    val propTypeString = PropertyType.entries
-                        .find { it.displayName() == propertyType }
-                        ?.name ?: currentProp.propertyType
-
-                    val updatedProperty = currentProp.copy(
-                        title         = title,
-                        description   = description,
-                        propertyType  = propTypeString,
-                        pricePerNight = pricePerNight.toDoubleOrNull() ?: currentProp.pricePerNight,
-                        bedrooms      = bedrooms.toIntOrNull() ?: currentProp.bedrooms,
-                        bathrooms     = bathrooms.toIntOrNull() ?: currentProp.bathrooms,
-                        areaSqFt      = area.toDoubleOrNull(),
-                        amenities     = selectedAmenities.toList(),
-                        city          = city,
-                        address       = address,
-                        imageUrls     = existingImageUrls.filterNot { it in removedImageUrls }
+            Column {
+                // Gold top-line on topbar bottom
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(0.dp)
+                )
+                AnimatedVisibility(
+                    visible = showSaveBar,
+                    enter   = slideInVertically(
+                        initialOffsetY = { fullHeight -> fullHeight },
+                        animationSpec  = tween(durationMillis = 320)
+                    ),
+                    exit    = slideOutVertically(
+                        targetOffsetY = { fullHeight -> fullHeight },
+                        animationSpec = tween(durationMillis = 260)
                     )
-                    viewModel.updateProperty(updatedProperty, newImageUris)
+                ) {
+                    EPRBottomSaveBar(
+                        isLoading = uiState.value.isLoading,
+                        isDark    = isDark,
+                        onSave    = onSave
+                    )
                 }
             }
         }
     ) { paddingValues ->
+
         if (uiState.value.isLoading && !isFormInitialized) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = goldC)
+                CircularProgressIndicator(color = EPR.GoldAccent)
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                item { Spacer(Modifier.height(4.dp)) }
+            return@Scaffold
+        }
 
-                // Basic Information section
+        // Gold line below topbar
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(EPR.GoldAccent)
+            )
+
+            LazyColumn(
+                state               = listState,
+                modifier            = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item { Spacer(Modifier.height(14.dp)) }
+
+                // ── Basic Information ─────────────────────────────────────
                 item {
-                    EditSectionCard(
-                        title  = "Basic Information",
-                        icon   = Icons.Default.Info,
-                        isDark = isDark
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            DarkAwareTextField(
+                    EPRSectionCard("Basic Information", Icons.Default.Info, isDark) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            EPRTextField(
                                 value         = title,
                                 onValueChange = { title = it; hasUnsavedChanges = true },
-                                label         = "Title",
+                                label         = "PROPERTY TITLE",
                                 isDark        = isDark
                             )
-                            DarkAwareTextField(
+                            EPRTextField(
                                 value         = description,
                                 onValueChange = { description = it; hasUnsavedChanges = true },
-                                label         = "Description",
+                                label         = "DESCRIPTION",
                                 isDark        = isDark,
                                 minLines      = 3
                             )
                             Text(
-                                "Property Type",
-                                fontWeight = FontWeight.Medium,
-                                color      = textPri
+                                "PROPERTY TYPE",
+                                fontSize      = 10.sp,
+                                fontWeight    = FontWeight.Bold,
+                                color         = if (isDark) EPR.DarkTextSec else EPR.LightTextHnt,
+                                letterSpacing = 0.7.sp
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(EDIT_PROPERTY_TYPES) { type ->
+                                    val isSelected = propertyType == type
                                     FilterChip(
-                                        selected = propertyType == type,
+                                        selected = isSelected,
                                         onClick  = { propertyType = type; hasUnsavedChanges = true },
-                                        label    = { Text(type) },
-                                        colors   = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = if (isDark) EPR_DarkGold else PrimaryBlue,
-                                            selectedLabelColor     = if (isDark) EPR_DarkNavy else Color.White,
-                                            containerColor         = if (isDark) EPR_DarkCard else Color(0xFFEEEEEE),
-                                            labelColor             = if (isDark) EPR_DarkTextSec else Color.Gray
+                                        label    = {
+                                            Text(
+                                                type,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize   = 12.sp
+                                            )
+                                        },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            // Selected: gold bg + navy text — premium look
+                                            selectedContainerColor = EPR.GoldAccent,
+                                            selectedLabelColor     = EPR.NavyDark,
+                                            containerColor         = if (isDark) EPR.DarkChipBg else EPR.LightChipBg,
+                                            labelColor             = if (isDark) EPR.DarkTextSec else EPR.LightTextSec
+                                        ),
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            enabled             = true,
+                                            selected            = isSelected,
+                                            selectedBorderColor = EPR.GoldDim,
+                                            selectedBorderWidth = 1.5.dp,
+                                            borderColor         = borderC,
+                                            borderWidth         = 1.dp
                                         )
                                     )
                                 }
@@ -258,33 +473,68 @@ fun EditPropertyScreen(
                     }
                 }
 
-                // Pricing & Details section
+                // ── Pricing & Details ─────────────────────────────────────
                 item {
-                    EditSectionCard(
-                        title  = "Pricing & Details",
-                        icon   = Icons.Default.AttachMoney,
-                        isDark = isDark
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            DarkAwareTextField(
+                    EPRSectionCard("Pricing & Details", Icons.Default.AttachMoney, isDark) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            EPRTextField(
                                 value           = pricePerNight,
                                 onValueChange   = { pricePerNight = it; hasUnsavedChanges = true },
-                                label           = "Price/Night",
+                                label           = "PRICE / NIGHT (PKR)",
                                 isDark          = isDark,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                DarkAwareTextField(
-                                    value         = bedrooms,
-                                    onValueChange = { bedrooms = it; hasUnsavedChanges = true },
-                                    label         = "Beds",
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier              = Modifier.fillMaxWidth()
+                            ) {
+                                EPRTextField(
+                                    value           = bedrooms,
+                                    onValueChange   = { bedrooms = it; hasUnsavedChanges = true },
+                                    label           = "BEDROOMS",
+                                    isDark          = isDark,
+                                    modifier        = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
+                                EPRTextField(
+                                    value           = bathrooms,
+                                    onValueChange   = { bathrooms = it; hasUnsavedChanges = true },
+                                    label           = "BATHROOMS",
+                                    isDark          = isDark,
+                                    modifier        = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
+                            }
+                            EPRTextField(
+                                value           = area,
+                                onValueChange   = { area = it; hasUnsavedChanges = true },
+                                label           = "AREA (SQ FT)",
+                                isDark          = isDark,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                        }
+                    }
+                }
+
+                // ── Location ──────────────────────────────────────────────
+                item {
+                    EPRSectionCard("Location", Icons.Default.LocationOn, isDark) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier              = Modifier.fillMaxWidth()
+                            ) {
+                                EPRTextField(
+                                    value         = city,
+                                    onValueChange = { city = it; hasUnsavedChanges = true },
+                                    label         = "CITY",
                                     isDark        = isDark,
                                     modifier      = Modifier.weight(1f)
                                 )
-                                DarkAwareTextField(
-                                    value         = bathrooms,
-                                    onValueChange = { bathrooms = it; hasUnsavedChanges = true },
-                                    label         = "Baths",
+                                EPRTextField(
+                                    value         = address,
+                                    onValueChange = { address = it; hasUnsavedChanges = true },
+                                    label         = "AREA / STREET",
                                     isDark        = isDark,
                                     modifier      = Modifier.weight(1f)
                                 )
@@ -293,130 +543,191 @@ fun EditPropertyScreen(
                     }
                 }
 
-                // Amenities section
+                // ── Amenities ─────────────────────────────────────────────
                 item {
-                    EditSectionCard(
-                        title  = "Amenities",
-                        icon   = Icons.Default.Checklist,
-                        isDark = isDark
-                    ) {
-                        Column {
+                    EPRSectionCard("Amenities", Icons.Default.Checklist, isDark) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             EDIT_AMENITIES_LIST.chunked(3).forEach { row ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier              = Modifier.fillMaxWidth()
+                                ) {
                                     row.forEach { am ->
+                                        val isSelected = am in selectedAmenities
                                         FilterChip(
-                                            selected = am in selectedAmenities,
+                                            selected = isSelected,
                                             onClick  = {
-                                                selectedAmenities = if (am in selectedAmenities)
-                                                    selectedAmenities - am
-                                                else
-                                                    selectedAmenities + am
+                                                selectedAmenities =
+                                                    if (isSelected) selectedAmenities - am
+                                                    else selectedAmenities + am
                                                 hasUnsavedChanges = true
                                             },
-                                            label    = { Text(am, fontSize = 10.sp) },
+                                            label = {
+                                                Text(
+                                                    am,
+                                                    fontSize   = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines   = 1
+                                                )
+                                            },
                                             modifier = Modifier.weight(1f),
                                             colors   = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = if (isDark) EPR_DarkGold else PrimaryBlue,
-                                                selectedLabelColor     = if (isDark) EPR_DarkNavy else Color.White,
-                                                containerColor         = if (isDark) EPR_DarkCard else Color(0xFFEEEEEE),
-                                                labelColor             = if (isDark) EPR_DarkTextSec else Color.Gray
+                                                selectedContainerColor = EPR.NavyPrimary,
+                                                selectedLabelColor     = Color.White,
+                                                containerColor         = if (isDark) EPR.DarkChipBg else EPR.LightChipBg,
+                                                labelColor             = if (isDark) EPR.DarkTextSec else EPR.LightTextSec
+                                            ),
+                                            border   = FilterChipDefaults.filterChipBorder(
+                                                enabled             = true,
+                                                selected            = isSelected,
+                                                selectedBorderColor = EPR.GoldAccent,
+                                                selectedBorderWidth = 1.5.dp,
+                                                borderColor         = borderC,
+                                                borderWidth         = 1.dp
                                             )
                                         )
                                     }
+                                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
                         }
                     }
                 }
 
-                // Photos section
+                // ── Photos ────────────────────────────────────────────────
                 item {
-                    EditPhotoSection(
+                    EPRPhotoSection(
                         existing    = existingImageUrls,
                         removed     = removedImageUrls,
                         new         = newImageUris,
                         onRemoveOld = { removedImageUrls = removedImageUrls + it; hasUnsavedChanges = true },
-                        onAddNew    = { newImageUris = newImageUris + it; hasUnsavedChanges = true },
-                        onRemoveNew = { newImageUris = newImageUris - it; hasUnsavedChanges = true },
+                        onAddNew    = { newImageUris     = newImageUris     + it; hasUnsavedChanges = true },
+                        onRemoveNew = { newImageUris     = newImageUris     - it; hasUnsavedChanges = true },
                         isDark      = isDark
                     )
                 }
 
-                item { Spacer(Modifier.height(20.dp)) }
+                item { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
 }
 
-// ── Dark-aware OutlinedTextField helper ───────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// COMPONENTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Text Field ────────────────────────────────────────────────────────────────
 @Composable
-private fun DarkAwareTextField(
+private fun EPRTextField(
     value          : String,
     onValueChange  : (String) -> Unit,
     label          : String,
-    isDark         : Boolean        = false,
-    readOnly       : Boolean        = false,
-    minLines       : Int            = 1,
-    modifier       : Modifier       = Modifier.fillMaxWidth(),
+    isDark         : Boolean         = false,
+    readOnly       : Boolean         = false,
+    minLines       : Int             = 1,
+    modifier       : Modifier        = Modifier.fillMaxWidth(),
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default
 ) {
     OutlinedTextField(
         value           = value,
         onValueChange   = onValueChange,
-        label           = { Text(label) },
+        label           = {
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        },
         modifier        = modifier,
         readOnly        = readOnly,
         minLines        = minLines,
         keyboardOptions = keyboardOptions,
+        shape           = RoundedCornerShape(10.dp),
         colors          = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor      = if (isDark) EPR_DarkGold    else PrimaryBlue,
-            unfocusedBorderColor    = if (isDark) EPR_DarkBorder  else Color(0xFFBDBDBD),
-            focusedLabelColor       = if (isDark) EPR_DarkGold    else PrimaryBlue,
-            unfocusedLabelColor     = if (isDark) EPR_DarkTextSec else Color.Gray,
-            focusedTextColor        = if (isDark) EPR_DarkTextPri else Color.Black,
-            unfocusedTextColor      = if (isDark) EPR_DarkTextPri else Color.Black,
-            focusedContainerColor   = if (isDark) EPR_DarkCard    else Color.Transparent,
-            unfocusedContainerColor = if (isDark) EPR_DarkCard    else Color.Transparent,
-            cursorColor             = if (isDark) EPR_DarkGold    else PrimaryBlue
+            focusedBorderColor      = EPR.GoldAccent,
+            unfocusedBorderColor    = if (isDark) EPR.DarkBorder  else EPR.LightBorder,
+            focusedLabelColor       = EPR.GoldAccent,
+            unfocusedLabelColor     = if (isDark) EPR.DarkTextSec else EPR.LightTextHnt,
+            focusedTextColor        = if (isDark) EPR.DarkTextPri else EPR.LightText,
+            unfocusedTextColor      = if (isDark) EPR.DarkTextPri else EPR.LightText,
+            focusedContainerColor   = if (isDark) EPR.DarkInputBg else EPR.LightInputBg,
+            unfocusedContainerColor = if (isDark) EPR.DarkInputBg else EPR.LightInputBg,
+            cursorColor             = EPR.GoldAccent
         )
     )
 }
 
-// ── Section Card — dark theme aware ──────────────────────────────────────────
+// ── Section Card — gold outline border ────────────────────────────────────────
 @Composable
-private fun EditSectionCard(
+private fun EPRSectionCard(
     title  : String,
     icon   : ImageVector,
     isDark : Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val cardBg  = if (isDark) EPR_DarkCard  else BackgroundWhite
-    val goldC   = if (isDark) EPR_DarkGold  else PrimaryBlue
-    val textPri = if (isDark) EPR_DarkTextPri else Color.Black
+    val cardBg  = if (isDark) EPR.DarkCard else EPR.LightCard
+    val headBg  = if (isDark) EPR.DarkHead else EPR.LightHead
+    val textPri = if (isDark) EPR.DarkTextPri else EPR.LightText
 
     Card(
-        modifier  = Modifier.fillMaxWidth(),
+        modifier  = Modifier
+            .fillMaxWidth()
+            // ── GOLD OUTLINE ── this is the premium border on every card
+            .border(
+                width = 1.5.dp,
+                color = EPR.GoldAccent.copy(alpha = if (isDark) 0.55f else 0.45f),
+                shape = RoundedCornerShape(16.dp)
+            ),
         shape     = RoundedCornerShape(16.dp),
         colors    = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // no shadow — border does the work
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column {
+            // ── Card header with navy icon bg + gold icon
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier          = Modifier.padding(bottom = 12.dp)
+                modifier          = Modifier
+                    .fillMaxWidth()
+                    .background(headBg)
+                    .padding(horizontal = 16.dp, vertical = 13.dp)
             ) {
-                Icon(icon, null, tint = goldC, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(title, fontWeight = FontWeight.SemiBold, color = textPri)
+                Box(
+                    modifier         = Modifier
+                        .size(34.dp)
+                        .background(EPR.NavyPrimary, RoundedCornerShape(9.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint               = EPR.GoldAccent,   // gold icon on navy bg
+                        modifier           = Modifier.size(17.dp)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    title,
+                    fontWeight    = FontWeight.Bold,
+                    fontSize      = 13.sp,
+                    color         = textPri,
+                    letterSpacing = 0.2.sp
+                )
             }
-            content()
+            // ── Gold divider line between header and body
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(EPR.GoldAccent.copy(alpha = if (isDark) 0.35f else 0.25f))
+            )
+            // ── Card body
+            Column(Modifier.padding(16.dp)) {
+                content()
+            }
         }
     }
 }
 
-// ── Photo Section — dark theme aware ─────────────────────────────────────────
+// ── Photo section ─────────────────────────────────────────────────────────────
 @Composable
-private fun EditPhotoSection(
+private fun EPRPhotoSection(
     existing   : List<String>,
     removed    : Set<String>,
     new        : List<Uri>,
@@ -428,32 +739,55 @@ private fun EditPhotoSection(
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { onAddNew(it) }
+
     val activeOld = existing.filterNot { it in removed }
 
-    EditSectionCard("Photos", Icons.Default.PhotoLibrary, isDark = isDark) {
+    EPRSectionCard("Photos", Icons.Default.PhotoLibrary, isDark) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(activeOld) { url -> EditableImageItem(url) { onRemoveOld(url) } }
-                items(new)       { uri -> EditableImageItem(uri) { onRemoveNew(uri) } }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(activeOld) { url -> EPRImageThumb(model = url) { onRemoveOld(url) } }
+                items(new)       { uri -> EPRImageThumb(model = uri) { onRemoveNew(uri) } }
             }
             OutlinedButton(
-                onClick = { launcher.launch("image/*") },
-                modifier = Modifier.fillMaxWidth(),
+                onClick  = { launcher.launch("image/*") },
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+                shape    = RoundedCornerShape(10.dp),
                 colors   = ButtonDefaults.outlinedButtonColors(
-                    contentColor = if (isDark) EPR_DarkGold else PrimaryBlue
+                    contentColor = EPR.NavyPrimary
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.5.dp,
+                    color = EPR.GoldAccent.copy(alpha = 0.5f)   // gold border on add button too
                 )
             ) {
-                Icon(Icons.Default.AddPhotoAlternate, null)
-                Text(" Add More Photos")
+                Icon(
+                    Icons.Default.AddPhotoAlternate,
+                    contentDescription = null,
+                    tint               = EPR.NavyPrimary,
+                    modifier           = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Add More Photos",
+                    fontWeight    = FontWeight.Bold,
+                    fontSize      = 13.sp,
+                    color         = if (isDark) EPR.DarkTextPri else EPR.NavyPrimary,
+                    letterSpacing = 0.2.sp
+                )
             }
         }
     }
 }
 
-// ── Editable image thumbnail ──────────────────────────────────────────────────
+// ── Image thumbnail ───────────────────────────────────────────────────────────
 @Composable
-private fun EditableImageItem(model: Any?, onRemove: () -> Unit) {
-    Box(modifier = Modifier.size(90.dp).clip(RoundedCornerShape(10.dp))) {
+private fun EPRImageThumb(model: Any?, onRemove: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(90.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, EPR.GoldAccent.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+    ) {
         AsyncImage(
             model              = model,
             contentDescription = null,
@@ -464,40 +798,88 @@ private fun EditableImageItem(model: Any?, onRemove: () -> Unit) {
             onClick  = onRemove,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                .padding(3.dp)
+                .background(EPR.NavyDark.copy(alpha = 0.7f), CircleShape)
                 .size(24.dp)
         ) {
-            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Remove",
+                tint               = EPR.GoldAccent,
+                modifier           = Modifier.size(12.dp)
+            )
         }
     }
 }
 
-// ── Bottom Save Bar — dark theme aware ───────────────────────────────────────
+// ── Bottom Save Bar ───────────────────────────────────────────────────────────
 @Composable
-private fun EditPropertyBottomBar(
+private fun EPRBottomSaveBar(
     isLoading: Boolean,
-    isDark   : Boolean = false,
+    isDark   : Boolean    = false,
     onSave   : () -> Unit
 ) {
-    val barBg  = if (isDark) Color(0xFF0D1B3E) else BackgroundWhite
-    val goldC  = if (isDark) EPR_DarkGold      else PrimaryBlue
-    val textC  = if (isDark) Color(0xFF060D1A) else Color.White
-
-    Surface(tonalElevation = 8.dp, color = barBg) {
-        Button(
-            onClick  = onSave,
-            enabled  = !isLoading,
-            modifier = Modifier.fillMaxWidth().padding(20.dp).height(50.dp),
-            shape    = RoundedCornerShape(12.dp),
-            colors   = ButtonDefaults.buttonColors(containerColor = goldC)
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = textC)
-            } else {
-                Icon(Icons.Default.Save, null, tint = textC)
-                Spacer(Modifier.width(8.dp))
-                Text("Save Changes", color = textC)
+    Surface(
+        color           = if (isDark) EPR.DarkNavyBar else EPR.LightCard,
+        tonalElevation  = 0.dp,
+        shadowElevation = 16.dp
+    ) {
+        Column {
+            // Gold accent line at very top of save bar
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(EPR.GoldAccent)
+            )
+            Button(
+                onClick   = onSave,
+                enabled   = !isLoading,
+                modifier  = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .height(52.dp),
+                shape     = RoundedCornerShape(13.dp),
+                colors    = ButtonDefaults.buttonColors(
+                    containerColor         = EPR.NavyPrimary,
+                    contentColor           = Color.White,
+                    disabledContainerColor = EPR.NavyPrimary.copy(alpha = 0.45f)
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier    = Modifier.size(22.dp),
+                        color       = EPR.GoldAccent,
+                        strokeWidth = 2.5.dp
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Save,
+                        contentDescription = null,
+                        tint               = EPR.GoldAccent,
+                        modifier           = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Save Changes",
+                        fontSize      = 15.sp,
+                        fontWeight    = FontWeight.Bold,
+                        color         = Color.White,
+                        letterSpacing = 0.3.sp
+                    )
+                }
             }
+            Text(
+                "Changes will be saved to your listing",
+                modifier  = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+                fontSize  = 10.sp,
+                color     = if (isDark) EPR.DarkTextSec else EPR.LightTextHnt,
+                fontWeight = FontWeight.Medium,
+                textAlign  = androidx.compose.ui.text.style.TextAlign.Center
+            )
         }
     }
 }

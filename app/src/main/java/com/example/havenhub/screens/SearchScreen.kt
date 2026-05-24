@@ -50,16 +50,20 @@ fun SearchScreen(
     val focusRequester  = remember { FocusRequester() }
     val focusManager    = LocalFocusManager.current
 
-    // FIX: isSearching only true when query is non-empty
     val isSearching = uiState.searchQuery.isNotEmpty()
 
-    // FIX: showResults = true when EITHER a query is typed OR filters are active
-    // Old code only showed results when isSearching was true — so filter-only
-    // results (no text typed) were never displayed. This was the second bug.
+    // Show results when there is a search query OR active filters
     val showResults = isSearching || uiState.hasActiveFilter
 
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-    LaunchedEffect(Unit)  { viewModel.refreshSearch() }
+    // FIX: Use initialLoad() instead of refreshSearch() here.
+    // refreshSearch() was clearing filters on every back-navigation because
+    // LaunchedEffect(Unit) re-fires when the composable re-enters composition
+    // after FilterScreen pops. initialLoad() is a no-op if results already exist,
+    // so filters applied in FilterScreen are preserved when we come back here.
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        viewModel.initialLoad()
+    }
 
     val primary          = MaterialTheme.colorScheme.primary
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
@@ -94,7 +98,7 @@ fun SearchScreen(
                             modifier   = Modifier.padding(start = 8.dp)
                         )
 
-                        // Active filter badge
+                        // Active filter badge — shown only when filters are applied
                         if (uiState.hasActiveFilter) {
                             Spacer(Modifier.width(8.dp))
                             Surface(
@@ -102,9 +106,7 @@ fun SearchScreen(
                                 color = tertiary.copy(alpha = 0.9f)
                             ) {
                                 Row(
-                                    modifier          = Modifier.padding(
-                                        horizontal = 8.dp, vertical = 4.dp
-                                    ),
+                                    modifier          = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -204,7 +206,7 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Loading bar
+            // Loading indicator
             if (uiState.isLoading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
@@ -213,10 +215,7 @@ fun SearchScreen(
             }
 
             when {
-                // ── Case 1: Results to show (search query OR filters active) ─
-                // FIX: was `isSearching || uiState.hasActiveFilter` in condition
-                //      but body only ran when results > 0 AND isSearching was true
-                //      Now uses showResults which covers filter-only case
+                // Case 1: Results available (text search OR active filters)
                 showResults && uiState.searchResults.isNotEmpty() -> {
                     LazyColumn(
                         modifier       = Modifier.fillMaxSize(),
@@ -259,7 +258,7 @@ fun SearchScreen(
                     }
                 }
 
-                // ── Case 2: Search/filter active but no results ───────────────
+                // Case 2: Search or filter active but no matching results
                 showResults && !uiState.isLoading -> {
                     EmptySearchUI(
                         query         = uiState.searchQuery,
@@ -268,7 +267,7 @@ fun SearchScreen(
                     )
                 }
 
-                // ── Case 3: Default state — show suggestions ──────────────────
+                // Case 3: Default state — show suggestions and recent history
                 !showResults -> {
                     Column(
                         modifier = Modifier
@@ -298,15 +297,11 @@ fun SearchScreen(
                                     },
                                     shape  = RoundedCornerShape(12.dp),
                                     color  = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(
-                                        1.dp, MaterialTheme.colorScheme.outline
-                                    )
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                                 ) {
                                     Text(
                                         city,
-                                        modifier   = Modifier.padding(
-                                            horizontal = 20.dp, vertical = 10.dp
-                                        ),
+                                        modifier   = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                                         fontSize   = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color      = MaterialTheme.colorScheme.onSurface
@@ -397,12 +392,14 @@ fun SearchScreen(
     }
 }
 
-// ── Property result card ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Property result card
 //
-// Priority 1: imageUrls.first() — ImgBB URL loaded via AsyncImage
-// Priority 2: drawableImageName  — local drawable fallback
-// Priority 3: propertyId         — getPropertyImage() fallback
-//
+// Image priority:
+//   1. imageUrls.first() — ImgBB remote URL via AsyncImage
+//   2. drawableImageName  — local drawable fallback
+//   3. propertyId         — getPropertyImage() generic fallback
+// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun ModernSearchCard(property: Property, onClick: () -> Unit) {
     val context = LocalContext.current
@@ -413,9 +410,7 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
             .padding(horizontal = 20.dp, vertical = 10.dp)
             .clickable { onClick() },
         shape     = RoundedCornerShape(24.dp),
-        colors    = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -434,22 +429,16 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
                         .clip(RoundedCornerShape(18.dp)),
                     contentScale = ContentScale.Crop,
                     placeholder  = painterResource(
-                        id = getPropertyImage(
-                            property.drawableImageName.ifBlank { property.propertyId }
-                        )
+                        id = getPropertyImage(property.drawableImageName.ifBlank { property.propertyId })
                     ),
                     error = painterResource(
-                        id = getPropertyImage(
-                            property.drawableImageName.ifBlank { property.propertyId }
-                        )
+                        id = getPropertyImage(property.drawableImageName.ifBlank { property.propertyId })
                     )
                 )
             } else {
                 androidx.compose.foundation.Image(
-                    painter = painterResource(
-                        id = getPropertyImage(
-                            property.drawableImageName.ifBlank { property.propertyId }
-                        )
+                    painter            = painterResource(
+                        id = getPropertyImage(property.drawableImageName.ifBlank { property.propertyId })
                     ),
                     contentDescription = null,
                     modifier           = Modifier
@@ -496,7 +485,9 @@ fun ModernSearchCard(property: Property, onClick: () -> Unit) {
     }
 }
 
-// ── Empty results UI ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Empty results state UI
+// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun EmptySearchUI(
     query        : String,
