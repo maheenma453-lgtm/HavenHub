@@ -14,6 +14,8 @@ data class Payment(
     val payeeId   : String = "",
     val payeeName : String = "",
 
+    val packageId : String = "",   // Rental package reference (empty if none)
+
     val amount         : String = "0",
     val platformFee    : String = "0",
     val landlordPayout : String = "0",
@@ -33,7 +35,6 @@ data class Payment(
     @ServerTimestamp
     val createdAt : Timestamp? = null,
     val updatedAt : Timestamp? = null
-
 ) {
     constructor() : this(paymentId = "")
 
@@ -49,17 +50,18 @@ data class Payment(
 
     val paymentStatusEnum : PaymentStatus
         get() = try { PaymentStatus.valueOf(status) }
-        catch (e: Exception) { PaymentStatus.PENDING }
+        catch (_: Exception) { PaymentStatus.PENDING }
 
     val paymentMethodEnum : PaymentMethod
         get() = try { PaymentMethod.valueOf(paymentMethod) }
-        catch (e: Exception) { PaymentMethod.JAZZCASH }
+        catch (_: Exception) { PaymentMethod.JAZZCASH }
 
     val paymentTypeEnum : PaymentType
         get() = try { PaymentType.valueOf(type) }
-        catch (e: Exception) { PaymentType.BOOKING }
+        catch (_: Exception) { PaymentType.BOOKING }
 }
 
+// Payment Method
 enum class PaymentMethod {
     JAZZCASH, EASYPAISA, BANK_TRANSFER, CREDIT_CARD, DEBIT_CARD, CASH;
 
@@ -73,10 +75,12 @@ enum class PaymentMethod {
     }
 }
 
+// Payment Type
 enum class PaymentType {
     BOOKING, REFUND, PAYOUT
 }
 
+// Payment Status
 enum class PaymentStatus {
     PENDING,
     PROCESSING,
@@ -84,9 +88,9 @@ enum class PaymentStatus {
     FAILED,
     REFUNDED,
     PARTIALLY_REFUNDED,
-    PAID,            // ✅ ADD: BookingDetailScreen ke liye
-    DEPOSIT_PAID,    // ✅ ADD: Pre-booking deposit paid
-    PARTIALLY_PAID;  // ✅ ADD: BookingDetailScreen ke liye
+    PAID,
+    DEPOSIT_PAID,
+    PARTIALLY_PAID;
 
     fun displayName(): String = when (this) {
         PENDING            -> "Pending"
@@ -95,8 +99,32 @@ enum class PaymentStatus {
         FAILED             -> "Failed"
         REFUNDED           -> "Refunded"
         PARTIALLY_REFUNDED -> "Partially Refunded"
-        PAID               -> "Paid"           // ✅ ADD
-        DEPOSIT_PAID       -> "Deposit Paid"   // ✅ ADD
-        PARTIALLY_PAID     -> "Partially Paid" // ✅ ADD
+        PAID               -> "Paid"
+        DEPOSIT_PAID       -> "Deposit Paid"
+        PARTIALLY_PAID     -> "Partially Paid"
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -26,7 +26,6 @@ import com.example.havenhub.data.PaymentMethod
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.PaymentViewModel
 
-// Semantic colors — intentional
 private val PGreen = Color(0xFF22C55E)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,13 +37,13 @@ fun PaymentScreen(
     payeeId      : String,
     payerName    : String,
     payeeName    : String,
-    amount       : String, // Accurate amount from backend (20% deposit ya 80% remaining)
+    amount       : String,
+    paymentType  : String = "FULL",   // ← NEW
+    packageId    : String = "none",   // ← NEW
     viewModel    : PaymentViewModel = hiltViewModel()
-    // NOTE (PULL CHANGE): bookingViewModel dependency removed — PaymentViewModel alone handles flow
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // PULL CHANGE: Verify payment status on load instead of loading booking separately
     LaunchedEffect(bookingId) {
         viewModel.verifyPaymentStatus(bookingId)
     }
@@ -61,16 +60,16 @@ fun PaymentScreen(
 
     val amountDouble = amount.toDoubleOrNull() ?: 0.0
 
-    // PULL CHANGE: Determines if this is a final payment (remaining 80%) or deposit (20%)
-    val isFinalPaymentPhase = !uiState.isPreBooking
+    // ← FIXED: driven by paymentType param, not ViewModel state
+    val isFinalPaymentPhase = paymentType == "FULL"
 
-    // Navigate to success screen when payment is processed
+    // ← FIXED: popUpTo route includes all 9 segments
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             navController.navigate(Screen.PaymentSuccess.createRoute(bookingId)) {
-                popUpTo("payment/$bookingId/$payerId/$payeeId/$payerName/$payeeName/$amount") {
-                    inclusive = true
-                }
+                popUpTo(
+                    "payment/$bookingId/$payerId/$payeeId/$payerName/$payeeName/$amount/$paymentType/$packageId"
+                ) { inclusive = true }
             }
             viewModel.clearMessages()
         }
@@ -86,26 +85,22 @@ fun PaymentScreen(
     Scaffold(
         topBar = {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
+                modifier = Modifier.fillMaxWidth()
                     .background(Brush.horizontalGradient(listOf(primary, primaryContainer)))
             ) {
                 Row(
-                    modifier          = Modifier
-                        .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    modifier          = Modifier.statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = tertiary)
                     }
                     Column(Modifier.weight(1f)) {
-                        // PULL CHANGE: Dynamic title — deposit vs final payment
                         Text(
-                            text       = if (isFinalPaymentPhase) "Complete Final Payment" else "Complete Deposit Payment",
+                            text = if (isFinalPaymentPhase) "Complete Final Payment" else "Complete Deposit Payment",
                             fontWeight = FontWeight.Bold,
-                            color      = onPrimary,
-                            fontSize   = 17.sp
+                            color = onPrimary,
+                            fontSize = 17.sp
                         )
                         Text("Secure & encrypted", fontSize = 11.sp, color = onPrimary.copy(0.55f))
                     }
@@ -145,15 +140,10 @@ fun PaymentScreen(
                     }
                     Spacer(Modifier.height(14.dp))
 
-                    PaySummaryRow("Booking ID",    "#${bookingId.take(8).uppercase()}", onPrimary)
-                    PaySummaryRow("From",          payerName.ifBlank { "Tenant" },      onPrimary)
-                    PaySummaryRow("To",            payeeName.ifBlank { "Landlord" },    onPrimary)
-                    // PULL CHANGE: Shows whether this is a deposit or remaining payment
-                    PaySummaryRow(
-                        "Payment Type",
-                        if (isFinalPaymentPhase) "Remaining Amount" else "Deposit Amount",
-                        onPrimary
-                    )
+                    PaySummaryRow("Booking ID", "#${bookingId.take(8).uppercase()}", onPrimary)
+                    PaySummaryRow("From",       payerName.ifBlank { "Tenant" },      onPrimary)
+                    PaySummaryRow("To",         payeeName.ifBlank { "Landlord" },    onPrimary)
+                    PaySummaryRow("Payment Type", if (isFinalPaymentPhase) "Remaining Amount" else "Deposit Amount", onPrimary)
 
                     Spacer(Modifier.height(8.dp))
                     Box(
@@ -168,12 +158,7 @@ fun PaymentScreen(
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         Column {
-                            // PULL CHANGE: Label changes based on payment phase
-                            Text(
-                                if (isFinalPaymentPhase) "Remaining Payable" else "Deposit Payable",
-                                fontSize = 12.sp,
-                                color    = onPrimary.copy(0.6f)
-                            )
+                            Text(if (isFinalPaymentPhase) "Remaining Payable" else "Deposit Payable", fontSize = 12.sp, color = onPrimary.copy(0.6f))
                             Text(
                                 "PKR ${"%,.0f".format(amountDouble)}",
                                 fontSize   = 24.sp,
@@ -254,8 +239,7 @@ fun PaymentScreen(
             Button(
                 onClick = {
                     val selected = uiState.selectedMethod ?: return@Button
-                    // PULL CHANGE: Simplified processPayment call — method match check removed,
-                    // isFinalPayment and isPreBookingDirect flags added for ViewModel to handle logic
+
                     viewModel.processPayment(
                         bookingId          = bookingId,
                         payerId            = payerId,
@@ -263,6 +247,7 @@ fun PaymentScreen(
                         payerName          = payerName,
                         payeeName          = payeeName,
                         amount             = amount,
+                        packageId          = packageId,   // ← NEW
                         method             = selected,
                         isFinalPayment     = isFinalPaymentPhase,
                         isPreBookingDirect = !isFinalPaymentPhase
@@ -337,11 +322,7 @@ fun PaymentScreen(
 }
 
 @Composable
-private fun PaySummaryRow(
-    label    : String,
-    value    : String,
-    onPrimary: Color
-) {
+private fun PaySummaryRow(label: String, value: String, onPrimary: Color) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -350,36 +331,3 @@ private fun PaySummaryRow(
         Text(value, fontSize = 12.sp, color = onPrimary, fontWeight = FontWeight.Medium)
     }
 }
-
-// PayRow is kept from your original code (used in other places)
-@Composable
-fun PayRow(
-    label    : String,
-    value    : String,
-    bold     : Boolean = false,
-    highlight: Boolean = false
-) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            value,
-            fontSize   = 13.sp,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            color      = if (highlight) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurface.copy(0.8f)
-        )
-    }
-}
-
-
-
-
-
-
-
-
-
-

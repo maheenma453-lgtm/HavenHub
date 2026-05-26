@@ -41,46 +41,39 @@ class BookingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BookingUiState())
     val uiState: StateFlow<BookingUiState> = _uiState.asStateFlow()
 
-    private var cachedUserId      : String  = ""
-    private var cachedRole        : String  = "tenant"
-    private var isCreatingBooking : Boolean = false
+    private var cachedUserId: String = ""
+    private var cachedRole: String = "tenant"
+    private var isCreatingBooking: Boolean = false
 
     fun loadBookings(userId: String, role: String) {
-        Log.d("BOOKING_VM", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Log.d("BOOKING_VM", "loadBookings CALLED — userId='$userId' role='$role'")
-
         if (userId.isBlank()) {
-            Log.e("BOOKING_VM", "❌ userId BLANK — aborted")
-            return
+            Log.e("BOOKING_VM", "userId BLANK — aborted"); return
         }
 
         val effectiveRole = role.ifBlank { "tenant" }
         cachedUserId = userId
-        cachedRole   = effectiveRole
+        cachedRole = effectiveRole
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                Log.d("BOOKING_VM", "Fetching for role='$effectiveRole' userId='$userId'")
                 val result = when (effectiveRole.lowercase()) {
-                    "admin"    -> repository.getAllBookingsForAdmin()
+                    "admin" -> repository.getAllBookingsForAdmin()
                     "landlord" -> repository.getLandlordBookings(userId)
-                    else       -> repository.getTenantBookings(userId)
+                    else -> repository.getTenantBookings(userId)
                 }
-                Log.d("BOOKING_VM", "✅ Got ${result.size} bookings")
+                Log.d("BOOKING_VM", "Got ${result.size} bookings")
                 _uiState.update { it.copy(isLoading = false, bookings = result) }
             } catch (e: Exception) {
-                Log.e("BOOKING_VM", "❌ EXCEPTION: ${e.localizedMessage}")
+                Log.e("BOOKING_VM", "EXCEPTION: ${e.localizedMessage}")
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
             }
         }
     }
 
     fun forceRefreshBookings() {
-        if (cachedUserId.isNotEmpty()) {
-            Log.d("BOOKING_VM", "forceRefreshBookings — userId='$cachedUserId' role='$cachedRole'")
-            loadBookings(cachedUserId, cachedRole)
-        }
+        if (cachedUserId.isNotEmpty()) loadBookings(cachedUserId, cachedRole)
     }
 
     fun loadBookingById(bookingId: String) {
@@ -88,8 +81,20 @@ class BookingViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             when (val result = repository.getBookingById(bookingId)) {
-                is Resource.Success -> _uiState.update { it.copy(isLoading = false, currentBooking = result.data) }
-                is Resource.Error   -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                is Resource.Success -> _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        currentBooking = result.data
+                    )
+                }
+
+                is Resource.Error -> _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = result.message
+                    )
+                }
+
                 else -> {}
             }
         }
@@ -97,24 +102,40 @@ class BookingViewModel @Inject constructor(
 
     fun createBooking(booking: Booking) {
         if (isCreatingBooking) {
-            Log.w("BOOKING_VM", "⚠️ Already creating — ignored")
-            return
+            Log.w("BOOKING_VM", "Already creating — ignored"); return
         }
         isCreatingBooking = true
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, actionSuccess = false, errorMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    actionSuccess = false,
+                    errorMessage = null
+                )
+            }
             try {
                 when (val result = repository.createBooking(booking)) {
                     is Resource.Success -> _uiState.update {
-                        it.copy(isLoading = false, actionSuccess = true, createdBookingId = result.data)
+                        it.copy(
+                            isLoading = false,
+                            actionSuccess = true,
+                            createdBookingId = result.data
+                        )
                     }
+
                     is Resource.Error -> _uiState.update {
                         it.copy(isLoading = false, errorMessage = result.message)
                     }
+
                     else -> {}
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Unknown error") }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Unknown error"
+                    )
+                }
             } finally {
                 isCreatingBooking = false
             }
@@ -126,14 +147,27 @@ class BookingViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             when (val result = repository.updateBookingStatus(bookingId, newStatus)) {
-                is Resource.Success -> _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
-                is Resource.Error   -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                is Resource.Success -> _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        actionSuccess = true
+                    )
+                }
+
+                is Resource.Error -> _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = result.message
+                    )
+                }
+
                 else -> {}
             }
         }
     }
 
-    // ✅ ADD: Pre-booking deposit paid hone ke baad call karo
+    // Called after the tenant pays the 20% deposit for a pre-booking.
+    // Sets status → DEPOSIT_PAID and records the deposit/remaining amounts in Firestore.
     fun markDepositPaid(bookingId: String, depositAmount: Double, totalAmount: Double) {
         if (bookingId.isBlank()) return
         viewModelScope.launch {
@@ -143,23 +177,24 @@ class BookingViewModel @Inject constructor(
                 firestore.collection("bookings").document(bookingId)
                     .update(
                         mapOf(
-                            "status"          to BookingStatus.DEPOSIT_PAID.name,
-                            "paymentStatus"   to PaymentStatus.DEPOSIT_PAID.name,
-                            "depositAmount"   to depositAmount,
+                            "status" to BookingStatus.DEPOSIT_PAID.name,
+                            "paymentStatus" to PaymentStatus.DEPOSIT_PAID.name,
+                            "depositAmount" to depositAmount,
                             "remainingAmount" to remainingAmount,
-                            "updatedAt"       to FieldValue.serverTimestamp()
+                            "updatedAt" to FieldValue.serverTimestamp()
                         )
                     ).await()
                 _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
-                Log.d("BOOKING_VM", "✅ Deposit marked paid — remaining: $remainingAmount")
+                Log.d("BOOKING_VM", "Deposit marked paid — remaining: $remainingAmount")
             } catch (e: Exception) {
-                Log.e("BOOKING_VM", "❌ markDepositPaid error: ${e.localizedMessage}")
+                Log.e("BOOKING_VM", "markDepositPaid error: ${e.localizedMessage}")
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
             }
         }
     }
 
-    // ✅ ADD: Landlord tenant ko check-in kare
+    // Called when the landlord confirms the tenant has arrived.
+    // Sets status → CHECKED_IN so the tenant can then pay the remaining 80% from the app.
     fun markCheckedIn(bookingId: String) {
         if (bookingId.isBlank()) return
         viewModelScope.launch {
@@ -168,19 +203,20 @@ class BookingViewModel @Inject constructor(
                 firestore.collection("bookings").document(bookingId)
                     .update(
                         mapOf(
-                            "status"    to BookingStatus.AWAITING_FINAL_PAYMENT.name,
+                            "status" to BookingStatus.CHECKED_IN.name,
                             "updatedAt" to FieldValue.serverTimestamp()
                         )
                     ).await()
                 _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
-                Log.d("BOOKING_VM", "✅ Tenant checked in — final payment pending")
+                Log.d("BOOKING_VM", "Tenant checked in — awaiting 80% final payment")
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
             }
         }
     }
 
-    // ✅ ADD: Arrival pe remaining 80% payment complete
+    // Called after the tenant pays the remaining 80% on arrival.
+    // Sets status → PENDING_APPROVAL and paymentStatus → PAID so the landlord can confirm.
     fun markFinalPaymentComplete(bookingId: String) {
         if (bookingId.isBlank()) return
         viewModelScope.launch {
@@ -189,13 +225,13 @@ class BookingViewModel @Inject constructor(
                 firestore.collection("bookings").document(bookingId)
                     .update(
                         mapOf(
-                            "status"        to BookingStatus.CHECKED_IN.name,
+                            "status" to BookingStatus.PENDING_APPROVAL.name,
                             "paymentStatus" to PaymentStatus.PAID.name,
-                            "updatedAt"     to FieldValue.serverTimestamp()
+                            "updatedAt" to FieldValue.serverTimestamp()
                         )
                     ).await()
                 _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
-                Log.d("BOOKING_VM", "✅ Final payment complete — checked in")
+                Log.d("BOOKING_VM", "Final payment complete — awaiting landlord approval")
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
             }
@@ -213,16 +249,16 @@ class BookingViewModel @Inject constructor(
                 firestore.collection("bookings").document(bookingId)
                     .update(
                         mapOf(
-                            "status"      to BookingStatus.CANCELLED.name,
+                            "status" to BookingStatus.CANCELLED.name,
                             "cancelledAt" to FieldValue.serverTimestamp()
                         )
                     ).await()
 
                 _uiState.update { state ->
                     state.copy(
-                        isLoading     = false,
+                        isLoading = false,
                         actionSuccess = true,
-                        bookings      = state.bookings.map { b ->
+                        bookings = state.bookings.map { b ->
                             if (b.bookingId == bookingId) b.copy(status = BookingStatus.CANCELLED.name) else b
                         }
                     )
@@ -230,17 +266,19 @@ class BookingViewModel @Inject constructor(
 
                 if (cachedUserId.isNotEmpty()) {
                     val fresh = when (cachedRole.lowercase()) {
-                        "admin"    -> repository.getAllBookingsForAdmin()
+                        "admin" -> repository.getAllBookingsForAdmin()
                         "landlord" -> repository.getLandlordBookings(cachedUserId)
-                        else       -> repository.getTenantBookings(cachedUserId)
+                        else -> repository.getTenantBookings(cachedUserId)
                     }
                     _uiState.update { it.copy(bookings = fresh) }
                 }
-
             } catch (e: Exception) {
-                Log.e("BOOKING_VM", "❌ cancelBooking error: ${e.localizedMessage}")
+                Log.e("BOOKING_VM", "cancelBooking error: ${e.localizedMessage}")
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = "Cancel failed: ${e.localizedMessage}")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Cancel failed: ${e.localizedMessage}"
+                    )
                 }
             }
         }
@@ -252,19 +290,27 @@ class BookingViewModel @Inject constructor(
             try {
                 val currentUserId = auth.currentUser?.uid ?: throw Exception("User not logged in")
                 val msgData = hashMapOf(
-                    "fromUserId"    to currentUserId,
-                    "toUserId"      to toUserId,
-                    "bookingId"     to bookingId,
+                    "fromUserId" to currentUserId,
+                    "toUserId" to toUserId,
+                    "bookingId" to bookingId,
                     "propertyTitle" to propertyTitle,
-                    "message"       to message,
-                    "isRead"        to false,
-                    "timestamp"     to FieldValue.serverTimestamp()
+                    "message" to message,
+                    "isRead" to false,
+                    "timestamp" to FieldValue.serverTimestamp()
                 )
                 firestore.collection("messages").add(msgData).await()
-                _uiState.update { it.copy(isSendingMessage = false, successMessage = "Message sent successfully") }
+                _uiState.update {
+                    it.copy(
+                        isSendingMessage = false,
+                        successMessage = "Message sent successfully"
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isSendingMessage = false, errorMessage = "Message send failed: ${e.localizedMessage}")
+                    it.copy(
+                        isSendingMessage = false,
+                        errorMessage = "Message send failed: ${e.localizedMessage}"
+                    )
                 }
             }
         }
@@ -273,9 +319,9 @@ class BookingViewModel @Inject constructor(
     fun clearMessages() {
         _uiState.update {
             it.copy(
-                errorMessage     = null,
-                successMessage   = null,
-                actionSuccess    = false,
+                errorMessage = null,
+                successMessage = null,
+                actionSuccess = false,
                 createdBookingId = null
             )
         }

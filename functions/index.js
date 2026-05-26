@@ -246,4 +246,4 @@ exports.onSeasonalAlertCreated = functions.firestore
             alert.message || "",
             { type: "seasonal", subType: "ALERT", referenceId: alertId }
         );
-    });s
+    });

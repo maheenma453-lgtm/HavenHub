@@ -35,6 +35,7 @@ import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
 
+// ── Private color palette ─────────────────────────────────────────────────────
 private val BN  = Color(0xFF0B1829)
 private val BG  = Color(0xFFD4AF37)
 private val BBg = Color(0xFFF0F3F8)
@@ -42,6 +43,7 @@ private val BW  = Color(0xFFFFFFFF)
 private val BM  = Color(0xFF8A9BB0)
 private val BL  = Color(0xFFE8EDF4)
 
+// ── Status theme data class ───────────────────────────────────────────────────
 private data class BStatusTheme(
     val fg: Color, val bg: Color, val icon: ImageVector, val label: String, val desc: String
 )
@@ -81,7 +83,7 @@ fun BookingDetailScreen(
     var tenantName by remember { mutableStateOf("...") }
     var hostName   by remember { mutableStateOf("...") }
 
-    // ─── Tenant name fetch ────────────────────────────────────────────────────
+    // Fetch tenant display name — falls back through name fields then email
     LaunchedEffect(booking?.tenantId) {
         val tid = booking?.tenantId
         tenantName = when {
@@ -104,36 +106,29 @@ fun BookingDetailScreen(
         }
     }
 
-    // ─── Host name fetch — FIXED ──────────────────────────────────────────────
-    // MASLA: Auto-added properties mein ownerName blank hota tha → "—" show hota tha
-    // FIX:   Step 1 → ownerName try karo (manual props ke liye)
-    //        Step 2 → ownerId se users collection mein jaao (auto props ke liye)
-    //        Step 3 → landlordId fallback (booking se)
+    // Fetch host (owner) display name.
+    // Step 1: Try ownerName from property doc (manual properties).
+    // Step 2: If blank, look up the owner's user doc via ownerId (auto-added properties).
+    // Step 3: Fall back to landlordName stored on the booking.
     LaunchedEffect(booking?.propertyId) {
         val currentBooking = booking ?: return@LaunchedEffect
         hostName = try {
             val db = FirebaseFirestore.getInstance()
 
-            // Step 1: Property doc se ownerName try karo
             val propertyDoc = db.collection("properties")
                 .document(currentBooking.propertyId)
                 .get().await()
 
-            val nameFromProperty = propertyDoc.getString("ownerName")
-                ?.takeIf { it.isNotBlank() }
+            val nameFromProperty = propertyDoc.getString("ownerName")?.takeIf { it.isNotBlank() }
 
             if (nameFromProperty != null) {
-                // Manual properties → ownerName direct milta hai ✅
                 nameFromProperty
             } else {
-                // Auto properties → ownerId se users collection mein jaao ✅
-                val ownerId = propertyDoc.getString("ownerId")
-                    ?.takeIf { it.isNotBlank() }
+                val ownerId = propertyDoc.getString("ownerId")?.takeIf { it.isNotBlank() }
                     ?: currentBooking.landlordId.takeIf { it.isNotBlank() }
 
                 if (!ownerId.isNullOrBlank()) {
-                    val userDoc = db.collection("users")
-                        .document(ownerId).get().await()
+                    val userDoc = db.collection("users").document(ownerId).get().await()
                     userDoc.getString("fullName")
                         ?: userDoc.getString("name")
                         ?: userDoc.getString("displayName")
@@ -143,7 +138,6 @@ fun BookingDetailScreen(
                 }
             }
         } catch (e: Exception) {
-            // Exception pe landlordName fallback
             currentBooking.landlordName.ifBlank { "—" }
         }
     }
@@ -156,6 +150,7 @@ fun BookingDetailScreen(
         }
     }
 
+    // ── Confirmation dialogs ──────────────────────────────────────────────────
     if (showCancel) BDialog(
         "Cancel Booking", "Cancel this booking? This cannot be undone.",
         "Yes, Cancel", Color(0xFFDC2626), Icons.Default.Cancel,
@@ -176,6 +171,7 @@ fun BookingDetailScreen(
         Color(0xFFDCFCE7), Color(0xFF16A34A),
         onConfirm = {
             booking?.bookingId?.let { bid ->
+                // Pre-bookings go to DEPOSIT_PAID; regular bookings go to CONFIRMED
                 val newStatus = if (booking.isPreBooking) BookingStatus.DEPOSIT_PAID
                 else BookingStatus.CONFIRMED
                 viewModel.updateStatusByAdmin(bid, newStatus)
@@ -214,12 +210,14 @@ fun BookingDetailScreen(
                 val t            = bTheme(booking.bookingStatus)
                 val isPending    = booking.bookingStatus == BookingStatus.PENDING
                 val isPreBooking = booking.isPreBooking ||
+                        booking.depositAmount > 0 ||
                         booking.bookingStatus == BookingStatus.DEPOSIT_PAID ||
-                        booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT
+                        booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT ||
+                        booking.bookingStatus == BookingStatus.CHECKED_IN
 
                 Column(Modifier.fillMaxSize()) {
 
-                    // ── TOP BAR ───────────────────────────────────────────────
+                    // ── Top bar ───────────────────────────────────────────────
                     Column(Modifier.fillMaxWidth().background(BN).statusBarsPadding()) {
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
@@ -233,16 +231,12 @@ fun BookingDetailScreen(
                                 Text("#${booking.bookingId.take(8).uppercase()}", color = BW.copy(alpha = 0.4f), fontSize = 11.sp)
                             }
                             if (isPreBooking) {
-                                Box(
-                                    Modifier.clip(RoundedCornerShape(20.dp)).background(BG.copy(0.2f)).padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
+                                Box(Modifier.clip(RoundedCornerShape(20.dp)).background(BG.copy(0.2f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
                                     Text("Pre-Booking", color = BG, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Spacer(Modifier.width(6.dp))
                             }
-                            Box(
-                                Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
+                            Box(Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).padding(horizontal = 12.dp, vertical = 6.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     Icon(t.icon, null, tint = t.fg, modifier = Modifier.size(12.dp))
                                     Text(t.label, color = t.fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -264,13 +258,15 @@ fun BookingDetailScreen(
                         ) {
                             tabs.forEachIndexed { i, tab ->
                                 Tab(selected = selectedTab == i, onClick = { selectedTab = i }, modifier = Modifier.height(42.dp)) {
-                                    Text(tab, fontSize = 13.sp, color = if (selectedTab == i) BW else BW.copy(alpha = 0.4f), fontWeight = if (selectedTab == i) FontWeight.SemiBold else FontWeight.Normal)
+                                    Text(tab, fontSize = 13.sp,
+                                        color = if (selectedTab == i) BW else BW.copy(alpha = 0.4f),
+                                        fontWeight = if (selectedTab == i) FontWeight.SemiBold else FontWeight.Normal)
                                 }
                             }
                         }
                     }
 
-                    // ── TAB CONTENT ───────────────────────────────────────────
+                    // ── Tab content ───────────────────────────────────────────
                     Column(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -315,9 +311,20 @@ fun BookingDetailScreen(
                             1 -> {
                                 if (isPreBooking) {
                                     BCard("Pre-Booking Payment", Icons.Default.AccountBalanceWallet) {
-                                        val totalCost    = booking.subtotal
+
+                                        // Resolve total cost from whichever field is available
+                                        val totalCost = when {
+                                            booking.depositAmount > 0 && booking.remainingAmount > 0 ->
+                                                booking.depositAmount + booking.remainingAmount
+                                            booking.totalAmount > 0 -> booking.totalAmount
+                                            else -> booking.subtotal
+                                        }
                                         val depositAmt   = if (booking.depositAmount > 0) booking.depositAmount else totalCost * 0.2
-                                        val remainingAmt = if (booking.remainingAmount > 0) booking.remainingAmount else totalCost * 0.8
+                                        val remainingAmt = when {
+                                            booking.remainingAmount > 0     -> booking.remainingAmount
+                                            booking.depositAmount > 0       -> totalCost - booking.depositAmount
+                                            else                            -> totalCost * 0.8
+                                        }
 
                                         BPayRow("Price / Night",       "PKR ${"%,.0f".format(booking.pricePerNight)}")
                                         BPayRow("Total Nights",        "${booking.totalNights} nights")
@@ -326,9 +333,8 @@ fun BookingDetailScreen(
                                         HorizontalDivider(color = BL)
                                         Spacer(Modifier.height(8.dp))
 
-                                        Box(
-                                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFDCFCE7)).padding(12.dp)
-                                        ) {
+                                        // Deposit paid box
+                                        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFDCFCE7)).padding(12.dp)) {
                                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Column {
                                                     Text("Deposit Paid (20%)", fontWeight = FontWeight.Bold, color = Color(0xFF15803D), fontSize = 13.sp)
@@ -340,8 +346,12 @@ fun BookingDetailScreen(
 
                                         Spacer(Modifier.height(8.dp))
 
-                                        val isRemainPaid = booking.paymentStatusEnum == PaymentStatus.PAID ||
-                                                booking.bookingStatus == BookingStatus.COMPLETED
+                                        // Remaining amount box — color changes based on payment state
+                                        val isRemainPaid =
+                                            booking.paymentStatusEnum == PaymentStatus.PAID ||
+                                                    booking.bookingStatus == BookingStatus.COMPLETED ||
+                                                    booking.bookingStatus == BookingStatus.PENDING_APPROVAL ||
+                                                    booking.bookingStatus == BookingStatus.CONFIRMED
                                         Box(
                                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                                                 .background(when {
@@ -390,7 +400,16 @@ fun BookingDetailScreen(
 
                                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Text("Total Paid Amount", fontWeight = FontWeight.SemiBold, color = BN, fontSize = 14.sp)
-                                            Text("PKR ${"%,.0f".format(if (isRemainPaid) totalCost else depositAmt)}", fontWeight = FontWeight.ExtraBold, color = BN, fontSize = 22.sp)
+                                            Text(
+                                                "PKR ${"%,.0f".format(if (isRemainPaid) totalCost else depositAmt)}",
+                                                fontWeight = FontWeight.ExtraBold, color = BN, fontSize = 22.sp
+                                            )
+                                        }
+
+                                        Spacer(Modifier.height(4.dp))
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Total Booking Cost", fontWeight = FontWeight.SemiBold, color = BM, fontSize = 13.sp)
+                                            Text("PKR ${"%,.0f".format(totalCost)}", fontWeight = FontWeight.Bold, color = BM, fontSize = 15.sp)
                                         }
 
                                         Spacer(Modifier.height(8.dp))
@@ -409,6 +428,7 @@ fun BookingDetailScreen(
                                             }
                                         }
 
+                                        // Landlord: Mark Checked In when deposit is paid
                                         if (isCurrentUserLandlord && booking.bookingStatus == BookingStatus.DEPOSIT_PAID) {
                                             Spacer(Modifier.height(12.dp))
                                             Button(
@@ -423,6 +443,7 @@ fun BookingDetailScreen(
                                             }
                                         }
 
+                                        // Landlord: Confirm final payment received when awaiting it
                                         if (isCurrentUserLandlord && booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT) {
                                             Spacer(Modifier.height(12.dp))
                                             Button(
@@ -438,6 +459,7 @@ fun BookingDetailScreen(
                                         }
                                     }
                                 } else {
+                                    // Regular (non-pre-booking) payment breakdown
                                     BCard("Payment Breakdown", Icons.Default.Receipt) {
                                         BPayRow("Price / Night",    "PKR ${booking.pricePerNight.toInt()}")
                                         BPayRow("Subtotal",         "PKR ${booking.subtotal.toInt()}")
@@ -467,6 +489,7 @@ fun BookingDetailScreen(
                                         }
                                     }
 
+                                    // Tenant: Pay Now button for unpaid pending bookings
                                     if (!isCurrentUserLandlord && isPending && booking.paymentStatusEnum.displayName() == "Pending") {
                                         Button(
                                             onClick = {
@@ -494,14 +517,13 @@ fun BookingDetailScreen(
                             // ── TAB 2: Info ───────────────────────────────────
                             2 -> {
                                 BCard("Booking Info", Icons.Default.Info) {
-                                    // Tenant: pehle tenantName (fetched), fallback email
-                                    BRow("Tenant", tenantName.ifBlank { booking.tenantEmail.ifBlank { "—" } })
-                                    // Host: FIXED — ab auto properties mein bhi naam aayega ✅
-                                    BRow("Host", hostName)
+                                    BRow("Tenant",         tenantName.ifBlank { booking.tenantEmail.ifBlank { "—" } })
+                                    BRow("Host",           hostName)
                                     BRow("Payment Method", if (isPreBooking) "Partial / Cash on Arrival" else booking.paymentMethod.ifBlank { "—" })
-                                    BRow("Booked On", bfmt(booking.createdAt?.toDate()))
+                                    BRow("Booked On",      bfmt(booking.createdAt?.toDate()))
                                 }
 
+                                // Tenant: Cancel button for pending bookings
                                 if (!isCurrentUserLandlord && isPending) {
                                     OutlinedButton(
                                         onClick  = { showCancel = true },
@@ -516,6 +538,7 @@ fun BookingDetailScreen(
                                     }
                                 }
 
+                                // Landlord: Reject / Approve buttons for pending bookings
                                 if (isCurrentUserLandlord && isPending) {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         OutlinedButton(
@@ -544,6 +567,7 @@ fun BookingDetailScreen(
                             }
                         }
 
+                        // Error strip at the bottom of any tab
                         uiState.errorMessage?.let {
                             BStrip(Icons.Default.ErrorOutline, it, Color(0xFFB91C1C), Color(0xFFFEE2E2))
                         }
@@ -555,11 +579,17 @@ fun BookingDetailScreen(
     }
 }
 
-// ── Private Composables ───────────────────────────────────────────────────────
+// ── Private composable helpers ────────────────────────────────────────────────
 
 @Composable
 private fun BCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = BW), elevation = CardDefaults.cardElevation(0.dp), border = BorderStroke(1.dp, BL)) {
+    Card(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(containerColor = BW),
+        elevation = CardDefaults.cardElevation(0.dp),
+        border    = BorderStroke(1.dp, BL)
+    ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 12.dp)) {
                 Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(BN.copy(alpha = 0.07f)), Alignment.Center) {
@@ -593,7 +623,10 @@ private fun BPayRow(label: String, value: String) {
 
 @Composable
 private fun BPill(icon: ImageVector, text: String) {
-    Row(Modifier.clip(RoundedCornerShape(20.dp)).background(BN.copy(alpha = 0.06f)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+    Row(
+        Modifier.clip(RoundedCornerShape(20.dp)).background(BN.copy(alpha = 0.06f)).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
         Icon(icon, null, tint = BN, modifier = Modifier.size(12.dp))
         Text(text, color = BN, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
@@ -601,7 +634,10 @@ private fun BPill(icon: ImageVector, text: String) {
 
 @Composable
 private fun BStrip(icon: ImageVector, msg: String, fg: Color, bg: Color) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Icon(icon, null, tint = fg, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Text(msg, color = fg, fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 18.sp)
@@ -609,25 +645,53 @@ private fun BStrip(icon: ImageVector, msg: String, fg: Color, bg: Color) {
 }
 
 @Composable
-private fun BDialog(title: String, message: String, confirmLabel: String, confirmColor: Color, icon: ImageVector, iconBg: Color, iconTint: Color, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun BDialog(
+    title       : String,
+    message     : String,
+    confirmLabel: String,
+    confirmColor: Color,
+    icon        : ImageVector,
+    iconBg      : Color,
+    iconTint    : Color,
+    onConfirm   : () -> Unit,
+    onDismiss   : () -> Unit
+) {
     AlertDialog(
-        onDismissRequest = onDismiss, containerColor = BW, shape = RoundedCornerShape(20.dp),
-        icon = { Box(Modifier.size(52.dp).clip(CircleShape).background(iconBg), Alignment.Center) { Icon(icon, null, tint = iconTint, modifier = Modifier.size(24.dp)) } },
+        onDismissRequest = onDismiss,
+        containerColor   = BW,
+        shape            = RoundedCornerShape(20.dp),
+        icon = {
+            Box(Modifier.size(52.dp).clip(CircleShape).background(iconBg), Alignment.Center) {
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(24.dp))
+            }
+        },
         title = { Text(title, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = BN, textAlign = TextAlign.Center) },
-        text = { Text(message, fontSize = 14.sp, color = BM, lineHeight = 20.sp, textAlign = TextAlign.Center) },
-        confirmButton = { Button(onClick = onConfirm, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = confirmColor), modifier = Modifier.fillMaxWidth().height(46.dp)) { Text(confirmLabel, fontWeight = FontWeight.SemiBold, fontSize = 14.sp) } },
-        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Go Back", color = BM, fontWeight = FontWeight.Medium, fontSize = 14.sp) } }
+        text  = { Text(message, fontSize = 14.sp, color = BM, lineHeight = 20.sp, textAlign = TextAlign.Center) },
+        confirmButton = {
+            Button(onClick = onConfirm, shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = confirmColor),
+                modifier = Modifier.fillMaxWidth().height(46.dp)) {
+                Text(confirmLabel, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Go Back", color = BM, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            }
+        }
     )
 }
 
-// ── Public aliases ────────────────────────────────────────────────────────────
+// ── Public aliases (kept for backward compatibility with other screens) ────────
 @Composable fun BDCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) = BCard(title, icon, content)
 @Composable fun BDField(label: String, value: String) = BRow(label, value)
 @Composable fun BDPayRow(label: String, value: String) = BPayRow(label, value)
 @Composable fun BDPill(icon: ImageVector, text: String) = BPill(icon, text)
 @Composable fun BDSectionHeader(icon: ImageVector, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(BN.copy(alpha = 0.07f)), Alignment.Center) { Icon(icon, null, tint = BN, modifier = Modifier.size(14.dp)) }
+        Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(BN.copy(alpha = 0.07f)), Alignment.Center) {
+            Icon(icon, null, tint = BN, modifier = Modifier.size(14.dp))
+        }
         Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = BN)
     }
 }
@@ -636,25 +700,28 @@ private fun BDialog(title: String, message: String, confirmLabel: String, confir
 @Composable fun BDStayPill(icon: ImageVector, text: String) = BPill(icon, text)
 @Composable fun BDStatusCard(status: String) {
     val t = bTheme(when (status) {
-        "Confirmed"  -> BookingStatus.CONFIRMED
-        "Checked In" -> BookingStatus.CHECKED_IN
-        "Completed"  -> BookingStatus.COMPLETED
-        "Cancelled"  -> BookingStatus.CANCELLED
+        "Confirmed"             -> BookingStatus.CONFIRMED
+        "Checked In"            -> BookingStatus.CHECKED_IN
+        "Completed"             -> BookingStatus.COMPLETED
+        "Cancelled"             -> BookingStatus.CANCELLED
         "Awaiting", "Awaiting Approval" -> BookingStatus.PENDING_APPROVAL
-        "Deposit Paid" -> BookingStatus.DEPOSIT_PAID
+        "Deposit Paid"          -> BookingStatus.DEPOSIT_PAID
         "Final Payment Pending" -> BookingStatus.AWAITING_FINAL_PAYMENT
-        else         -> BookingStatus.PENDING
+        else                    -> BookingStatus.PENDING
     })
     BStrip(t.icon, t.label + " — " + t.desc, t.fg, t.bg)
 }
 @Composable fun BDActionSection(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(BW).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(BW).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
 }
 @Composable fun BookingSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) = BCard(title, icon, content)
 @Composable fun InfoItem(label: String, value: String) = BRow(label, value)
 @Composable fun BookingStatusBanner(status: String) = BDStatusCard(status)
 @Composable fun StatusBadge(status: String) = BDStatusCard(status)
 @Composable fun CancelConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) =
-    BDialog("Cancel Booking", "Cancel this booking? This cannot be undone.", "Yes, Cancel", Color(0xFFDC2626), Icons.Default.Cancel, Color(0xFFFEE2E2), Color(0xFFDC2626), onConfirm, onDismiss)
-@Composable fun BookingActionDialog(title: String, message: String, confirmLabel: String, confirmColor: Color, icon: ImageVector, iconBg: Color, iconTint: Color, onConfirm: () -> Unit, onDismiss: () -> Unit) = BDialog(title, message, confirmLabel, confirmColor, icon, iconBg, iconTint, onConfirm, onDismiss)
+    BDialog("Cancel Booking", "Cancel this booking? This cannot be undone.", "Yes, Cancel",
+        Color(0xFFDC2626), Icons.Default.Cancel, Color(0xFFFEE2E2), Color(0xFFDC2626), onConfirm, onDismiss)
+@Composable fun BookingActionDialog(title: String, message: String, confirmLabel: String, confirmColor: Color, icon: ImageVector, iconBg: Color, iconTint: Color, onConfirm: () -> Unit, onDismiss: () -> Unit) =
+    BDialog(title, message, confirmLabel, confirmColor, icon, iconBg, iconTint, onConfirm, onDismiss)
 fun String?.displayName(): String = this ?: "Unknown"

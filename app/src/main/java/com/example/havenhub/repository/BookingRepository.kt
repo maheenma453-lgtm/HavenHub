@@ -22,12 +22,12 @@ class BookingRepository @Inject constructor(
     private val firestore             : FirebaseFirestore,
     private val notificationRepository: NotificationRepository
 ) {
-    private val bookingsCol      = firestore.collection("bookings")
-    private val usersCol         = firestore.collection("users")
+    private val bookingsCol = firestore.collection("bookings")
+    private val usersCol = firestore.collection("users")
     private val notificationsCol = firestore.collection("notifications")
-    private val propertiesCol    = firestore.collection("properties")
+    private val propertiesCol = firestore.collection("properties")
 
-    // ── Helper: safe parse ────────────────────────────────────────────────────
+    // ── Helper: safe Firestore document parse ─────────────────────────────────
     private fun parseBookingSafe(doc: com.google.firebase.firestore.DocumentSnapshot): Booking? {
         return try {
             var b = doc.toObject(Booking::class.java) ?: return null
@@ -42,44 +42,41 @@ class BookingRepository @Inject constructor(
     // ══════════════════════════════════════════════════════════════════════════
     // isPropertyBooked — DATE-AWARE CHECK
     //
-    // Returns true only if the property has an ACTIVE booking that has NOT
-    // yet ended (i.e. checkOutDate is in the future or today).
+    // Returns true only if the property has an ACTIVE booking whose
+    // checkOutDate is still in the future (i.e. stay is ongoing).
     //
-    // OLD behaviour (broken):
-    //   - Only checked status == CONFIRMED or PENDING
-    //   - Did NOT look at dates → a booking from last month still showed "Booked"
+    // Steps:
+    //   1. Fetch all CONFIRMED / PENDING / CHECKED_IN bookings for this property
+    //   2. Per booking, check if checkOutDate > now
+    //      - Future  → property is still occupied  → return true
+    //      - Expired → auto-complete booking silently (frees the property)
+    //   3. No active booking found → return false → property is available
     //
-    // NEW behaviour (fixed):
-    //   Step 1: Fetch all CONFIRMED + PENDING bookings for this property
-    //   Step 2: For each booking, check if checkOutDate > now
-    //           - If yes  → property is still occupied  → return true
-    //           - If no   → booking has expired, auto-mark it COMPLETED in background
-    //   Step 3: If no active (non-expired) booking found → return false
-    //           → property is available for new tenants
-    //
-    // Why auto-complete here?
-    //   Calling markExpiredBookingsCompleted() inside this check means the
-    //   cleanup happens silently every time a tenant opens PropertyDetailScreen
-    //   — no cron job or Cloud Function needed.
+    // Auto-complete happens here so no cron job or Cloud Function is needed;
+    // cleanup triggers every time a tenant opens PropertyDetailScreen.
     // ══════════════════════════════════════════════════════════════════════════
     suspend fun isPropertyBooked(propertyId: String): Boolean {
         if (propertyId.isBlank()) return false
         return try {
             val now = Timestamp.now()
 
-            // Fetch bookings that are in an "active" status
             val snap = bookingsCol
                 .whereEqualTo("propertyId", propertyId)
-                .whereIn("status", listOf(
-                    BookingStatus.CONFIRMED.name,
-                    BookingStatus.PENDING.name,
-                    BookingStatus.CHECKED_IN.name      // also block during active stay
-                ))
+                .whereIn(
+                    "status", listOf(
+                        BookingStatus.CONFIRMED.name,
+                        BookingStatus.PENDING.name,
+                        BookingStatus.CHECKED_IN.name
+                    )
+                )
                 .get()
                 .await()
 
             if (snap.isEmpty) {
-                Log.d("BOOKING_REPO", "isPropertyBooked('$propertyId') = false (no active bookings)")
+                Log.d(
+                    "BOOKING_REPO",
+                    "isPropertyBooked('$propertyId') = false (no active bookings)"
+                )
                 return false
             }
 
@@ -87,24 +84,31 @@ class BookingRepository @Inject constructor(
 
             for (doc in snap.documents) {
                 val booking = parseBookingSafe(doc) ?: continue
-
                 val checkOut = booking.checkOutDate
 
-                // If checkOutDate is missing, treat as still active (safe default)
+                // No checkOutDate → treat as still active (safe default)
                 if (checkOut == null) {
                     hasActiveBooking = true
-                    Log.d("BOOKING_REPO", "Booking ${booking.bookingId} has no checkOutDate — treating as active")
+                    Log.d(
+                        "BOOKING_REPO",
+                        "Booking ${booking.bookingId} has no checkOutDate — treating as active"
+                    )
                     continue
                 }
 
                 if (checkOut.toDate().after(now.toDate())) {
-                    // Booking is still ongoing — property is occupied
+                    // Stay is still ongoing → property occupied
                     hasActiveBooking = true
-                    Log.d("BOOKING_REPO", "Booking ${booking.bookingId} is active until ${checkOut.toDate()}")
+                    Log.d(
+                        "BOOKING_REPO",
+                        "Booking ${booking.bookingId} active until ${checkOut.toDate()}"
+                    )
                 } else {
-                    // checkOutDate has passed — auto-complete this booking in background
-                    // This frees the property for new customers automatically
-                    Log.d("BOOKING_REPO", "Booking ${booking.bookingId} expired on ${checkOut.toDate()} — auto-completing")
+                    // checkOutDate has passed → auto-complete and free the property
+                    Log.d(
+                        "BOOKING_REPO",
+                        "Booking ${booking.bookingId} expired on ${checkOut.toDate()} — auto-completing"
+                    )
                     autoCompleteExpiredBooking(booking)
                 }
             }
@@ -121,76 +125,81 @@ class BookingRepository @Inject constructor(
     // ══════════════════════════════════════════════════════════════════════════
     // autoCompleteExpiredBooking — PRIVATE HELPER
     //
-    // Called internally when a booking's checkOutDate has passed.
-    // Marks the booking as COMPLETED so it no longer blocks the property.
+    // Called when a booking's checkOutDate has passed.
+    // Marks it COMPLETED so it no longer blocks the property.
+    // Also sends a "stay completed" notification to the tenant
+    // so they know they can leave a review.
     //
-    // What it does:
-    //   1. Updates booking status → COMPLETED in Firestore
-    //   2. Sends a "stay completed" notification to the tenant
-    //      (optional but good UX — tenant can now leave a review)
-    //
-    // This runs silently — any failure is logged but does NOT crash the UI.
+    // Any failure is logged but never crashes the UI.
     // ══════════════════════════════════════════════════════════════════════════
     private suspend fun autoCompleteExpiredBooking(booking: Booking) {
         try {
-            // Only auto-complete CONFIRMED or CHECKED_IN bookings
+            // Only auto-complete bookings that were actually in progress
             // Do NOT auto-complete PENDING — those haven't started yet
             if (booking.status != BookingStatus.CONFIRMED.name &&
-                booking.status != BookingStatus.CHECKED_IN.name) {
+                booking.status != BookingStatus.CHECKED_IN.name
+            ) {
                 Log.d("BOOKING_REPO", "Skipping auto-complete for status=${booking.status}")
                 return
             }
 
             bookingsCol.document(booking.bookingId).update(
                 mapOf(
-                    "status"    to BookingStatus.COMPLETED.name,
+                    "status" to BookingStatus.COMPLETED.name,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
 
-            Log.d("BOOKING_REPO", "✅ Auto-completed booking ${booking.bookingId} — property is now free")
+            Log.d(
+                "BOOKING_REPO",
+                "✅ Auto-completed booking ${booking.bookingId} — property is now free"
+            )
 
-            // Send notification to tenant so they can leave a review
+            // Notify tenant so they can leave a review
             try {
                 if (booking.tenantId.isNotBlank()) {
                     notificationRepository.sendBookingCompletedToTenant(
-                        tenantId      = booking.tenantId,
-                        bookingId     = booking.bookingId,
+                        tenantId = booking.tenantId,
+                        bookingId = booking.bookingId,
                         propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                     )
                 }
             } catch (notifEx: Exception) {
-                // Notification failure should never block the main flow
-                Log.e("BOOKING_REPO", "Auto-complete notification error: ${notifEx.localizedMessage}")
+                Log.e(
+                    "BOOKING_REPO",
+                    "Auto-complete notification error: ${notifEx.localizedMessage}"
+                )
             }
 
         } catch (e: Exception) {
-            Log.e("BOOKING_REPO", "autoCompleteExpiredBooking error for ${booking.bookingId}: ${e.localizedMessage}")
+            Log.e(
+                "BOOKING_REPO",
+                "autoCompleteExpiredBooking error for ${booking.bookingId}: ${e.localizedMessage}"
+            )
         }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // markExpiredBookingsCompleted — PUBLIC (call from ViewModel/WorkManager)
+    // markExpiredBookingsCompleted — PUBLIC
     //
     // Scans ALL active bookings across ALL properties and completes expired ones.
-    // Can be called:
+    // Call this:
     //   - On app launch (from a ViewModel init block)
     //   - From a scheduled WorkManager job (recommended for production)
-    //   - Manually from admin dashboard
-    //
-    // Useful for bulk cleanup when the app hasn't been opened for a few days.
+    //   - From admin dashboard for manual bulk cleanup
     // ══════════════════════════════════════════════════════════════════════════
     suspend fun markExpiredBookingsCompleted() {
         Log.d("BOOKING_REPO", "markExpiredBookingsCompleted — scanning all active bookings")
         try {
             val now = Timestamp.now()
 
-            // Fetch all CONFIRMED + CHECKED_IN bookings across all properties
             val snap = bookingsCol
-                .whereIn("status", listOf(
-                    BookingStatus.CONFIRMED.name,
-                    BookingStatus.CHECKED_IN.name
-                ))
+                .whereIn(
+                    "status", listOf(
+                        BookingStatus.CONFIRMED.name,
+                        BookingStatus.CHECKED_IN.name
+                    )
+                )
                 .get()
                 .await()
 
@@ -202,17 +211,19 @@ class BookingRepository @Inject constructor(
             var completedCount = 0
 
             for (doc in snap.documents) {
-                val booking  = parseBookingSafe(doc) ?: continue
-                val checkOut = booking.checkOutDate ?: continue  // skip if no date
+                val booking = parseBookingSafe(doc) ?: continue
+                val checkOut = booking.checkOutDate ?: continue   // skip if no date
 
                 if (!checkOut.toDate().after(now.toDate())) {
-                    // Booking has expired — mark it complete
                     autoCompleteExpiredBooking(booking)
                     completedCount++
                 }
             }
 
-            Log.d("BOOKING_REPO", "markExpiredBookingsCompleted done — completed $completedCount bookings")
+            Log.d(
+                "BOOKING_REPO",
+                "markExpiredBookingsCompleted done — completed $completedCount bookings"
+            )
 
         } catch (e: Exception) {
             Log.e("BOOKING_REPO", "markExpiredBookingsCompleted error: ${e.localizedMessage}")
@@ -221,11 +232,14 @@ class BookingRepository @Inject constructor(
 
     // ── CREATE ────────────────────────────────────────────────────────────────
     suspend fun createBooking(booking: Booking): Resource<String> {
-        Log.d("BOOKING_REPO", "createBooking START tenantId='${booking.tenantId}'")
+        Log.d(
+            "BOOKING_REPO",
+            "createBooking START tenantId='${booking.tenantId}' isPreBooking='${booking.isPreBooking}'"
+        )
 
         val resolvedTenantName = resolveTenantName(booking)
         val pendingBooking = booking.copy(
-            status     = BookingStatus.PENDING.name,
+            status = BookingStatus.PENDING.name,
             tenantName = resolvedTenantName
         )
 
@@ -233,12 +247,43 @@ class BookingRepository @Inject constructor(
         Log.d("BOOKING_REPO", "createBooking result = $result")
 
         if (result is Resource.Success) {
-            val bookingId          = result.data ?: ""
+            val bookingId = result.data ?: ""
             val resolvedLandlordId = resolveLandlordId(booking)
-            val finalBooking       = pendingBooking.copy(
-                bookingId  = bookingId,
+            val finalBooking = pendingBooking.copy(
+                bookingId = bookingId,
                 landlordId = resolvedLandlordId
             )
+
+            // Explicitly save isPreBooking + deposit fields to Firestore.
+            // This ensures the fields persist even if FirebaseDataManager missed them.
+            if (bookingId.isNotBlank()) {
+                try {
+                    val updateMap = mutableMapOf<String, Any>(
+                        "isPreBooking" to booking.isPreBooking,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                    if (booking.isPreBooking) {
+                        val deposit =
+                            if (booking.depositAmount > 0) booking.depositAmount else booking.totalAmount * 0.2
+                        val remaining =
+                            if (booking.remainingAmount > 0) booking.remainingAmount else booking.totalAmount * 0.8
+                        updateMap["depositAmount"] = deposit
+                        updateMap["remainingAmount"] = remaining
+                        Log.d(
+                            "BOOKING_REPO",
+                            "✅ Pre-booking fields saved — deposit: $deposit, remaining: $remaining"
+                        )
+                    }
+                    bookingsCol.document(bookingId).update(updateMap).await()
+                    Log.d(
+                        "BOOKING_REPO",
+                        "✅ isPreBooking=${booking.isPreBooking} saved to Firestore"
+                    )
+                } catch (e: Exception) {
+                    Log.e("BOOKING_REPO", "isPreBooking save error: ${e.localizedMessage}")
+                }
+            }
+
             sendBookingNotificationToLandlord(finalBooking)
             sendBookingNotificationToAdmin(finalBooking)
         }
@@ -273,15 +318,11 @@ class BookingRepository @Inject constructor(
             return emptyList()
         }
         return try {
-            val snap = bookingsCol
-                .whereEqualTo("tenantId", tenantId)
-                .get().await()
-
+            val snap = bookingsCol.whereEqualTo("tenantId", tenantId).get().await()
             Log.d("BOOKING_REPO", "snap size = ${snap.documents.size}")
             val all = snap.documents
                 .mapNotNull { parseBookingSafe(it) }
                 .sortedByDescending { it.createdAt?.seconds ?: 0L }
-
             Log.d("BOOKING_REPO", "getTenantBookings result: ${all.size} bookings")
             all
         } catch (e: Exception) {
@@ -297,15 +338,11 @@ class BookingRepository @Inject constructor(
             return emptyList()
         }
         return try {
-            val snap = bookingsCol
-                .whereEqualTo("landlordId", landlordId)
-                .get().await()
-
+            val snap = bookingsCol.whereEqualTo("landlordId", landlordId).get().await()
             Log.d("BOOKING_REPO", "snap size = ${snap.documents.size}")
             val all = snap.documents
                 .mapNotNull { parseBookingSafe(it) }
                 .sortedByDescending { it.createdAt?.seconds ?: 0L }
-
             Log.d("BOOKING_REPO", "getLandlordBookings result: ${all.size} bookings")
             all
         } catch (e: Exception) {
@@ -321,8 +358,16 @@ class BookingRepository @Inject constructor(
     ): Resource<Unit> {
         Log.d("BOOKING_REPO", "updateBookingStatus: '$bookingId' → '${newStatus.name}'")
         return try {
-            bookingsCol.document(bookingId).update("status", newStatus.name).await()
+            // Update both status fields + updatedAt for consistency
+            bookingsCol.document(bookingId).update(
+                mapOf(
+                    "status" to newStatus.name,
+                    "bookingStatus" to newStatus.name,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
 
+            // Send notification based on the new status
             try {
                 val bookingResource = getBookingById(bookingId)
                 if (bookingResource is Resource.Success) {
@@ -330,22 +375,25 @@ class BookingRepository @Inject constructor(
                     when (newStatus) {
                         BookingStatus.CONFIRMED ->
                             notificationRepository.sendBookingConfirmedToTenant(
-                                tenantId      = booking.tenantId,
-                                bookingId     = bookingId,
+                                tenantId = booking.tenantId,
+                                bookingId = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
+
                         BookingStatus.CANCELLED ->
                             notificationRepository.sendBookingCancelledToTenant(
-                                tenantId      = booking.tenantId,
-                                bookingId     = bookingId,
+                                tenantId = booking.tenantId,
+                                bookingId = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
+
                         BookingStatus.COMPLETED ->
                             notificationRepository.sendBookingCompletedToTenant(
-                                tenantId      = booking.tenantId,
-                                bookingId     = bookingId,
+                                tenantId = booking.tenantId,
+                                bookingId = bookingId,
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
+
                         else -> {}
                     }
                 }
@@ -362,15 +410,15 @@ class BookingRepository @Inject constructor(
 
     // ── PAYMENT UPDATE ────────────────────────────────────────────────────────
     suspend fun updatePaymentStatusOnBooking(
-        bookingId    : String,
+        bookingId: String,
         paymentStatus: String,
-        paymentId    : String
+        paymentId: String
     ) {
         Log.d("BOOKING_REPO", "updatePaymentStatusOnBooking: '$bookingId'")
         val updateMap = mapOf(
             "paymentStatus" to paymentStatus,
-            "paymentId"     to paymentId,
-            "updatedAt"     to FieldValue.serverTimestamp()
+            "paymentId" to paymentId,
+            "updatedAt" to FieldValue.serverTimestamp()
         )
         try {
             bookingsCol.document(bookingId).update(updateMap).await()
@@ -388,7 +436,7 @@ class BookingRepository @Inject constructor(
     // ── CANCEL ────────────────────────────────────────────────────────────────
     suspend fun cancelBooking(bookingId: String): Resource<Unit> {
         val updateMap = mapOf(
-            "status"      to BookingStatus.CANCELLED.name,
+            "status" to BookingStatus.CANCELLED.name,
             "cancelledAt" to FieldValue.serverTimestamp()
         )
         return try {
@@ -412,7 +460,9 @@ class BookingRepository @Inject constructor(
                 ?: userDoc.getString("name")
                 ?: userDoc.getString("displayName")
                 ?: ""
-        } catch (e: Exception) { "" }
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     private suspend fun resolveLandlordId(booking: Booking): String {
@@ -424,17 +474,19 @@ class BookingRepository @Inject constructor(
                 ?: propDoc.getString("ownerId")
                 ?: propDoc.getString("userId")
                 ?: ""
-        } catch (e: Exception) { "" }
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     private suspend fun sendBookingNotificationToLandlord(booking: Booking) {
         try {
             if (booking.landlordId.isBlank()) return
             notificationRepository.sendBookingRequestToLandlord(
-                landlordId    = booking.landlordId,
-                bookingId     = booking.bookingId,
+                landlordId = booking.landlordId,
+                bookingId = booking.bookingId,
                 propertyTitle = booking.propertyTitle.ifBlank { "Property" },
-                tenantName    = booking.tenantName.ifBlank { "Tenant" }
+                tenantName = booking.tenantName.ifBlank { "Tenant" }
             )
         } catch (e: Exception) {
             Log.e("BOOKING_REPO", "landlord notification error: ${e.localizedMessage}")
@@ -448,17 +500,18 @@ class BookingRepository @Inject constructor(
                 adminQuery = usersCol.whereEqualTo("role", "admin").get().await()
             }
 
+            // If no admin user found, save a generic notification doc targeting the admin role
             if (adminQuery.isEmpty) {
                 val notifData = mapOf(
-                    "recipientId"  to "admin",
-                    "targetRole"   to "admin",
-                    "title"        to "New Booking Request",
-                    "body"         to "${booking.tenantName.ifBlank { "A tenant" }} ne \"${booking.propertyTitle.ifBlank { "a property" }}\" book kiya.",
-                    "type"         to NotificationType.BOOKING_REQUESTED.name,
-                    "referenceId"  to booking.bookingId,
-                    "isRead"       to false,
-                    "isActive"     to true,
-                    "createdAt"    to Timestamp.now()
+                    "recipientId" to "admin",
+                    "targetRole" to "admin",
+                    "title" to "New Booking Request",
+                    "body" to "${booking.tenantName.ifBlank { "A tenant" }} ne \"${booking.propertyTitle.ifBlank { "a property" }}\" book kiya.",
+                    "type" to NotificationType.BOOKING_REQUESTED.name,
+                    "referenceId" to booking.bookingId,
+                    "isRead" to false,
+                    "isActive" to true,
+                    "createdAt" to Timestamp.now()
                 )
                 notificationsCol.add(notifData).await()
                 return
@@ -466,10 +519,10 @@ class BookingRepository @Inject constructor(
 
             adminQuery.documents.forEach { adminDoc ->
                 notificationRepository.sendBookingNotificationToAdmin(
-                    adminId       = adminDoc.id,
-                    bookingId     = booking.bookingId,
+                    adminId = adminDoc.id,
+                    bookingId = booking.bookingId,
                     propertyTitle = booking.propertyTitle.ifBlank { "Property" },
-                    tenantName    = booking.tenantName.ifBlank { "Tenant" }
+                    tenantName = booking.tenantName.ifBlank { "Tenant" }
                 )
             }
         } catch (e: Exception) {

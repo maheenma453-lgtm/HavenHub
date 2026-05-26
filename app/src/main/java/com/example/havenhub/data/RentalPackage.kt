@@ -1,4 +1,5 @@
 package com.example.havenhub.data
+
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
@@ -13,7 +14,7 @@ import com.google.firebase.firestore.ServerTimestamp
  * a specific date range or minimum stay.
  *
  * Package status: [PackageStatus]
- * Duration type: [PackageDuration]
+ * Duration type:  [PackageDuration]
  */
 data class RentalPackage(
 
@@ -29,6 +30,9 @@ data class RentalPackage(
 
     /** UID of the landlord who created this package. */
     val landlordId: String = "",
+
+    /** Name of the landlord (denormalized for display). */
+    val landlordName: String = "",
 
     // ── Content ───────────────────────────────────────────────────────────────
 

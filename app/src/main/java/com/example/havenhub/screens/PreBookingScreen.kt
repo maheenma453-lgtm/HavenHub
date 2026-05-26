@@ -3,7 +3,6 @@ package com.example.havenhub.screens
 import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,8 +34,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.example.havenhub.data.Booking
+import com.example.havenhub.data.BookingStatus
+import com.example.havenhub.data.PaymentStatus
 import com.example.havenhub.data.RentalPackage
 import com.example.havenhub.navigation.Screen
+import com.example.havenhub.viewmodel.AuthViewModel
+import com.example.havenhub.viewmodel.BookingViewModel
 import com.example.havenhub.viewmodel.VacationViewModel
 
 // ─── Color Palette ────────────────────────────────────────────────────────────
@@ -68,7 +72,7 @@ private val GoldBorder = Brush.horizontalGradient(
 private val NavyGradient     = Brush.linearGradient(listOf(PB_NavyDeep, PB_NavyMid))
 private val NavySoftGradient = Brush.linearGradient(listOf(PB_NavyPrime, PB_NavyLight))
 
-// ─── Fully Responsive Size System ─────────────────────────────────────────────
+// ─── Responsive Size System ───────────────────────────────────────────────────
 private data class PBSizes(
     val hPad        : Dp,
     val vPad        : Dp,
@@ -82,8 +86,8 @@ private data class PBSizes(
     val btnHeight   : Dp,
     val sectionGap  : Dp,
     val cardPad     : Dp,
-    val priceSize   : Float,    // large price font
-    val depositSize : Float,    // bottom bar deposit font
+    val priceSize   : Float,
+    val depositSize : Float,
     val checkSize   : Dp,
     val bannerIcon  : Dp,
 )
@@ -159,26 +163,65 @@ private fun rememberPBSizes(): PBSizes {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PreBookingScreen(
-    navController: NavController,
-    propertyId   : String            = "",
-    viewModel    : VacationViewModel = hiltViewModel()
+    navController   : NavController,
+    propertyId      : String            = "",
+    viewModel       : VacationViewModel = hiltViewModel(),
+    authViewModel   : AuthViewModel     = hiltViewModel(),
+    bookingViewModel: BookingViewModel  = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val sz      = rememberPBSizes()
+    val uiState        by viewModel.uiState.collectAsState()
+    val bookingUiState by bookingViewModel.uiState.collectAsState()
+    val authUiState    by authViewModel.uiState.collectAsState()
+    val sz              = rememberPBSizes()
+
+    val currentUserId   = authUiState.currentUser?.uid         ?: ""
+    val currentUserName = authUiState.currentUser?.displayName ?: ""
+
+    val selectedPkg = uiState.selectedPackage
+    val minNights   = selectedPkg?.minNights ?: 1
+    val maxNights   = selectedPkg?.maxNights ?: 30
+
+    var selectedNights by remember(selectedPkg?.packageId) {
+        mutableIntStateOf(minNights)
+    }
+
+    LaunchedEffect(selectedPkg?.packageId) {
+        selectedNights = minNights
+    }
+
+    val totalAmount   = (selectedPkg?.discountedPricePerNight ?: 0.0) * selectedNights
+    val depositAmount = totalAmount * 0.20
 
     LaunchedEffect(propertyId) {
         Log.d("PRE_DEBUG", "LaunchedEffect fired — propertyId = '$propertyId'")
         if (propertyId.isNotEmpty()) {
             viewModel.loadPackagesForProperty(propertyId)
         } else {
-            Log.e("PRE_DEBUG", "propertyId is EMPTY — packages nahi load honge!")
+            Log.e("PRE_DEBUG", "propertyId is EMPTY — packages will not load!")
         }
     }
 
-    val packages      = uiState.propertyPackages
-    val selectedPkg   = uiState.selectedPackage
-    val totalAmount   = viewModel.calculateTotalAmount()
-    val depositAmount = viewModel.calculateDepositAmount()
+    // Navigate to Payment screen after booking is created successfully
+    LaunchedEffect(bookingUiState.actionSuccess, bookingUiState.createdBookingId) {
+        if (bookingUiState.actionSuccess && !bookingUiState.createdBookingId.isNullOrEmpty()) {
+            val createdId = bookingUiState.createdBookingId!!
+            val pkg       = selectedPkg ?: return@LaunchedEffect
+            bookingViewModel.clearMessages()
+            navController.navigate(
+                Screen.Payment.createRoute(
+                    bookingId   = createdId,
+                    payerId     = currentUserId,
+                    payeeId     = pkg.landlordId,
+                    payerName   = currentUserName,
+                    payeeName   = pkg.propertyTitle,
+                    amount      = depositAmount,
+                    paymentType = "DEPOSIT"
+                )
+            )
+        }
+    }
+
+    val packages = uiState.propertyPackages
 
     Scaffold(
         topBar = {
@@ -200,14 +243,32 @@ fun PreBookingScreen(
                     PBBottomBar(
                         depositAmount = depositAmount,
                         totalAmount   = totalAmount,
-                        isLoading     = uiState.isLoading,
+                        isLoading     = bookingUiState.isLoading,
                         sz            = sz,
                         onPay         = {
-                            navController.navigate(
-                                Screen.Booking.createRoute(
-                                    propertyId.ifEmpty { selectedPkg.propertyId }
-                                )
+                            val pid = propertyId.ifEmpty { selectedPkg.propertyId }
+                            val booking = Booking(
+                                propertyId      = pid,
+                                propertyTitle   = selectedPkg.propertyTitle,
+                                landlordId      = selectedPkg.landlordId,
+                                landlordName    = selectedPkg.propertyTitle,
+                                tenantId        = currentUserId,
+                                tenantName      = currentUserName,
+                                pricePerNight   = selectedPkg.discountedPricePerNight,
+                                subtotal        = totalAmount,
+                                totalAmount     = totalAmount,
+                                depositAmount   = depositAmount,
+                                remainingAmount = totalAmount - depositAmount,
+                                isPreBooking    = true,
+                                securityDeposit = 0.0,
+                                status          = BookingStatus.PENDING_APPROVAL.name,
+                                paymentStatus   = PaymentStatus.PENDING.name,
+                                propertyAddress = selectedPkg.propertyTitle,
+                                totalNights     = selectedNights,
+                                guestCount      = uiState.guestCount,
+                                paymentMethod   = "Pending"
                             )
+                            bookingViewModel.createBooking(booking)
                         }
                     )
                 }
@@ -222,13 +283,13 @@ fun PreBookingScreen(
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
 
-            // ── Advance Booking Banner ────────────────────────────────────────
+            // Advance Booking Banner
             item {
                 Spacer(Modifier.height(sz.sectionGap))
                 PBAdvanceBanner(sz)
             }
 
-            // ── Section Header ────────────────────────────────────────────────
+            // Section Header
             item {
                 Spacer(Modifier.height(sz.sectionGap + 4.dp))
                 PBSectionHeader(
@@ -239,17 +300,15 @@ fun PreBookingScreen(
                 Spacer(Modifier.height(sz.vPad - 4.dp))
             }
 
-            // ── Loading State ─────────────────────────────────────────────────
+            // Loading State
             if (uiState.isLoading) {
                 item { PBLoadingState(sz) }
             }
-
-            // ── Empty State ───────────────────────────────────────────────────
+            // Empty State
             else if (packages.isEmpty()) {
                 item { PBEmptyState(propertyId = propertyId, sz = sz) }
             }
-
-            // ── Package Cards ─────────────────────────────────────────────────
+            // Package Cards
             else {
                 items(packages, key = { it.packageId }) { pkg ->
                     PBPackageCard(
@@ -261,7 +320,7 @@ fun PreBookingScreen(
                 }
             }
 
-            // ── Guest Counter ─────────────────────────────────────────────────
+            // Guest Counter
             item {
                 Spacer(Modifier.height(sz.sectionGap - 4.dp))
                 PBGuestCounter(
@@ -272,7 +331,7 @@ fun PreBookingScreen(
                 )
             }
 
-            // ── Payment Summary ───────────────────────────────────────────────
+            // Nights Selector — only shown when a package is selected
             item {
                 AnimatedVisibility(
                     visible = selectedPkg != null,
@@ -280,15 +339,31 @@ fun PreBookingScreen(
                     exit    = shrinkVertically() + fadeOut()
                 ) {
                     if (selectedPkg != null) {
-                        val nights = when {
-                            uiState.checkInDay != -1 && uiState.checkOutDay != -1 ->
-                                (uiState.checkOutDay - uiState.checkInDay).coerceAtLeast(1)
-                            else -> selectedPkg.minNights.coerceAtLeast(1)
-                        }
+                        Spacer(Modifier.height(sz.sectionGap - 4.dp))
+                        PBNightsSelector(
+                            nights    = selectedNights,
+                            minNights = minNights,
+                            maxNights = maxNights,
+                            sz        = sz,
+                            onMinus   = { if (selectedNights > minNights) selectedNights-- },
+                            onPlus    = { if (selectedNights < maxNights) selectedNights++ }
+                        )
+                    }
+                }
+            }
+
+            // Payment Summary — only shown when a package is selected
+            item {
+                AnimatedVisibility(
+                    visible = selectedPkg != null,
+                    enter   = expandVertically() + fadeIn(),
+                    exit    = shrinkVertically() + fadeOut()
+                ) {
+                    if (selectedPkg != null) {
                         Spacer(Modifier.height(sz.sectionGap - 4.dp))
                         PBPaymentSummary(
                             pkg           = selectedPkg,
-                            nights        = nights,
+                            nights        = selectedNights,
                             guestCount    = uiState.guestCount,
                             totalAmount   = totalAmount,
                             depositAmount = depositAmount,
@@ -298,7 +373,7 @@ fun PreBookingScreen(
                 }
             }
 
-            // ── Error Message ─────────────────────────────────────────────────
+            // Error Message
             if (uiState.errorMessage != null) {
                 item {
                     Spacer(Modifier.height(sz.vPad - 4.dp))
@@ -307,6 +382,94 @@ fun PreBookingScreen(
             }
 
             item { Spacer(Modifier.height(sz.sectionGap)) }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NIGHTS SELECTOR
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun PBNightsSelector(
+    nights   : Int,
+    minNights: Int,
+    maxNights: Int,
+    sz       : PBSizes,
+    onMinus  : () -> Unit,
+    onPlus   : () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = sz.hPad)
+            .shadow(8.dp, RoundedCornerShape(sz.cardRadius))
+            .clip(RoundedCornerShape(sz.cardRadius))
+            .background(PB_CardBg)
+            .border(1.5.dp, GoldBorder, RoundedCornerShape(sz.cardRadius))
+    ) {
+        Box(
+            Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .align(Alignment.CenterStart)
+                .background(GoldGradient)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = sz.cardPad + 6.dp, vertical = sz.vPad + 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier          = Modifier.weight(1f).padding(end = 8.dp)
+            ) {
+                Box(
+                    Modifier
+                        .size(sz.avatarSize)
+                        .clip(CircleShape)
+                        .background(PB_NavyDeep.copy(0.06f))
+                        .border(1.dp, GoldBorder, CircleShape),
+                    Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.NightsStay,
+                        contentDescription = null,
+                        tint     = PB_NavyMid,
+                        modifier = Modifier.size(sz.iconSize)
+                    )
+                }
+                Spacer(Modifier.width(sz.hPad - 4.dp))
+                Column {
+                    Text(
+                        "Number of Nights",
+                        fontWeight = FontWeight.Bold,
+                        color      = PB_TextDark,
+                        fontSize   = sz.titleSp.sp
+                    )
+                    Text(
+                        "Min ${minNights}N  •  Max ${maxNights}N",
+                        color    = PB_TextMuted,
+                        fontSize = sz.captionSp.sp
+                    )
+                }
+            }
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(sz.hPad - 6.dp)
+            ) {
+                PBCounterButton("−", nights > minNights, onMinus, sz)
+                Text(
+                    "$nights",
+                    fontSize   = (sz.titleSp + 6f).sp,
+                    fontWeight = FontWeight.Black,
+                    color      = PB_TextDark,
+                    modifier   = Modifier.widthIn(min = (sz.avatarSize.value * 0.9f).dp),
+                    textAlign  = TextAlign.Center
+                )
+                PBCounterButton("+", nights < maxNights, onPlus, sz)
+            }
         }
     }
 }
@@ -326,7 +489,6 @@ private fun PBTopBar(
             .fillMaxWidth()
             .background(NavyGradient)
     ) {
-        // Decorative circles
         Box(
             Modifier
                 .size((sz.avatarSize.value * 3.2f).dp)
@@ -343,8 +505,6 @@ private fun PBTopBar(
                 .clip(CircleShape)
                 .background(PB_Gold.copy(0.04f))
         )
-
-        // Gold accent line at bottom
         Box(
             Modifier
                 .fillMaxWidth()
@@ -352,14 +512,12 @@ private fun PBTopBar(
                 .align(Alignment.BottomCenter)
                 .background(GoldBorder)
         )
-
         Row(
             modifier          = Modifier
                 .statusBarsPadding()
                 .padding(horizontal = sz.hPad, vertical = sz.vPad),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Back button
             Box(
                 modifier = Modifier
                     .size(sz.avatarSize)
@@ -379,9 +537,7 @@ private fun PBTopBar(
                     modifier = Modifier.size(sz.iconSize)
                 )
             }
-
             Spacer(Modifier.width(sz.hPad - 4.dp))
-
             Column(Modifier.weight(1f)) {
                 Text(
                     "PRE-BOOKING",
@@ -403,8 +559,6 @@ private fun PBTopBar(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            // 20% OFF badge
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape((sz.cardRadius.value * 0.55f).dp))
@@ -441,7 +595,6 @@ private fun PBBottomBar(
             .shadow(20.dp)
             .background(Color.White)
     ) {
-        // Gold top line
         Box(
             Modifier
                 .fillMaxWidth()
@@ -449,9 +602,8 @@ private fun PBBottomBar(
                 .align(Alignment.TopCenter)
                 .background(GoldBorder)
         )
-
         Row(
-            modifier              = Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = sz.hPad, vertical = sz.vPad - 2.dp),
@@ -492,8 +644,6 @@ private fun PBBottomBar(
                     maxLines = 1
                 )
             }
-
-            // Pay Deposit CTA
             Box(
                 modifier = Modifier
                     .height(sz.btnHeight)
@@ -556,9 +706,7 @@ private fun PBAdvanceBanner(sz: PBSizes) {
             )
             .clip(RoundedCornerShape(sz.cardRadius))
             .background(
-                Brush.linearGradient(
-                    listOf(PB_NavyDeep.copy(0.96f), PB_NavyMid.copy(0.96f))
-                )
+                Brush.linearGradient(listOf(PB_NavyDeep.copy(0.96f), PB_NavyMid.copy(0.96f)))
             )
             .border(1.dp, GoldBorder, RoundedCornerShape(sz.cardRadius))
     ) {
@@ -569,7 +717,6 @@ private fun PBAdvanceBanner(sz: PBSizes) {
                 .align(Alignment.TopCenter)
                 .background(GoldBorder)
         )
-
         Row(
             modifier          = Modifier.padding(horizontal = sz.hPad, vertical = sz.vPad),
             verticalAlignment = Alignment.CenterVertically
@@ -670,7 +817,7 @@ private fun PBLoadingState(sz: PBSizes) {
             )
             Spacer(Modifier.height(sz.vPad))
             Text(
-                "Packages load ho rahe hain...",
+                "Loading packages...",
                 color    = PB_TextMuted,
                 fontSize = sz.bodySp.sp
             )
@@ -703,7 +850,8 @@ private fun PBEmptyState(propertyId: String, sz: PBSizes) {
                 Alignment.Center
             ) {
                 Icon(
-                    Icons.Default.Inventory2, null,
+                    Icons.Default.Inventory2,
+                    contentDescription = null,
                     tint     = PB_GoldDim,
                     modifier = Modifier.size(sz.iconSize + 8.dp)
                 )
@@ -717,10 +865,41 @@ private fun PBEmptyState(propertyId: String, sz: PBSizes) {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = if (propertyId.isEmpty()) "propertyId missing!" else "Property: $propertyId",
+                text       = if (propertyId.isEmpty()) "propertyId missing!" else "Property: $propertyId",
                 color      = if (propertyId.isEmpty()) MaterialTheme.colorScheme.error else PB_TextMuted,
                 fontSize   = sz.bodySp.sp,
                 fontWeight = if (propertyId.isEmpty()) FontWeight.Bold else FontWeight.Normal
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ERROR CARD
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun PBErrorCard(message: String, sz: PBSizes) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = sz.hPad)
+            .clip(RoundedCornerShape(sz.cardRadius))
+            .background(MaterialTheme.colorScheme.error.copy(0.06f))
+            .border(1.dp, MaterialTheme.colorScheme.error.copy(0.3f), RoundedCornerShape(sz.cardRadius))
+            .padding(sz.hPad - 2.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.ErrorOutline,
+                contentDescription = null,
+                tint     = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(sz.iconSize)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                message,
+                color    = MaterialTheme.colorScheme.error,
+                fontSize = sz.bodySp.sp
             )
         }
     }
@@ -741,7 +920,6 @@ private fun PBPackageCard(
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label         = "cardElevation"
     )
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -770,7 +948,6 @@ private fun PBPackageCard(
                 indication        = null
             ) { onClick() }
     ) {
-        // Gold top stripe when selected
         if (isSelected) {
             Box(
                 Modifier
@@ -780,20 +957,14 @@ private fun PBPackageCard(
                     .background(GoldBorder)
             )
         }
-
         Column(Modifier.padding(horizontal = sz.cardPad, vertical = sz.vPad + 4.dp)) {
 
-            // ── Header row ────────────────────────────────────────────────────
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.Top
             ) {
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .padding(end = sz.hPad - 4.dp)
-                ) {
+                Column(Modifier.weight(1f).padding(end = sz.hPad - 4.dp)) {
                     if (pkg.badgeLabel.isNotEmpty()) {
                         Box(
                             Modifier
@@ -828,8 +999,6 @@ private fun PBPackageCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-
-                // Selected checkmark
                 AnimatedVisibility(
                     visible = isSelected,
                     enter   = scaleIn() + fadeIn(),
@@ -855,7 +1024,6 @@ private fun PBPackageCard(
 
             Spacer(Modifier.height(sz.vPad))
 
-            // ── Price row ─────────────────────────────────────────────────────
             Row(
                 verticalAlignment = Alignment.Bottom,
                 modifier          = Modifier.fillMaxWidth()
@@ -901,7 +1069,6 @@ private fun PBPackageCard(
 
             Spacer(Modifier.height(sz.vPad))
 
-            // ── Info Chips ────────────────────────────────────────────────────
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier              = Modifier.fillMaxWidth()
@@ -920,12 +1087,10 @@ private fun PBPackageCard(
                 }
             }
 
-            // ── Inclusions ────────────────────────────────────────────────────
             if (pkg.inclusions.isNotEmpty()) {
                 Spacer(Modifier.height(sz.vPad))
                 Divider(color = PB_Divider)
                 Spacer(Modifier.height(sz.vPad - 4.dp))
-
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier
@@ -943,8 +1108,6 @@ private fun PBPackageCard(
                     )
                 }
                 Spacer(Modifier.height(sz.vPad - 4.dp))
-
-                // Inclusions grid — 2 per row
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     pkg.inclusions.take(4).chunked(2).forEach { rowItems ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1031,7 +1194,6 @@ private fun PBGuestCounter(
             .background(PB_CardBg)
             .border(1.5.dp, GoldBorder, RoundedCornerShape(sz.cardRadius))
     ) {
-        // Gold left accent bar
         Box(
             Modifier
                 .width(4.dp)
@@ -1039,9 +1201,8 @@ private fun PBGuestCounter(
                 .align(Alignment.CenterStart)
                 .background(GoldGradient)
         )
-
         Row(
-            modifier              = Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = sz.cardPad + 6.dp, vertical = sz.vPad + 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1081,31 +1242,20 @@ private fun PBGuestCounter(
                     )
                 }
             }
-
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(sz.hPad - 6.dp)
             ) {
-                PBCounterButton(
-                    symbol  = "−",
-                    enabled = guestCount > 1,
-                    onClick = onMinus,
-                    sz      = sz
-                )
+                PBCounterButton("−", guestCount > 1, onMinus, sz)
                 Text(
                     "$guestCount",
-                    fontSize  = (sz.titleSp + 6f).sp,
+                    fontSize   = (sz.titleSp + 6f).sp,
                     fontWeight = FontWeight.Black,
-                    color     = PB_TextDark,
-                    modifier  = Modifier.widthIn(min = (sz.avatarSize.value * 0.9f).dp),
-                    textAlign = TextAlign.Center
+                    color      = PB_TextDark,
+                    modifier   = Modifier.widthIn(min = (sz.avatarSize.value * 0.9f).dp),
+                    textAlign  = TextAlign.Center
                 )
-                PBCounterButton(
-                    symbol  = "+",
-                    enabled = guestCount < 20,
-                    onClick = onPlus,
-                    sz      = sz
-                )
+                PBCounterButton("+", guestCount < 20, onPlus, sz)
             }
         }
     }
@@ -1170,7 +1320,6 @@ private fun PBPaymentSummary(
             .background(PB_CardBg)
             .border(2.dp, GoldBorder, RoundedCornerShape(sz.cardRadius))
     ) {
-        // Gold top stripe
         Box(
             Modifier
                 .fillMaxWidth()
@@ -1178,9 +1327,7 @@ private fun PBPaymentSummary(
                 .align(Alignment.TopCenter)
                 .background(GoldBorder)
         )
-
         Column(Modifier.padding(horizontal = sz.cardPad, vertical = sz.vPad + 4.dp)) {
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
@@ -1208,15 +1355,14 @@ private fun PBPaymentSummary(
                     )
                 }
             }
-
             Spacer(Modifier.height(sz.vPad))
             Divider(color = PB_Divider)
             Spacer(Modifier.height(sz.vPad - 2.dp))
 
-            PBSummaryRow("Package",    pkg.packageName,                sz)
-            PBSummaryRow("Rate/Night", pkg.formattedDiscountedPrice,    sz, strikethrough = pkg.formattedOriginalPrice)
-            PBSummaryRow("Duration",   "$nights nights",                sz)
-            PBSummaryRow("Guests",     "$guestCount guests",            sz)
+            PBSummaryRow("Package",    pkg.packageName,               sz)
+            PBSummaryRow("Rate/Night", pkg.formattedDiscountedPrice,   sz, strikethrough = pkg.formattedOriginalPrice)
+            PBSummaryRow("Duration",   "$nights nights",               sz)
+            PBSummaryRow("Guests",     "$guestCount guests",           sz)
 
             Spacer(Modifier.height(sz.vPad - 2.dp))
             Divider(color = PB_Divider)
@@ -1227,7 +1373,12 @@ private fun PBPaymentSummary(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                Text("Total Amount", fontWeight = FontWeight.Bold, color = PB_TextDark, fontSize = sz.titleSp.sp)
+                Text(
+                    "Total Amount",
+                    fontWeight = FontWeight.Bold,
+                    color      = PB_TextDark,
+                    fontSize   = sz.titleSp.sp
+                )
                 Text(
                     "PKR ${"%,.0f".format(totalAmount)}",
                     fontWeight = FontWeight.Black,
@@ -1238,14 +1389,11 @@ private fun PBPaymentSummary(
 
             Spacer(Modifier.height(sz.vPad - 2.dp))
 
-            // Deposit Highlight Box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape((sz.cardRadius.value * 0.75f).dp))
-                    .background(
-                        Brush.linearGradient(listOf(PB_WarningLight, PB_GoldFaint))
-                    )
+                    .background(Brush.linearGradient(listOf(PB_WarningLight, PB_GoldFaint)))
                     .border(
                         1.5.dp,
                         Brush.horizontalGradient(
@@ -1297,37 +1445,6 @@ private fun PBPaymentSummary(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ERROR CARD
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun PBErrorCard(message: String, sz: PBSizes) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = sz.hPad)
-            .clip(RoundedCornerShape(sz.cardRadius))
-            .background(MaterialTheme.colorScheme.error.copy(0.06f))
-            .border(1.dp, MaterialTheme.colorScheme.error.copy(0.3f), RoundedCornerShape(sz.cardRadius))
-            .padding(sz.hPad - 2.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Default.ErrorOutline,
-                null,
-                tint     = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(sz.iconSize)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                message,
-                color    = MaterialTheme.colorScheme.error,
-                fontSize = sz.bodySp.sp
-            )
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // SUMMARY ROW
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
@@ -1342,27 +1459,28 @@ private fun PBSummaryRow(
             .fillMaxWidth()
             .padding(vertical = (sz.vPad.value * 0.28f).dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment     = Alignment.CenterVertically
     ) {
         Text(label, color = PB_TextMuted, fontSize = sz.bodySp.sp)
         Row(
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (strikethrough != null) {
                 Text(
                     strikethrough,
-                    color = PB_TextLight,
-                    fontSize = sz.captionSp.sp,
+                    color          = PB_TextLight,
+                    fontSize       = sz.captionSp.sp,
                     textDecoration = TextDecoration.LineThrough
                 )
             }
             Text(
                 value,
                 fontWeight = FontWeight.SemiBold,
-                color = PB_TextDark,
-                fontSize = sz.bodySp.sp
+                color      = PB_TextDark,
+                fontSize   = sz.bodySp.sp
             )
         }
     }
 }
+
