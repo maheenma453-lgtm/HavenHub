@@ -18,6 +18,17 @@ import kotlinx.coroutines.launch
 import java.util.*
 import javax.inject.Inject
 
+// ─────────────────────────────────────────────────────────────────────────────
+// VACATION UI STATE
+//
+// checkInDay  — day-of-month selected by tenant for check-in  (-1 = not set)
+// checkOutDay — day-of-month selected by tenant for check-out (-1 = not set)
+// checkInMonth / checkInYear   — month+year for check-in date
+// checkOutMonth / checkOutYear — month+year for check-out date
+//
+// Storing month+year separately lets us correctly build full Timestamps
+// when the tenant picks dates across different months.
+// ─────────────────────────────────────────────────────────────────────────────
 data class VacationUiState(
     val isLoading             : Boolean             = false,
     val properties            : List<Property>      = emptyList(),
@@ -27,8 +38,17 @@ data class VacationUiState(
     val selectedPackage       : RentalPackage?      = null,
     val selectedPropertyId    : String              = "",
     val selectedPropertyTitle : String              = "",
+
+    // Tenant-selected check-in date components
     val checkInDay            : Int                 = -1,
+    val checkInMonth          : Int                 = Calendar.getInstance().get(Calendar.MONTH),
+    val checkInYear           : Int                 = Calendar.getInstance().get(Calendar.YEAR),
+
+    // Tenant-selected check-out date components
     val checkOutDay           : Int                 = -1,
+    val checkOutMonth         : Int                 = Calendar.getInstance().get(Calendar.MONTH),
+    val checkOutYear          : Int                 = Calendar.getInstance().get(Calendar.YEAR),
+
     val guestCount            : Int                 = 2,
     val errorMessage          : String?             = null,
     val successMessage        : String?             = null
@@ -44,10 +64,7 @@ class VacationViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(VacationUiState())
     val uiState: StateFlow<VacationUiState> = _uiState.asStateFlow()
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // Vacation cities — inhi cities ki APPROVED properties VacationHub pe
-    // dikhti hain. Naya city add karna ho toh sirf yahan add karo.
-    // ══════════════════════════════════════════════════════════════════════════
+    // Cities shown on Vacation Hub — add more here as needed
     private val vacationCities = setOf(
         "islamabad", "hunza", "naran", "skardu",
         "swat", "murree", "kaghan", "gilgit",
@@ -59,49 +76,20 @@ class VacationViewModel @Inject constructor(
         loadAllActivePackages()
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // ROOT FIX: loadVacationProperties()
-    //
-    // PEHLE (broken):
-    //   1. Firestore se active rental_packages fetch karo
-    //   2. Un packages ke propertyIds nikalo
-    //   3. Sirf woh properties dikhao
-    //
-    //   Problem 1: PropertyRepository mein collection name "rentalPackages" tha
-    //              lekin Firestore mein "rental_packages" hai → PERMISSION_DENIED
-    //              → packages empty → koi property nahi dikhti
-    //
-    //   Problem 2: Agar landlord ne package nahi banaya toh property kabhi
-    //              nahi dikhti — chahe wo Hunza ki approved property ho
-    //
-    // AB (fixed):
-    //   1. Saari APPROVED properties fetch karo (PropertyRepository.getAllProperties)
-    //   2. Sirf vacation cities wali filter karo (city name match)
-    //   3. Packages alag se load hote hain — property display pe depend nahi
-    //
-    //   Result: Saari 11 manually seeded + nai auto-added vacation properties
-    //           show hongi — package ho ya na ho
-    // ══════════════════════════════════════════════════════════════════════════
+    // ── Properties ────────────────────────────────────────────────────────────
+
     fun loadVacationProperties() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
             when (val result = propertyRepository.getAllProperties()) {
                 is Resource.Success -> {
                     val vacationList = result.data.filter { property ->
                         property.city.lowercase().trim() in vacationCities
                     }
-                    _uiState.update {
-                        it.copy(
-                            isLoading  = false,
-                            properties = vacationList
-                        )
-                    }
+                    _uiState.update { it.copy(isLoading = false, properties = vacationList) }
                 }
                 is Resource.Error -> {
-                    _uiState.update {
-                        it.copy(isLoading = false, errorMessage = result.message)
-                    }
+                    _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
                 }
                 else -> {
                     _uiState.update { it.copy(isLoading = false) }
@@ -109,6 +97,8 @@ class VacationViewModel @Inject constructor(
             }
         }
     }
+
+    // ── Unavailable Dates ─────────────────────────────────────────────────────
 
     fun loadUnavailableDates(propertyId: String) {
         val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
@@ -118,13 +108,8 @@ class VacationViewModel @Inject constructor(
                 bookings
                     .filter { it.propertyId == propertyId }
                     .forEach { booking ->
-                        val startDate = try {
-                            booking.checkInDate?.toDate()
-                        } catch (e: Exception) { null }
-                        val endDate   = try {
-                            booking.checkOutDate?.toDate()
-                        } catch (e: Exception) { null }
-
+                        val startDate = try { booking.checkInDate?.toDate() } catch (e: Exception) { null }
+                        val endDate   = try { booking.checkOutDate?.toDate() } catch (e: Exception) { null }
                         if (startDate != null && endDate != null) {
                             val calendar = Calendar.getInstance()
                             var current: Date = startDate
@@ -160,27 +145,20 @@ class VacationViewModel @Inject constructor(
     fun loadPackagesForProperty(propertyId: String) {
         viewModelScope.launch {
             _uiState.update {
-                it.copy(
-                    isLoading        = true,
-                    propertyPackages = emptyList(),
-                    selectedPackage  = null
-                )
+                it.copy(isLoading = true, propertyPackages = emptyList(), selectedPackage = null)
             }
             when (val result = firebaseDataManager.getPackagesByProperty(propertyId)) {
                 is Resource.Success -> {
                     _uiState.update {
-                        it.copy(
-                            isLoading        = false,
-                            propertyPackages = result.data ?: emptyList()
-                        )
+                        it.copy(isLoading = false, propertyPackages = result.data ?: emptyList())
                     }
                 }
                 is Resource.Error -> {
-                    _uiState.update {
-                        it.copy(isLoading = false, errorMessage = result.message)
-                    }
+                    _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
                 }
-                else -> { _uiState.update { it.copy(isLoading = false) } }
+                else -> {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
             }
         }
     }
@@ -193,7 +171,7 @@ class VacationViewModel @Inject constructor(
         _uiState.update { it.copy(selectedPackage = null) }
     }
 
-    // ── Pre-Booking Form State ────────────────────────────────────────────────
+    // ── Property Selection ────────────────────────────────────────────────────
 
     fun setSelectedProperty(propertyId: String, propertyTitle: String) {
         _uiState.update {
@@ -207,32 +185,118 @@ class VacationViewModel @Inject constructor(
         loadPackagesForProperty(propertyId)
     }
 
+    // ── Guest Count ───────────────────────────────────────────────────────────
+
     fun setGuestCount(count: Int) {
         _uiState.update { it.copy(guestCount = count.coerceIn(1, 20)) }
     }
 
-    fun setCheckInDay(day: Int) {
-        _uiState.update { it.copy(checkInDay = day, checkOutDay = -1) }
+    // ── Date Selection (tenant-driven) ────────────────────────────────────────
+    //
+    // setCheckInDate  — saves check-in day + month + year, clears check-out
+    // setCheckOutDate — saves check-out day + month + year
+    // clearDates      — resets both dates so tenant can pick again
+    //
+    // Month/year are stored so we can build correct Timestamps even when
+    // check-in and check-out fall in different calendar months.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    fun setCheckInDate(day: Int, month: Int, year: Int) {
+        _uiState.update {
+            it.copy(
+                checkInDay    = day,
+                checkInMonth  = month,
+                checkInYear   = year,
+                // Always clear check-out when check-in changes
+                checkOutDay   = -1,
+                checkOutMonth = month,
+                checkOutYear  = year
+            )
+        }
     }
 
-    fun setCheckOutDay(day: Int) {
-        _uiState.update { it.copy(checkOutDay = day) }
+    fun setCheckOutDate(day: Int, month: Int, year: Int) {
+        _uiState.update {
+            it.copy(
+                checkOutDay   = day,
+                checkOutMonth = month,
+                checkOutYear  = year
+            )
+        }
     }
+
+    fun clearDates() {
+        val now = Calendar.getInstance()
+        _uiState.update {
+            it.copy(
+                checkInDay    = -1,
+                checkInMonth  = now.get(Calendar.MONTH),
+                checkInYear   = now.get(Calendar.YEAR),
+                checkOutDay   = -1,
+                checkOutMonth = now.get(Calendar.MONTH),
+                checkOutYear  = now.get(Calendar.YEAR)
+            )
+        }
+    }
+
+    // ── Amount Calculations ───────────────────────────────────────────────────
 
     fun calculateTotalAmount(): Double {
-        val pkg = _uiState.value.selectedPackage ?: return 0.0
-        val nights = when {
-            _uiState.value.checkInDay  != -1 &&
-                    _uiState.value.checkOutDay != -1 ->
-                (_uiState.value.checkOutDay - _uiState.value.checkInDay).coerceAtLeast(1)
-            else -> pkg.minNights.coerceAtLeast(1)
-        }
+        val pkg    = _uiState.value.selectedPackage ?: return 0.0
+        val nights = calculateNights().coerceAtLeast(pkg.minNights)
         return pkg.discountedPricePerNight * nights
     }
 
     fun calculateDepositAmount(): Double = calculateTotalAmount() * 0.20
 
+    // Calculates nights between selected check-in and check-out dates.
+    // Returns minNights from package if dates are not fully selected.
+    fun calculateNights(): Int {
+        val state = _uiState.value
+        val pkg   = state.selectedPackage ?: return 1
+
+        if (state.checkInDay == -1 || state.checkOutDay == -1) {
+            return pkg.minNights.coerceAtLeast(1)
+        }
+
+        val checkIn = Calendar.getInstance().apply {
+            set(Calendar.YEAR, state.checkInYear)
+            set(Calendar.MONTH, state.checkInMonth)
+            set(Calendar.DAY_OF_MONTH, state.checkInDay)
+            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val checkOut = Calendar.getInstance().apply {
+            set(Calendar.YEAR, state.checkOutYear)
+            set(Calendar.MONTH, state.checkOutMonth)
+            set(Calendar.DAY_OF_MONTH, state.checkOutDay)
+            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val diffMs    = checkOut.timeInMillis - checkIn.timeInMillis
+        val diffDays  = (diffMs / (1000 * 60 * 60 * 24)).toInt()
+        return diffDays.coerceAtLeast(1)
+    }
+
+    // ── Messages ──────────────────────────────────────────────────────────────
+
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, successMessage = null) }
     }
 }
+
+
+
+
+
+
+
+
+
+
+

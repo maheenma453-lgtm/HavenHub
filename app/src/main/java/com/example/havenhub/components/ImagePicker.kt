@@ -1,59 +1,51 @@
 package com.example.havenhub.components
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.havenhub.utils.ValidationUtils
 
 /**
- * Image picker component for HavenHub property/profile photo selection.
+ * Image picker components for HavenHub.
  *
- * Two variants:
- *  1. [SingleImagePicker]  – Circular/square single photo picker (avatar, cover)
- *  2. [MultiImagePicker]   – Grid picker supporting up to [maxImages] photos
- *
- * Both use the Photo Picker API (ActivityResultContracts.PickVisualMedia).
+ * Three variants:
+ *   1. [SingleImagePicker]  – Single photo picker (avatar / cover image).
+ *   2. [rememberCnicPicker] – Returns a lambda that opens the CNIC picker.
+ *                             Validates MIME type; only JPG/PNG/WebP pass through.
+ *                             The caller owns the button UI — no hidden overlay.
+ *   3. [MultiImagePicker]   – Grid picker for up to [maxImages] property photos.
  */
 
-// ─── 1. Single Image Picker ───────────────────────────────────────────────────
+// ── 1. Single Image Picker ────────────────────────────────────────────────────
 
 /**
- * @param imageUri       Currently selected image URI (null shows placeholder)
- * @param onImagePicked  Callback with the new URI
- * @param label          Helper text shown below the picker
- * @param isCircle       Circular crop when true (avatar), square when false
+ * General-purpose single image picker (profile photo, cover image, etc.)
+ *
+ * @param imageUri      Currently selected image URI; null shows the placeholder.
+ * @param onImagePicked Called with the URI the user chose.
+ * @param label         Helper text shown below the picker.
+ * @param isCircle      true → circular crop (avatar); false → square (cover).
  */
 @Composable
 fun SingleImagePicker(
@@ -80,7 +72,9 @@ fun SingleImagePicker(
                 .clip(shape)
                 .border(2.dp, MaterialTheme.colorScheme.outline, shape)
                 .clickable(role = Role.Button) {
-                    launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    launcher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -92,6 +86,7 @@ fun SingleImagePicker(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
+                // Placeholder icon + label when nothing is selected
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -121,14 +116,77 @@ fun SingleImagePicker(
     }
 }
 
-// ─── 2. Multi-Image Picker ────────────────────────────────────────────────────
+// ── 2. CNIC Image Picker ──────────────────────────────────────────────────────
 
 /**
- * Grid-based image picker supporting multiple selections.
+ * Returns a lambda that, when invoked, opens the system image picker for CNIC photos.
  *
- * @param images        Current list of selected URIs
- * @param onImagesChanged Updated list callback (add or remove)
- * @param maxImages     Maximum number of photos allowed (default 10)
+ * WHY THIS DESIGN:
+ *   The previous implementation rendered a hidden 0.dp composable containing the
+ *   real launcher, while showing a separate OutlinedButton whose onClick did nothing.
+ *   As a result, tapping the button never opened the picker.
+ *
+ *   Fix: expose the launcher as a plain Kotlin lambda via this @Composable function.
+ *   SignUpScreen calls openCnicPicker() directly inside the button's onClick.
+ *   One button → one launcher → no invisible overlay.
+ *
+ * MIME VALIDATION:
+ *   Only image/jpeg, image/png, and image/webp are accepted.
+ *   The check uses ContentResolver.getType() which reads the actual file header —
+ *   renaming a PDF to "cnic.jpg" will NOT bypass the check.
+ *
+ * Usage in SignUpScreen:
+ *   val openCnicPicker = rememberCnicPicker(
+ *       onImagePicked = { uri -> viewModel.onCnicImageSelected(uri) },
+ *       onInvalidFile = { cnicFileTypeError = true }
+ *   )
+ *   ...
+ *   Button(onClick = { openCnicPicker() }) { Text("Upload CNIC") }
+ *
+ * @param onImagePicked  Called only when the selected file passes MIME validation.
+ * @param onInvalidFile  Called when the user picks a non-image file (PDF, DOC, etc.).
+ * @return               A lambda — invoke it to open the system photo picker.
+ */
+@Composable
+fun rememberCnicPicker(
+    onImagePicked: (Uri) -> Unit,
+    onInvalidFile: () -> Unit,
+): () -> Unit {
+    val context = LocalContext.current
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        // User cancelled the picker — do nothing
+        if (uri == null) return@rememberLauncherForActivityResult
+
+        // Resolve MIME type from ContentResolver (reads the actual file header).
+        // Do NOT use the file extension — it can be faked (e.g. a .pdf renamed to .jpg).
+        val mimeType = context.contentResolver.getType(uri)
+
+        if (ValidationUtils.isValidImageMimeType(mimeType)) {
+            onImagePicked(uri)  // Valid CNIC image — forward to ViewModel
+        } else {
+            onInvalidFile()     // Not a real image — caller shows an error
+        }
+    }
+
+    // Return a stable lambda that restricts the picker to images only
+    return {
+        launcher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
+    }
+}
+
+// ── 3. Multi-Image Picker ─────────────────────────────────────────────────────
+
+/**
+ * Grid-based picker for selecting multiple property photos.
+ *
+ * @param images          Current list of selected URIs.
+ * @param onImagesChanged Called with the updated list after any add or remove.
+ * @param maxImages       Upper limit for how many photos can be selected (default 10).
  */
 @Composable
 fun MultiImagePicker(
@@ -141,14 +199,16 @@ fun MultiImagePicker(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = maxImages)
     ) { uris ->
         if (uris.isNotEmpty()) {
+            // Merge new picks with existing ones; deduplicate and respect the cap
             val combined = (images + uris).distinctBy { it.toString() }.take(maxImages)
             onImagesChanged(combined)
         }
     }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Header row
-        androidx.compose.foundation.layout.Row(
+
+        // Header row: current count + "Add more" link
+        Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -164,12 +224,17 @@ fun MultiImagePicker(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable {
-                        launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        launcher.launch(
+                            PickVisualMediaRequest(
+                                ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
+                        )
                     }
                 )
             }
         }
 
+        // 3-column image grid
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -184,11 +249,15 @@ fun MultiImagePicker(
                 )
             }
 
-            // Add button cell
+            // "+" add button — only shown when under the limit
             if (images.size < maxImages) {
                 item {
                     AddImageCell {
-                        launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        launcher.launch(
+                            PickVisualMediaRequest(
+                                ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
+                        )
                     }
                 }
             }
@@ -196,8 +265,9 @@ fun MultiImagePicker(
     }
 }
 
-// ── Private composables ───────────────────────────────────────────────────────
+// ── Private helper composables ────────────────────────────────────────────────
 
+/** Single grid cell showing the selected image with a remove (×) button. */
 @Composable
 private fun ImageGridItem(uri: Uri, onRemove: () -> Unit) {
     Box(
@@ -211,6 +281,7 @@ private fun ImageGridItem(uri: Uri, onRemove: () -> Unit) {
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+        // × remove button anchored to the top-right corner
         IconButton(
             onClick = onRemove,
             modifier = Modifier
@@ -235,6 +306,7 @@ private fun ImageGridItem(uri: Uri, onRemove: () -> Unit) {
     }
 }
 
+/** Grid cell with a "+" icon — tapping it opens the image picker. */
 @Composable
 private fun AddImageCell(onClick: () -> Unit) {
     Surface(
@@ -263,5 +335,3 @@ private fun AddImageCell(onClick: () -> Unit) {
         }
     }
 }
-
-

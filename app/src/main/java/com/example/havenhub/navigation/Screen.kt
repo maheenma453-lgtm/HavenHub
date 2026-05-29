@@ -148,7 +148,42 @@ sealed class Screen(val route: String) {
         }
     }
 
-    object VacationRentals : Screen("vacation_rentals")
+    // ─────────────────────────────────────────────────────────────────────────
+    // VacationRentals — UPDATED
+    //
+    // Now supports optional `season` and `location` query params so that
+    // Seasonal Alert cards can deep-link directly into a pre-filtered view.
+    //
+    // Usage:
+    //   Normal entry (no filter):
+    //     Screen.VacationRentals.route
+    //       → "vacation_rentals?season=none&location=none"
+    //
+    //   From Seasonal Alert card (with filter):
+    //     Screen.VacationRentals.createRoute(season = "Eid", location = "Hunza")
+    //       → "vacation_rentals?season=Eid&location=Hunza"
+    //
+    //   From Seasonal Alert card (season only, no city pre-filter):
+    //     Screen.VacationRentals.createRoute(season = "Winter")
+    //       → "vacation_rentals?season=Winter&location=none"
+    // ─────────────────────────────────────────────────────────────────────────
+    object VacationRentals : Screen("vacation_rentals?season={season}&location={location}") {
+        const val ARG_SEASON   = "season"
+        const val ARG_LOCATION = "location"
+
+        // Default route with no filters — used in BottomNavBar and normal navigation
+        val defaultRoute = "vacation_rentals?season=none&location=none"
+
+        // Called from Seasonal Alert card — encodes both params safely
+        fun createRoute(
+            season  : String = "none",
+            location: String = "none"
+        ): String {
+            val safeSeason   = android.net.Uri.encode(season.ifBlank { "none" })
+            val safeLocation = android.net.Uri.encode(location.ifBlank { "none" })
+            return "vacation_rentals?season=$safeSeason&location=$safeLocation"
+        }
+    }
 
     object PreBooking : Screen("pre_booking/{propertyId}") {
         const val ARG_PROPERTY_ID = "propertyId"
@@ -184,3 +219,14 @@ sealed class Screen(val route: String) {
     object ManageSeasonalAlerts : Screen("manage_seasonal_alerts")
     object CreateSeasonalAlert  : Screen("create_seasonal_alert")
 }
+
+
+
+
+
+
+
+
+
+
+

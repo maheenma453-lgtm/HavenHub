@@ -19,7 +19,7 @@ import com.example.havenhub.viewmodel.NotificationViewModel
 import com.example.havenhub.viewmodel.MessagingViewModel
 import com.example.havenhub.viewmodel.SearchViewModel
 
-// Route groupings
+// ── Route groupings ───────────────────────────────────────────────────────────
 private val authRoutes = listOf(
     Screen.Splash.route,
     Screen.Onboarding.route,
@@ -59,11 +59,11 @@ private val sharedRoutes = listOf(
     Screen.GlobalReviews.route,
 )
 
-// Sub-admin permission model
+// ── Sub-admin permission helper ───────────────────────────────────────────────
 private fun hasPermission(
-    role: String?,
+    role       : String?,
     permissions: List<String>,
-    permission: String
+    permission : String
 ): Boolean = when (role) {
     "admin"     -> true
     "sub_admin" -> permissions.contains(permission)
@@ -84,29 +84,37 @@ object SubAdminPermission {
 fun HavenHubNavGraph(
     navController: NavHostController
 ) {
-    val authViewModel        : AuthViewModel         = hiltViewModel()
-    val uiState              by authViewModel.uiState.collectAsState()
+    val authViewModel: AuthViewModel = hiltViewModel()
+    val uiState by authViewModel.uiState.collectAsState()
     val notificationViewModel: NotificationViewModel = hiltViewModel()
-    val messagingViewModel   : MessagingViewModel    = hiltViewModel()
-    val messagingUiState     by messagingViewModel.uiState.collectAsState()
+    val messagingViewModel: MessagingViewModel = hiltViewModel()
+    val messagingUiState by messagingViewModel.uiState.collectAsState()
 
-    val currentUserId       = uiState.currentUser?.uid ?: ""
-    val userRole            = uiState.userRole
+    val currentUserId = uiState.currentUser?.uid ?: ""
+    val userRole = uiState.userRole
     val subAdminPermissions = uiState.subAdminPermissions ?: emptyList()
 
     val isCurrentUserLandlord = userRole == "landlord"
-    val isCurrentUserAdmin    = userRole == "admin"
+    val isCurrentUserAdmin = userRole == "admin"
     val isCurrentUserSubAdmin = userRole == "sub_admin"
     val isCurrentUserAnyAdmin = isCurrentUserAdmin || isCurrentUserSubAdmin
 
-    val canManageUsers        = hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_USERS)
-    val canManageProperties   = hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_PROPERTIES)
-    val canManageBookings     = hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_BOOKINGS)
-    val canVerifyProperties   = hasPermission(userRole, subAdminPermissions, SubAdminPermission.VERIFY_PROPERTIES)
-    val canVerifyUsers        = hasPermission(userRole, subAdminPermissions, SubAdminPermission.VERIFY_USERS)
-    val canViewReports        = hasPermission(userRole, subAdminPermissions, SubAdminPermission.VIEW_REPORTS)
-    val canViewPaymentReports = hasPermission(userRole, subAdminPermissions, SubAdminPermission.VIEW_PAYMENT_REPORTS)
+    val canManageUsers =
+        hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_USERS)
+    val canManageProperties =
+        hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_PROPERTIES)
+    val canManageBookings =
+        hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_BOOKINGS)
+    val canVerifyProperties =
+        hasPermission(userRole, subAdminPermissions, SubAdminPermission.VERIFY_PROPERTIES)
+    val canVerifyUsers =
+        hasPermission(userRole, subAdminPermissions, SubAdminPermission.VERIFY_USERS)
+    val canViewReports =
+        hasPermission(userRole, subAdminPermissions, SubAdminPermission.VIEW_REPORTS)
+    val canViewPaymentReports =
+        hasPermission(userRole, subAdminPermissions, SubAdminPermission.VIEW_PAYMENT_REPORTS)
 
+    // Redirect to sign-in when auth session ends
     LaunchedEffect(uiState.isLoggedIn, uiState.isAuthReady) {
         if (uiState.isAuthReady && !uiState.isLoggedIn) {
             val currentRoute = navController.currentBackStackEntry?.destination?.route
@@ -118,6 +126,7 @@ fun HavenHubNavGraph(
         }
     }
 
+    // Start real-time listeners once user is identified
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
             notificationViewModel.startListening(currentUserId)
@@ -128,58 +137,60 @@ fun HavenHubNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val isAuthRoute  = currentRoute in authRoutes
+    val isAuthRoute = currentRoute in authRoutes
     val isExploreMap = currentRoute == Screen.ExploreMap.route
 
     val isAdminRoute = when {
-        strictAdminRoutes.any { currentRoute == it }                     -> true
+        strictAdminRoutes.any { currentRoute == it } -> true
         currentRoute?.startsWith("property_verification_detail") == true -> true
-        currentRoute?.startsWith("user_verification_detail") == true     -> true
-        sharedRoutes.any { currentRoute == it }                          -> isCurrentUserAnyAdmin
-        currentRoute?.startsWith("notification_detail") == true          -> isCurrentUserAnyAdmin
-        else                                                             -> false
+        currentRoute?.startsWith("user_verification_detail") == true -> true
+        sharedRoutes.any { currentRoute == it } -> isCurrentUserAnyAdmin
+        currentRoute?.startsWith("notification_detail") == true -> isCurrentUserAnyAdmin
+        else -> false
     }
 
     Scaffold(
         bottomBar = {
             when {
-                isAuthRoute || isExploreMap -> { /* No bottom bar */ }
+                isAuthRoute || isExploreMap -> { /* No bottom bar on auth/map screens */
+                }
+
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
-                else         -> BottomNavBar(
-                    navController      = navController,
+                else -> BottomNavBar(
+                    navController = navController,
                     unreadMessageCount = messagingUiState.unreadCount,
-                    userRole           = userRole,
+                    userRole = userRole,
                 )
             }
         }
     ) { innerPadding ->
         NavHost(
-            navController    = navController,
+            navController = navController,
             startDestination = Screen.Splash.route,
-            modifier         = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
+            modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
         ) {
 
-// Auth
-            composable(Screen.Splash.route)        { SplashScreen(navController) }
-            composable(Screen.Onboarding.route)    { OnboardingScreen(navController) }
+            // ── Auth ──────────────────────────────────────────────────────────
+            composable(Screen.Splash.route) { SplashScreen(navController) }
+            composable(Screen.Onboarding.route) { OnboardingScreen(navController) }
             composable(Screen.RoleSelection.route) { RoleSelectionScreen(navController) }
 
             composable(
-                route     = Screen.SignUp.route,
+                route = Screen.SignUp.route,
                 arguments = listOf(navArgument(Screen.SignUp.ARG_ROLE) {
                     type = NavType.StringType; defaultValue = ""
                 })
             ) { back ->
                 SignUpScreen(
                     navController = navController,
-                    selectedRole  = back.arguments?.getString(Screen.SignUp.ARG_ROLE) ?: ""
+                    selectedRole = back.arguments?.getString(Screen.SignUp.ARG_ROLE) ?: ""
                 )
             }
 
-            composable(Screen.SignIn.route)         { SignInScreen(navController) }
+            composable(Screen.SignIn.route) { SignInScreen(navController) }
             composable(Screen.ForgotPassword.route) { ForgotPasswordScreen(navController) }
 
-// Home / Search
+            // ── Home / Search ─────────────────────────────────────────────────
             composable(Screen.Home.route) { HomeScreen(navController) }
 
             composable(Screen.Search.route) { searchEntry ->
@@ -188,37 +199,46 @@ fun HavenHubNavGraph(
             }
 
             composable(Screen.Filter.route) { filterEntry ->
-                val searchEntry     = remember(filterEntry) { navController.getBackStackEntry(Screen.Search.route) }
-                val searchViewModel : SearchViewModel = hiltViewModel(searchEntry)
+                val searchEntry =
+                    remember(filterEntry) { navController.getBackStackEntry(Screen.Search.route) }
+                val searchViewModel: SearchViewModel = hiltViewModel(searchEntry)
                 FilterScreen(navController = navController, viewModel = searchViewModel)
             }
 
-// Explore Map
+            // ── Explore Map ───────────────────────────────────────────────────
             composable(Screen.ExploreMap.route) {
                 ExploreMapScreen(navController = navController)
             }
 
-// Global Reviews
+            // ── Global Reviews ────────────────────────────────────────────────
             composable(Screen.GlobalReviews.route) {
                 GlobalReviewsScreen(
                     navController = navController,
-                    isLandlord    = isCurrentUserLandlord,
+                    isLandlord = isCurrentUserLandlord,
+                    isAdmin = isCurrentUserAdmin,
                     currentUserId = currentUserId
                 )
             }
 
-// Property
+            // ── Property ──────────────────────────────────────────────────────
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
 
             composable(Screen.AddProperty.route) {
                 val isVerified = uiState.isVerified
                 when {
-                    uiState.isLoading      -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                    !isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }
-                    !isVerified            -> UnverifiedAccessScreen(
+                    uiState.isLoading -> Box(
+                        Modifier.fillMaxSize(), Alignment.Center
+                    ) { CircularProgressIndicator() }
+
+                    !isCurrentUserLandlord -> {
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
+
+                    !isVerified -> UnverifiedAccessScreen(
                         message = "Your account needs to be verified by admin before you can add properties.",
-                        onBack  = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() }
                     )
+
                     else -> AddPropertyScreen(navController)
                 }
             }
@@ -226,225 +246,300 @@ fun HavenHubNavGraph(
             composable(Screen.MyProperties.route) { MyPropertiesScreen(navController) }
 
             composable(
-                route     = Screen.PropertyDetail.route,
-                arguments = listOf(navArgument(Screen.PropertyDetail.ARG_PROPERTY_ID) { type = NavType.StringType })
+                route = Screen.PropertyDetail.route,
+                arguments = listOf(navArgument(Screen.PropertyDetail.ARG_PROPERTY_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 PropertyDetailScreen(
                     navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.PropertyDetail.ARG_PROPERTY_ID) ?: "",
+                    propertyId = back.arguments?.getString(Screen.PropertyDetail.ARG_PROPERTY_ID)
+                        ?: "",
                 )
             }
 
             composable(
-                route     = Screen.EditProperty.route,
-                arguments = listOf(navArgument(Screen.EditProperty.ARG_PROPERTY_ID) { type = NavType.StringType })
+                route = Screen.EditProperty.route,
+                arguments = listOf(navArgument(Screen.EditProperty.ARG_PROPERTY_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 EditPropertyScreen(
                     navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.EditProperty.ARG_PROPERTY_ID) ?: ""
+                    propertyId = back.arguments?.getString(Screen.EditProperty.ARG_PROPERTY_ID)
+                        ?: ""
                 )
             }
 
             composable(
-                route     = Screen.AddRentalPackage.route,
-                arguments = listOf(navArgument(Screen.AddRentalPackage.ARG_PROPERTY_ID) { type = NavType.StringType })
+                route = Screen.AddRentalPackage.route,
+                arguments = listOf(navArgument(Screen.AddRentalPackage.ARG_PROPERTY_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 AddRentalPackageScreen(
                     navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.AddRentalPackage.ARG_PROPERTY_ID) ?: ""
+                    propertyId = back.arguments?.getString(Screen.AddRentalPackage.ARG_PROPERTY_ID)
+                        ?: ""
                 )
             }
 
-// Bookings
+            // ── Bookings ──────────────────────────────────────────────────────
             composable(
-                route     = "my_bookings?tab={tab}",
+                route = "my_bookings?tab={tab}",
                 arguments = listOf(navArgument("tab") { type = NavType.IntType; defaultValue = 0 })
             ) { back ->
                 MyBookingsScreen(
                     navController = navController,
-                    userId        = currentUserId,
-                    initialTab    = back.arguments?.getInt("tab") ?: 0,
+                    userId = currentUserId,
+                    initialTab = back.arguments?.getInt("tab") ?: 0,
                 )
             }
 
             composable(
-                route     = Screen.Booking.route,
-                arguments = listOf(navArgument(Screen.Booking.ARG_PROPERTY_ID) { type = NavType.StringType })
+                route = Screen.Booking.route,
+                arguments = listOf(navArgument(Screen.Booking.ARG_PROPERTY_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 val isVerified = uiState.isVerified
                 when {
-                    uiState.isLoading     -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                    isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }
-                    !isVerified           -> UnverifiedAccessScreen(
+                    uiState.isLoading -> Box(
+                        Modifier.fillMaxSize(), Alignment.Center
+                    ) { CircularProgressIndicator() }
+
+                    isCurrentUserLandlord -> {
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
+
+                    !isVerified -> UnverifiedAccessScreen(
                         message = "Your account needs to be verified by admin before you can book properties.",
-                        onBack  = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() }
                     )
+
                     else -> BookingScreen(
                         navController = navController,
-                        propertyId    = back.arguments?.getString(Screen.Booking.ARG_PROPERTY_ID) ?: ""
+                        propertyId = back.arguments?.getString(Screen.Booking.ARG_PROPERTY_ID) ?: ""
                     )
                 }
             }
 
             composable(
-                route     = Screen.BookingConfirmation.route,
-                arguments = listOf(navArgument(Screen.BookingConfirmation.ARG_BOOKING_ID) { type = NavType.StringType })
+                route = Screen.BookingConfirmation.route,
+                arguments = listOf(navArgument(Screen.BookingConfirmation.ARG_BOOKING_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 BookingConfirmationScreen(
                     navController = navController,
-                    bookingId     = back.arguments?.getString(Screen.BookingConfirmation.ARG_BOOKING_ID) ?: ""
+                    bookingId = back.arguments?.getString(Screen.BookingConfirmation.ARG_BOOKING_ID)
+                        ?: ""
                 )
             }
 
             composable(
-                route     = Screen.BookingDetails.route,
-                arguments = listOf(navArgument(Screen.BookingDetails.ARG_BOOKING_ID) { type = NavType.StringType })
+                route = Screen.BookingDetails.route,
+                arguments = listOf(navArgument(Screen.BookingDetails.ARG_BOOKING_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 BookingDetailScreen(
                     navController = navController,
-                    bookingId     = back.arguments?.getString(Screen.BookingDetails.ARG_BOOKING_ID) ?: ""
+                    bookingId = back.arguments?.getString(Screen.BookingDetails.ARG_BOOKING_ID)
+                        ?: "",
+                    isCurrentUserLandlord = isCurrentUserLandlord
                 )
             }
 
-// Payment — route now includes paymentType and packageId for pre-booking flow
+            // ── Payment ───────────────────────────────────────────────────────
             composable(
                 route = Screen.Payment.route,
                 arguments = listOf(
-                    navArgument(Screen.Payment.ARG_BOOKING_ID)   { type = NavType.StringType },
-                    navArgument(Screen.Payment.ARG_PAYER_ID)     { type = NavType.StringType },
-                    navArgument(Screen.Payment.ARG_PAYEE_ID)     { type = NavType.StringType },
-                    navArgument(Screen.Payment.ARG_PAYER_NAME)   { type = NavType.StringType },
-                    navArgument(Screen.Payment.ARG_PAYEE_NAME)   { type = NavType.StringType },
-                    navArgument(Screen.Payment.ARG_AMOUNT)       { type = NavType.StringType },
-                    navArgument(Screen.Payment.ARG_PAYMENT_TYPE) { type = NavType.StringType; defaultValue = "FULL" },
-                    navArgument(Screen.Payment.ARG_PACKAGE_ID)   { type = NavType.StringType; defaultValue = "none" },
+                    navArgument(Screen.Payment.ARG_BOOKING_ID) { type = NavType.StringType },
+                    navArgument(Screen.Payment.ARG_PAYER_ID) { type = NavType.StringType },
+                    navArgument(Screen.Payment.ARG_PAYEE_ID) { type = NavType.StringType },
+                    navArgument(Screen.Payment.ARG_PAYER_NAME) { type = NavType.StringType },
+                    navArgument(Screen.Payment.ARG_PAYEE_NAME) { type = NavType.StringType },
+                    navArgument(Screen.Payment.ARG_AMOUNT) { type = NavType.StringType },
+                    navArgument(Screen.Payment.ARG_PAYMENT_TYPE) {
+                        type = NavType.StringType; defaultValue = "FULL"
+                    },
+                    navArgument(Screen.Payment.ARG_PACKAGE_ID) {
+                        type = NavType.StringType; defaultValue = "none"
+                    },
                 )
             ) { back ->
                 PaymentScreen(
                     navController = navController,
-                    bookingId     = back.arguments?.getString(Screen.Payment.ARG_BOOKING_ID)   ?: "",
-                    payerId       = back.arguments?.getString(Screen.Payment.ARG_PAYER_ID)     ?: "",
-                    payeeId       = back.arguments?.getString(Screen.Payment.ARG_PAYEE_ID)     ?: "",
-                    payerName     = back.arguments?.getString(Screen.Payment.ARG_PAYER_NAME)   ?: "",
-                    payeeName     = back.arguments?.getString(Screen.Payment.ARG_PAYEE_NAME)   ?: "",
-                    amount        = back.arguments?.getString(Screen.Payment.ARG_AMOUNT)       ?: "0",
-                    paymentType   = back.arguments?.getString(Screen.Payment.ARG_PAYMENT_TYPE) ?: "FULL",
-                    packageId     = back.arguments?.getString(Screen.Payment.ARG_PACKAGE_ID)   ?: "none",
+                    bookingId = back.arguments?.getString(Screen.Payment.ARG_BOOKING_ID) ?: "",
+                    payerId = back.arguments?.getString(Screen.Payment.ARG_PAYER_ID) ?: "",
+                    payeeId = back.arguments?.getString(Screen.Payment.ARG_PAYEE_ID) ?: "",
+                    payerName = back.arguments?.getString(Screen.Payment.ARG_PAYER_NAME) ?: "",
+                    payeeName = back.arguments?.getString(Screen.Payment.ARG_PAYEE_NAME) ?: "",
+                    amount = back.arguments?.getString(Screen.Payment.ARG_AMOUNT) ?: "0",
+                    paymentType = back.arguments?.getString(Screen.Payment.ARG_PAYMENT_TYPE)
+                        ?: "FULL",
+                    packageId = back.arguments?.getString(Screen.Payment.ARG_PACKAGE_ID) ?: "none",
                 )
             }
 
             composable(Screen.PaymentMethod.route) { PaymentMethodScreen(navController) }
 
             composable(
-                route     = Screen.PaymentSuccess.route,
-                arguments = listOf(navArgument(Screen.PaymentSuccess.ARG_BOOKING_ID) { type = NavType.StringType })
+                route = Screen.PaymentSuccess.route,
+                arguments = listOf(navArgument(Screen.PaymentSuccess.ARG_BOOKING_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 PaymentSuccessScreen(
                     navController = navController,
-                    bookingId     = back.arguments?.getString(Screen.PaymentSuccess.ARG_BOOKING_ID) ?: ""
+                    bookingId = back.arguments?.getString(Screen.PaymentSuccess.ARG_BOOKING_ID)
+                        ?: ""
                 )
             }
 
-// Reviews
+            // ── Reviews ───────────────────────────────────────────────────────
             composable(
-                route     = Screen.AddReview.route,
+                route = Screen.AddReview.route,
                 arguments = listOf(navArgument(Screen.AddReview.ARG_PROPERTY_ID) {
                     type = NavType.StringType; defaultValue = ""
                 })
             ) { back ->
                 AddReviewScreen(
                     navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.AddReview.ARG_PROPERTY_ID) ?: "",
-                    bookingId     = "",
+                    propertyId = back.arguments?.getString(Screen.AddReview.ARG_PROPERTY_ID) ?: "",
+                    bookingId = "",
                     propertyTitle = ""
                 )
             }
 
             composable(
-                route     = Screen.ViewReviews.route,
-                arguments = listOf(navArgument(Screen.ViewReviews.ARG_PROPERTY_ID) { type = NavType.StringType })
+                route = Screen.ViewReviews.route,
+                arguments = listOf(navArgument(Screen.ViewReviews.ARG_PROPERTY_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 ViewReviewsScreen(
                     navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.ViewReviews.ARG_PROPERTY_ID) ?: ""
+                    propertyId = back.arguments?.getString(Screen.ViewReviews.ARG_PROPERTY_ID) ?: ""
                 )
             }
 
-// Profile
-            composable(Screen.Profile.route)     { ProfileScreen(navController) }
+            // ── Profile ───────────────────────────────────────────────────────
+            composable(Screen.Profile.route) { ProfileScreen(navController) }
             composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
 
-// Favourites
+            // ── Favourites ────────────────────────────────────────────────────
             composable(Screen.Favourites.route) { FavouritesScreen(navController) }
 
-// Settings
-            composable(Screen.Settings.route)             { SettingsScreen(navController) }
-            composable(Screen.AccountSettings.route)      { AccountSettingsScreen(navController) }
+            // ── Settings ──────────────────────────────────────────────────────
+            composable(Screen.Settings.route) { SettingsScreen(navController) }
+            composable(Screen.AccountSettings.route) { AccountSettingsScreen(navController) }
             composable(Screen.NotificationSettings.route) { NotificationSettingsScreen(navController) }
-            composable(Screen.PrivacySettings.route)      { PrivacySettingsScreen(navController) }
-            composable(Screen.About.route)                { AboutScreen(navController) }
-            composable(Screen.HelpAndSupport.route)       { HelpAndSupportScreen(navController) }
+            composable(Screen.PrivacySettings.route) { PrivacySettingsScreen(navController) }
+            composable(Screen.About.route) { AboutScreen(navController) }
+            composable(Screen.HelpAndSupport.route) { HelpAndSupportScreen(navController) }
 
-// Notifications
+            // ── Notifications ─────────────────────────────────────────────────
             composable(Screen.Notifications.route) { NotificationsScreen(navController) }
 
             composable(
-                route     = Screen.NotificationDetail.route,
-                arguments = listOf(navArgument(Screen.NotificationDetail.ARG_NOTIFICATION_ID) { type = NavType.StringType })
+                route = Screen.NotificationDetail.route,
+                arguments = listOf(navArgument(Screen.NotificationDetail.ARG_NOTIFICATION_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 NotificationDetailScreen(
-                    navController  = navController,
-                    notificationId = back.arguments?.getString(Screen.NotificationDetail.ARG_NOTIFICATION_ID) ?: ""
+                    navController = navController,
+                    notificationId = back.arguments?.getString(Screen.NotificationDetail.ARG_NOTIFICATION_ID)
+                        ?: ""
                 )
             }
 
-// Messaging
+            // ── Messaging ─────────────────────────────────────────────────────
             composable(Screen.MessageList.route) { MessageListScreen(navController) }
 
             composable(
-                route     = Screen.Chat.route,
+                route = Screen.Chat.route,
                 arguments = listOf(
-                    navArgument(Screen.Chat.ARG_USER_ID)     { type = NavType.StringType },
-                    navArgument(Screen.Chat.ARG_OWNER_NAME)  { type = NavType.StringType; defaultValue = "Owner" },
-                    navArgument(Screen.Chat.ARG_PROPERTY_ID) { type = NavType.StringType; defaultValue = "none" }
+                    navArgument(Screen.Chat.ARG_USER_ID) { type = NavType.StringType },
+                    navArgument(Screen.Chat.ARG_OWNER_NAME) {
+                        type = NavType.StringType; defaultValue = "Owner"
+                    },
+                    navArgument(Screen.Chat.ARG_PROPERTY_ID) {
+                        type = NavType.StringType; defaultValue = "none"
+                    }
                 )
             ) { back ->
                 val rawPropertyId = back.arguments?.getString(Screen.Chat.ARG_PROPERTY_ID) ?: ""
                 ChatScreen(
                     navController = navController,
-                    userId        = back.arguments?.getString(Screen.Chat.ARG_USER_ID)    ?: "",
-                    ownerName     = back.arguments?.getString(Screen.Chat.ARG_OWNER_NAME) ?: "Owner",
-                    propertyId    = if (rawPropertyId == "none") "" else rawPropertyId,
+                    userId = back.arguments?.getString(Screen.Chat.ARG_USER_ID) ?: "",
+                    ownerName = back.arguments?.getString(Screen.Chat.ARG_OWNER_NAME) ?: "Owner",
+                    propertyId = if (rawPropertyId == "none") "" else rawPropertyId,
                     currentUserId = currentUserId
                 )
             }
 
-// Vacation / Pre-booking
-            composable(Screen.VacationRentals.route) { VacationRentalsScreen(navController) }
+            // ── Vacation / Pre-booking ─────────────────────────────────────────
+            // UPDATED: VacationRentals now accepts optional `season` and `location`
+            // query params so Seasonal Alert cards can deep-link with pre-filters.
+            //
+            // Both params default to "none" — existing navigation (BottomNavBar,
+            // HomeScreen) continues to work without any changes.
+            composable(
+                route = Screen.VacationRentals.route,
+                arguments = listOf(
+                    navArgument(Screen.VacationRentals.ARG_SEASON) {
+                        type = NavType.StringType
+                        defaultValue = "none"   // no season filter by default
+                    },
+                    navArgument(Screen.VacationRentals.ARG_LOCATION) {
+                        type = NavType.StringType
+                        defaultValue = "none"   // no city pre-filter by default
+                    }
+                )
+            ) { back ->
+                // Decode "none" sentinel back to empty string so the screen logic
+                // can simply check `seasonFilter.isEmpty()` instead of "none"
+                val rawSeason =
+                    back.arguments?.getString(Screen.VacationRentals.ARG_SEASON) ?: "none"
+                val rawLocation =
+                    back.arguments?.getString(Screen.VacationRentals.ARG_LOCATION) ?: "none"
+
+                VacationRentalsScreen(
+                    navController = navController,
+                    initialSeason = if (rawSeason == "none") "" else rawSeason,
+                    initialLocation = if (rawLocation == "none") "" else rawLocation
+                )
+            }
 
             composable(
-                route     = Screen.PreBooking.route,
+                route = Screen.PreBooking.route,
                 arguments = listOf(navArgument(Screen.PreBooking.ARG_PROPERTY_ID) {
                     type = NavType.StringType; defaultValue = ""
                 })
             ) { back ->
                 PreBookingScreen(
                     navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.PreBooking.ARG_PROPERTY_ID) ?: ""
+                    propertyId = back.arguments?.getString(Screen.PreBooking.ARG_PROPERTY_ID) ?: ""
                 )
             }
 
             composable(
-                route     = Screen.VacationCalendar.route,
-                arguments = listOf(navArgument(Screen.VacationCalendar.ARG_PROPERTY_ID) { type = NavType.StringType })
+                route = Screen.VacationCalendar.route,
+                arguments = listOf(navArgument(Screen.VacationCalendar.ARG_PROPERTY_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 VacationCalendarScreen(
                     navController = navController,
-                    propertyId    = back.arguments?.getString(Screen.VacationCalendar.ARG_PROPERTY_ID) ?: ""
+                    propertyId = back.arguments?.getString(Screen.VacationCalendar.ARG_PROPERTY_ID)
+                        ?: ""
                 )
             }
 
-// Tenants (landlord only)
+            // ── Tenants (landlord only) ───────────────────────────────────────
             composable(Screen.Tenants.route) {
                 if (isCurrentUserLandlord) {
                     TenantsScreen(navController = navController)
@@ -453,64 +548,93 @@ fun HavenHubNavGraph(
                 }
             }
 
-// Admin / Sub-admin screens
+            // ── Admin / Sub-admin screens ─────────────────────────────────────
             composable(Screen.AdminDashboard.route) {
                 if (isCurrentUserAnyAdmin) AdminDashboardScreen(navController = navController)
                 else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
             composable(Screen.ManageUsers.route) {
-                when { canManageUsers -> ManageUsersScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
+                when {
+                    canManageUsers -> ManageUsersScreen(navController)
+                    else -> LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
 
             composable(Screen.ManageProperties.route) {
-                when { canManageProperties -> ManagePropertiesScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
+                when {
+                    canManageProperties -> ManagePropertiesScreen(navController)
+                    else -> LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
 
             composable(Screen.ManageBookings.route) {
-                when { canManageBookings -> ManageBookingsScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
+                when {
+                    canManageBookings -> ManageBookingsScreen(navController)
+                    else -> LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
 
             composable(Screen.VerifyProperties.route) {
-                when { canVerifyProperties -> VerifyPropertiesScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
+                when {
+                    canVerifyProperties -> VerifyPropertiesScreen(navController)
+                    else -> LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
 
             composable(Screen.VerifyUsers.route) {
-                when { canVerifyUsers -> VerifyUsersScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
-            }
-
-            composable(
-                route     = Screen.PropertyVerificationDetail.route,
-                arguments = listOf(navArgument(Screen.PropertyVerificationDetail.ARG_PROPERTY_ID) { type = NavType.StringType })
-            ) { back ->
                 when {
-                    canVerifyProperties -> PropertyVerificationDetailScreen(
-                        navController = navController,
-                        propertyId    = back.arguments?.getString(Screen.PropertyVerificationDetail.ARG_PROPERTY_ID) ?: ""
-                    )
+                    canVerifyUsers -> VerifyUsersScreen(navController)
                     else -> LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
 
             composable(
-                route     = Screen.UserVerificationDetail.route,
-                arguments = listOf(navArgument(Screen.UserVerificationDetail.ARG_USER_ID) { type = NavType.StringType })
+                route = Screen.PropertyVerificationDetail.route,
+                arguments = listOf(navArgument(Screen.PropertyVerificationDetail.ARG_PROPERTY_ID) {
+                    type = NavType.StringType
+                })
+            ) { back ->
+                when {
+                    canVerifyProperties -> PropertyVerificationDetailScreen(
+                        navController = navController,
+                        propertyId = back.arguments?.getString(Screen.PropertyVerificationDetail.ARG_PROPERTY_ID)
+                            ?: ""
+                    )
+
+                    else -> LaunchedEffect(Unit) { navController.popBackStack() }
+                }
+            }
+
+            composable(
+                route = Screen.UserVerificationDetail.route,
+                arguments = listOf(navArgument(Screen.UserVerificationDetail.ARG_USER_ID) {
+                    type = NavType.StringType
+                })
             ) { back ->
                 when {
                     canVerifyUsers -> UserVerificationDetailScreen(
                         navController = navController,
-                        userId        = back.arguments?.getString(Screen.UserVerificationDetail.ARG_USER_ID) ?: ""
+                        userId = back.arguments?.getString(Screen.UserVerificationDetail.ARG_USER_ID)
+                            ?: ""
                     )
+
                     else -> LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
 
             composable(Screen.Reports.route) {
-                when { canViewReports -> ReportsScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
+                when {
+                    canViewReports -> ReportsScreen(navController)
+                    else -> LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
 
             composable(Screen.PaymentReports.route) {
-                when { canViewPaymentReports -> PaymentReportsScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
+                when {
+                    canViewPaymentReports -> PaymentReportsScreen(navController)
+                    else -> LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
 
             composable(Screen.ManageSeasonalAlerts.route) {

@@ -35,10 +35,16 @@ import com.example.havenhub.R
 @Composable
 fun VacationRentalsScreen(
     navController: NavController,
-    viewModel    : VacationViewModel = hiltViewModel()
+    initialSeason: String? = null,    // NavGraph se pass hone wala parameter
+    initialLocation: String? = null,  // NavGraph se pass hone wala parameter
+    viewModel: VacationViewModel = hiltViewModel()
 ) {
-    val uiState           by viewModel.uiState.collectAsState()
-    var selectedCategory  by remember { mutableStateOf("All") }
+    val uiState by viewModel.uiState.collectAsState()
+
+    // Agar NavGraph se koi specific location/city aayi hai toh woh initial state banegi, nahi toh "All"
+    var selectedCategory by remember {
+        mutableStateOf(if (!initialLocation.isNullOrEmpty() && initialLocation != "none") initialLocation else "All")
+    }
 
     val filteredProperties = if (selectedCategory == "All") {
         uiState.properties
@@ -300,11 +306,6 @@ fun VacationRentalsScreen(
             // ── Property Cards ────────────────────────────────────────────
             else {
                 items(filteredProperties) { prop ->
-                    // ── IMAGE SOURCE DECISION ─────────────────────────────
-                    // Auto-added properties (auto-id): imageUrls list mein
-                    //   ImgBB URLs hoti hain — AsyncImage se load karo.
-                    // Manually seeded (prop_001..prop_012): imageUrls empty
-                    //   hoti hain — purana drawable system use karo.
                     val networkImageUrl = prop.imageUrls.firstOrNull()
                         ?.takeIf { it.startsWith("http") }
 
@@ -315,7 +316,7 @@ fun VacationRentalsScreen(
                         price           = prop.pricePerNight,
                         rating          = prop.averageRating.toDouble(),
                         amenities       = prop.amenities,
-                        networkImageUrl = networkImageUrl,   // ← NEW
+                        networkImageUrl = networkImageUrl,
                         onBookClick     = {
                             navController.navigate(
                                 Screen.PreBooking.createRoute(prop.propertyId)
@@ -342,7 +343,7 @@ fun VacationPropertyCard(
     price           : Double,
     rating          : Double,
     amenities       : List<String>,
-    networkImageUrl : String?,          // ← NEW: ImgBB URL for auto-added props
+    networkImageUrl : String?,
     onBookClick     : () -> Unit,
     onCardClick     : () -> Unit
 ) {
@@ -368,17 +369,6 @@ fun VacationPropertyCard(
                     .fillMaxWidth()
                     .height(210.dp)
             ) {
-                // ══════════════════════════════════════════════════════════
-                // IMAGE LOADING FIX
-                //
-                // networkImageUrl != null  → auto-added property
-                //   Load from ImgBB URL using Coil AsyncImage.
-                //   Fallback: havenhub logo while loading / on error.
-                //
-                // networkImageUrl == null  → manually seeded property
-                //   Load from res/drawable using getPropertyImage(propertyId).
-                //   This is the old behaviour — unchanged.
-                // ══════════════════════════════════════════════════════════
                 if (networkImageUrl != null) {
                     AsyncImage(
                         model = networkImageUrl,

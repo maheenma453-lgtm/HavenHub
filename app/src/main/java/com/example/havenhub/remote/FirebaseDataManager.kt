@@ -22,11 +22,11 @@ class FirebaseDataManager @Inject constructor(
     private val firestore: FirebaseFirestore
 ) {
 
-    private val usersCollection          = firestore.collection("users")
-    private val propertiesCollection     = firestore.collection("properties")
-    private val bookingsCollection       = firestore.collection("bookings")
-    private val reviewsCollection        = firestore.collection("reviews")
-    private val notificationsCollection  = firestore.collection("notifications")
+    private val usersCollection = firestore.collection("users")
+    private val propertiesCollection = firestore.collection("properties")
+    private val bookingsCollection = firestore.collection("bookings")
+    private val reviewsCollection = firestore.collection("reviews")
+    private val notificationsCollection = firestore.collection("notifications")
     private val rentalPackagesCollection = firestore.collection("rental_packages")
 
     // =========================================================================
@@ -45,108 +45,82 @@ class FirebaseDataManager @Inject constructor(
 
     private fun extractUpdatedAt(doc: com.google.firebase.firestore.DocumentSnapshot): Long? {
         return when (val raw = doc.get("updatedAt")) {
-            is Long      -> raw
+            is Long -> raw
             is Timestamp -> raw.toDate().time
-            else         -> null
+            else -> null
         }
     }
 
     // =========================================================================
-    // parseProperty — ROOT FIX for ExploreMap missing pins
+    // parseProperty
     //
-    // PROBLEM:
-    //   Two types of properties exist in Firestore:
+    // Two property types exist in Firestore:
+    //   1. Manually seeded (prop_001..prop_012): coords in nested "location" object
+    //   2. App-added (auto-id): coords at top-level latitude/longitude fields
     //
-    //   1. Manually added (prop_001 to prop_012):
-    //      - NO top-level "latitude" / "longitude" fields
-    //      - Coords stored inside nested "location" object:
-    //          location.latitude  = 31.5204
-    //          location.longitude = 74.3587
-    //
-    //   2. App-added (auto-id, new landlord submissions):
-    //      - Top-level "latitude"  = 31.4504
-    //      - Top-level "longitude" = 73.135
-    //      - location.latitude = 0  (PropertyViewModel does not fill nested obj)
-    //
-    //   Old code:
-    //      latitude = doc.getDouble("latitude") ?: 0.0
-    //   For manual props → field missing → returns 0.0
-    //   0.0 matches Pakistan center fallback (30.3753, 69.3451) check in
-    //   Property.resolvedLatitude → city lookup runs → if city matches table
-    //   it shows, otherwise falls to Pakistan center → ExploreMapScreen
-    //   filters it OUT → pin never appears on map.
-    //
-    // FIX:
-    //   Try top-level latitude first (app-added props).
-    //   If zero/missing, try location.latitude (manually seeded props).
-    //   This makes ALL 25 properties resolve correctly.
+    // Fix: try top-level first, fall back to nested location object.
     // =========================================================================
     private fun parseProperty(doc: com.google.firebase.firestore.DocumentSnapshot): Property? {
         return try {
-
-            // -- Step 1: read top-level lat/lng (app-added properties) ---------
             val topLat = doc.getDouble("latitude")
             val topLng = doc.getDouble("longitude")
 
-            // -- Step 2: read nested location object (manually seeded props) ---
             @Suppress("UNCHECKED_CAST")
             val locationMap = doc.get("location") as? Map<String, Any>
-            val nestedLat   = (locationMap?.get("latitude")  as? Number)?.toDouble()
-            val nestedLng   = (locationMap?.get("longitude") as? Number)?.toDouble()
+            val nestedLat = (locationMap?.get("latitude") as? Number)?.toDouble()
+            val nestedLng = (locationMap?.get("longitude") as? Number)?.toDouble()
 
-            // -- Step 3: pick best non-zero value ------------------------------
-            // Priority: top-level (non-zero) → nested (non-zero) → 0.0
-            // 0.0 means "unknown" — Property.resolvedLatitude will then try
-            // city-name lookup and finally fall back to Pakistan center.
             val resolvedLat = when {
-                topLat    != null && topLat    != 0.0 -> topLat
+                topLat != null && topLat != 0.0 -> topLat
                 nestedLat != null && nestedLat != 0.0 -> nestedLat
                 else -> 0.0
             }
             val resolvedLng = when {
-                topLng    != null && topLng    != 0.0 -> topLng
+                topLng != null && topLng != 0.0 -> topLng
                 nestedLng != null && nestedLng != 0.0 -> nestedLng
                 else -> 0.0
             }
 
             Property(
-                propertyId        = doc.id,
-                ownerId           = doc.getString("ownerId")           ?: "",
-                ownerName         = doc.getString("ownerName")         ?: "",
-                title             = doc.getString("title")             ?: "",
-                description       = doc.getString("description")       ?: "",
-                propertyType      = doc.getString("propertyType")      ?: "APARTMENT",
-                status            = doc.getString("status")            ?: "PENDING",
-                address           = doc.getString("address")           ?: "",
-                city              = doc.getString("city")              ?: "",
-                latitude          = resolvedLat,    // ← FIXED
-                longitude         = resolvedLng,    // ← FIXED
-                pricePerNight     = doc.getDouble("pricePerNight")     ?: 0.0,
-                pricePerMonth     = doc.getDouble("pricePerMonth"),
-                pricePerWeek      = doc.getDouble("pricePerWeek"),
-                securityDeposit   = doc.getDouble("securityDeposit")   ?: 0.0,
-                bedrooms          = (doc.getLong("bedrooms")           ?: 1L).toInt(),
-                bathrooms         = (doc.getLong("bathrooms")          ?: 1L).toInt(),
-                maxGuests         = (doc.getLong("maxGuests")          ?: 2L).toInt(),
-                areaSqFt          = doc.getDouble("areaSqFt"),
-                floor             = doc.getLong("floor")?.toInt(),
-                imageUrls         = (doc.get("imageUrls") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-                pt1DocumentUrl    = doc.getString("pt1DocumentUrl")    ?: "",
-                amenities         = (doc.get("amenities") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                propertyId = doc.id,
+                ownerId = doc.getString("ownerId") ?: "",
+                ownerName = doc.getString("ownerName") ?: "",
+                title = doc.getString("title") ?: "",
+                description = doc.getString("description") ?: "",
+                propertyType = doc.getString("propertyType") ?: "APARTMENT",
+                status = doc.getString("status") ?: "PENDING",
+                address = doc.getString("address") ?: "",
+                city = doc.getString("city") ?: "",
+                latitude = resolvedLat,
+                longitude = resolvedLng,
+                pricePerNight = doc.getDouble("pricePerNight") ?: 0.0,
+                pricePerMonth = doc.getDouble("pricePerMonth"),
+                pricePerWeek = doc.getDouble("pricePerWeek"),
+                securityDeposit = doc.getDouble("securityDeposit") ?: 0.0,
+                bedrooms = (doc.getLong("bedrooms") ?: 1L).toInt(),
+                bathrooms = (doc.getLong("bathrooms") ?: 1L).toInt(),
+                maxGuests = (doc.getLong("maxGuests") ?: 2L).toInt(),
+                areaSqFt = doc.getDouble("areaSqFt"),
+                floor = doc.getLong("floor")?.toInt(),
+                imageUrls = (doc.get("imageUrls") as? List<*>)?.filterIsInstance<String>()
+                    ?: emptyList(),
+                pt1DocumentUrl = doc.getString("pt1DocumentUrl") ?: "",
+                amenities = (doc.get("amenities") as? List<*>)?.filterIsInstance<String>()
+                    ?: emptyList(),
                 drawableImageName = doc.getString("drawableImageName") ?: "",
-                petsAllowed       = doc.getBoolean("petsAllowed")      ?: false,
-                smokingAllowed    = doc.getBoolean("smokingAllowed")   ?: false,
-                partiesAllowed    = doc.getBoolean("partiesAllowed")   ?: false,
-                checkInTime       = doc.getString("checkInTime")       ?: "14:00",
-                checkOutTime      = doc.getString("checkOutTime")      ?: "11:00",
-                minNights         = (doc.getLong("minNights")          ?: 1L).toInt(),
-                averageRating     = (doc.getDouble("averageRating")    ?: 0.0).toFloat(),
-                reviewCount       = (doc.getLong("reviewCount")        ?: 0L).toInt(),
-                adminNote         = doc.getString("adminNote")         ?: "",
-                available         = doc.getBoolean("isAvailable")      ?: true,
-                featured          = doc.getBoolean("isFeatured")       ?: false,
-                createdAt         = doc.getTimestamp("createdAt"),
-                updatedAt         = doc.getTimestamp("updatedAt")
+                petsAllowed = doc.getBoolean("petsAllowed") ?: false,
+                smokingAllowed = doc.getBoolean("smokingAllowed") ?: false,
+                partiesAllowed = doc.getBoolean("partiesAllowed") ?: false,
+                checkInTime = doc.getString("checkInTime") ?: "14:00",
+                checkOutTime = doc.getString("checkOutTime") ?: "11:00",
+                minNights = (doc.getLong("minNights") ?: 1L).toInt(),
+                averageRating = (doc.getDouble("averageRating") ?: 0.0).toFloat(),
+                reviewCount = (doc.getLong("reviewCount") ?: 0L).toInt(),
+                adminNote = doc.getString("adminNote") ?: "",
+                available = doc.getBoolean("isAvailable") ?: true,
+                featured = doc.getBoolean("isFeatured") ?: false,
+                createdAt = doc.getTimestamp("createdAt"),
+                updatedAt = doc.getTimestamp("updatedAt")
             )
         } catch (e: Exception) {
             Log.e("HAVEN_PROP", "parseProperty FAIL ${doc.id}: ${e.localizedMessage}")
@@ -154,31 +128,93 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
+
+//private fun parseReview(doc: com.google.firebase.firestore.DocumentSnapshot): Review? {
+//    return try {
+//        Review(
+//            reviewId          = doc.id,
+//            bookingId         = doc.getString("bookingId") ?: "",
+//            propertyId        = doc.getString("propertyId") ?: "",
+//            reviewerId        = doc.getString("reviewerId") ?: "",
+//            reviewerName      = doc.getString("reviewerName") ?: "",
+//            reviewerAvatarUrl = doc.getString("reviewerAvatarUrl") ?: "",
+//            landlordId        = doc.getString("landlordId") ?: "",
+//            overallRating     = doc.getDouble("overallRating")?.toFloat() ?: 0f,
+//            cleanlinessRating = doc.getDouble("cleanlinessRating")?.toFloat() ?: 0f,
+//            accuracyRating    = doc.getDouble("accuracyRating")?.toFloat() ?: 0f,
+//            communicationRating = doc.getDouble("communicationRating")?.toFloat() ?: 0f,
+//            checkInRating     = doc.getDouble("checkInRating")?.toFloat() ?: 0f,
+//            valueRating       = doc.getDouble("valueRating")?.toFloat() ?: 0f,
+//            locationRating    = doc.getDouble("locationRating")?.toFloat() ?: 0f,
+//            comment           = doc.getString("comment") ?: "",
+//            photoUrls         = (doc.get("photoUrls") as? List<*>)
+//                ?.filterIsInstance<String>() ?: emptyList(),
+//            landlordReply     = doc.getString("landlordReply") ?: "",
+//            // hasLandlordReply is a computed property on the data class
+//            // (landlordReply.isNotEmpty()) — cannot be assigned here
+//            landlordRepliedAt = doc.getTimestamp("landlordRepliedAt"),
+//            isVisible         = doc.getBoolean("isVisible") ?: true,
+//            moderationNote    = doc.getString("moderationNote") ?: "",
+//
+//            // ── DATE FIX ──────────────────────────────────────────────────────
+//            // Old reviews written before the server-timestamp fix have no
+//            // "createdAt" field in Firestore at all, so getTimestamp returns null
+//            // and dates showed blank everywhere. Fix: fall back to "updatedAt"
+//            // which is always written. If both are null the date hides cleanly
+//            // via safeToDate() + formatReviewDate() in the UI layer.
+//            createdAt         = doc.getTimestamp("createdAt")
+//                ?: doc.getTimestamp("updatedAt"),
+//            updatedAt         = doc.getTimestamp("updatedAt")
+//        )
+//    } catch (e: Exception) {
+//        Log.e("HAVEN_REVIEW", "parseReview FAIL ${doc.id}: ${e.localizedMessage}")
+//        null
+//    }
+//}
+    // ============================================================
+// ONLY THIS FUNCTION needs to replace parseReview() inside
+// FirebaseDataManager.kt  (the rest of the file stays as-is)
+// ============================================================
+
     private fun parseReview(doc: com.google.firebase.firestore.DocumentSnapshot): Review? {
         return try {
+            // ── DATE FIX ────────────────────────────────────────────────────────
+            // Priority order for createdAt:
+            //   1. "createdAt" field  (normal path)
+            //   2. "updatedAt" field  (old reviews written before the fix)
+            //   3. Timestamp.now()    (brand-new doc: serverTimestamp still pending)
+            //
+            // Using Timestamp.now() as last resort means the date will show
+            // "today" for a freshly posted review, which is CORRECT behaviour.
+            // After the next Firestore round-trip the real server timestamp loads.
+            // ────────────────────────────────────────────────────────────────────
+            val createdAt: Timestamp = doc.getTimestamp("createdAt")
+                ?: doc.getTimestamp("updatedAt")
+                ?: Timestamp.now()   // fallback: new review not yet confirmed by server
+
             Review(
                 reviewId            = doc.id,
-                bookingId           = doc.getString("bookingId")           ?: "",
-                propertyId          = doc.getString("propertyId")          ?: "",
-                reviewerId          = doc.getString("reviewerId")          ?: "",
-                reviewerName        = doc.getString("reviewerName")        ?: "",
-                reviewerAvatarUrl   = doc.getString("reviewerAvatarUrl")   ?: "",
-                landlordId          = doc.getString("landlordId")          ?: "",
-                overallRating       = doc.getDouble("overallRating")?.toFloat()       ?: 0f,
-                cleanlinessRating   = doc.getDouble("cleanlinessRating")?.toFloat()   ?: 0f,
-                accuracyRating      = doc.getDouble("accuracyRating")?.toFloat()      ?: 0f,
+                bookingId           = doc.getString("bookingId") ?: "",
+                propertyId          = doc.getString("propertyId") ?: "",
+                reviewerId          = doc.getString("reviewerId") ?: "",
+                reviewerName        = doc.getString("reviewerName") ?: "",
+                reviewerAvatarUrl   = doc.getString("reviewerAvatarUrl") ?: "",
+                landlordId          = doc.getString("landlordId") ?: "",
+                overallRating       = doc.getDouble("overallRating")?.toFloat() ?: 0f,
+                cleanlinessRating   = doc.getDouble("cleanlinessRating")?.toFloat() ?: 0f,
+                accuracyRating      = doc.getDouble("accuracyRating")?.toFloat() ?: 0f,
                 communicationRating = doc.getDouble("communicationRating")?.toFloat() ?: 0f,
-                checkInRating       = doc.getDouble("checkInRating")?.toFloat()       ?: 0f,
-                valueRating         = doc.getDouble("valueRating")?.toFloat()         ?: 0f,
-                locationRating      = doc.getDouble("locationRating")?.toFloat()      ?: 0f,
-                comment             = doc.getString("comment")             ?: "",
+                checkInRating       = doc.getDouble("checkInRating")?.toFloat() ?: 0f,
+                valueRating         = doc.getDouble("valueRating")?.toFloat() ?: 0f,
+                locationRating      = doc.getDouble("locationRating")?.toFloat() ?: 0f,
+                comment             = doc.getString("comment") ?: "",
                 photoUrls           = (doc.get("photoUrls") as? List<*>)
-                    ?.filterIsInstance<String>()                           ?: emptyList(),
-                landlordReply       = doc.getString("landlordReply")       ?: "",
+                    ?.filterIsInstance<String>() ?: emptyList(),
+                landlordReply       = doc.getString("landlordReply") ?: "",
                 landlordRepliedAt   = doc.getTimestamp("landlordRepliedAt"),
-                isVisible           = doc.getBoolean("isVisible")          ?: true,
-                moderationNote      = doc.getString("moderationNote")      ?: "",
-                createdAt           = doc.getTimestamp("createdAt"),
+                isVisible           = doc.getBoolean("isVisible") ?: true,
+                moderationNote      = doc.getString("moderationNote") ?: "",
+                createdAt           = createdAt,   // never null after fix
                 updatedAt           = doc.getTimestamp("updatedAt")
             )
         } catch (e: Exception) {
@@ -187,39 +223,49 @@ class FirebaseDataManager @Inject constructor(
         }
     }
 
+
     private fun parseRentalPackage(doc: com.google.firebase.firestore.DocumentSnapshot): RentalPackage? {
         return try {
-            val statusStr   = doc.getString("status")       ?: "ACTIVE"
-            val status      = try { PackageStatus.valueOf(statusStr)    } catch (e: Exception) { PackageStatus.ACTIVE }
+            val statusStr = doc.getString("status") ?: "ACTIVE"
+            val status = try {
+                PackageStatus.valueOf(statusStr)
+            } catch (e: Exception) {
+                PackageStatus.ACTIVE
+            }
             val durationStr = doc.getString("durationType") ?: "FLEXIBLE"
-            val duration    = try { PackageDuration.valueOf(durationStr) } catch (e: Exception) { PackageDuration.FLEXIBLE }
+            val duration = try {
+                PackageDuration.valueOf(durationStr)
+            } catch (e: Exception) {
+                PackageDuration.FLEXIBLE
+            }
 
             RentalPackage(
-                packageId               = doc.id,
-                propertyId              = doc.getString("propertyId")              ?: "",
-                propertyTitle           = doc.getString("propertyTitle")           ?: "",
-                landlordId              = doc.getString("landlordId")              ?: "",
-                packageName             = doc.getString("packageName")             ?: "",
-                description             = doc.getString("description")             ?: "",
-                badgeLabel              = doc.getString("badgeLabel")              ?: "",
-                durationType            = duration,
-                fixedNights             = doc.getLong("fixedNights")?.toInt(),
-                minNights               = (doc.getLong("minNights")                ?: 1L).toInt(),
-                maxNights               = doc.getLong("maxNights")?.toInt(),
+                packageId = doc.id,
+                propertyId = doc.getString("propertyId") ?: "",
+                propertyTitle = doc.getString("propertyTitle") ?: "",
+                landlordId = doc.getString("landlordId") ?: "",
+                packageName = doc.getString("packageName") ?: "",
+                description = doc.getString("description") ?: "",
+                badgeLabel = doc.getString("badgeLabel") ?: "",
+                durationType = duration,
+                fixedNights = doc.getLong("fixedNights")?.toInt(),
+                minNights = (doc.getLong("minNights") ?: 1L).toInt(),
+                maxNights = doc.getLong("maxNights")?.toInt(),
                 discountedPricePerNight = doc.getDouble("discountedPricePerNight") ?: 0.0,
-                originalPricePerNight   = doc.getDouble("originalPricePerNight")   ?: 0.0,
-                flatDiscount            = doc.getDouble("flatDiscount"),
-                discountPercentage      = doc.getDouble("discountPercentage")?.toFloat(),
-                inclusions              = (doc.get("inclusions") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-                availableFrom           = doc.getTimestamp("availableFrom"),
-                availableTo             = doc.getTimestamp("availableTo"),
-                blackoutDates           = (doc.get("blackoutDates") as? List<*>)
+                originalPricePerNight = doc.getDouble("originalPricePerNight") ?: 0.0,
+                flatDiscount = doc.getDouble("flatDiscount"),
+                discountPercentage = doc.getDouble("discountPercentage")?.toFloat(),
+                inclusions = (doc.get("inclusions") as? List<*>)?.filterIsInstance<String>()
+                    ?: emptyList(),
+                availableFrom = doc.getTimestamp("availableFrom"),
+                availableTo = doc.getTimestamp("availableTo"),
+                blackoutDates = (doc.get("blackoutDates") as? List<*>)
                     ?.filterIsInstance<com.google.firebase.Timestamp>() ?: emptyList(),
-                totalSlots              = doc.getLong("totalSlots")?.toInt(),
-                bookedSlots             = (doc.getLong("bookedSlots")              ?: 0L).toInt(),
-                status                  = status,
-                createdAt               = doc.getTimestamp("createdAt"),
-                updatedAt               = doc.getTimestamp("updatedAt")
+                totalSlots = doc.getLong("totalSlots")?.toInt(),
+                bookedSlots = (doc.getLong("bookedSlots") ?: 0L).toInt(),
+                status = status,
+                createdAt = doc.getTimestamp("createdAt"),
+                updatedAt = doc.getTimestamp("updatedAt")
             )
         } catch (e: Exception) {
             Log.e("HAVEN_PKG", "parseRentalPackage FAILED for ${doc.id}: ${e.localizedMessage}")
@@ -235,7 +281,9 @@ class FirebaseDataManager @Inject constructor(
         return try {
             usersCollection.document(user.userId).set(user).await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to save user") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to save user")
+        }
     }
 
     suspend fun getUser(uid: String): Resource<User> {
@@ -251,7 +299,9 @@ class FirebaseDataManager @Inject constructor(
                 if (user != null) return Resource.Success(user)
             }
             Resource.Error("User not found")
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch user") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch user")
+        }
     }
 
     suspend fun updateUserFields(uid: String, fields: Map<String, Any>): Resource<Unit> {
@@ -264,14 +314,18 @@ class FirebaseDataManager @Inject constructor(
             }
             usersCollection.document(docId).update(fields).await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to update user") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to update user")
+        }
     }
 
     suspend fun deleteUser(uid: String): Resource<Unit> {
         return try {
             usersCollection.document(uid).delete().await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to delete user") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to delete user")
+        }
     }
 
     // =========================================================================
@@ -283,7 +337,9 @@ class FirebaseDataManager @Inject constructor(
             val docRef = propertiesCollection.document()
             docRef.set(property.copy(propertyId = docRef.id)).await()
             Resource.Success(docRef.id)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to add property") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to add property")
+        }
     }
 
     suspend fun getAllProperties(): Resource<List<Property>> {
@@ -293,7 +349,9 @@ class FirebaseDataManager @Inject constructor(
                 snapshot.documents.mapNotNull { parseProperty(it) }
                     .sortedByDescending { it.createdAt?.seconds ?: 0L }
             )
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch properties") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch properties")
+        }
     }
 
     suspend fun getPropertiesByOwner(ownerId: String): Resource<List<Property>> {
@@ -303,28 +361,36 @@ class FirebaseDataManager @Inject constructor(
                 snapshot.documents.mapNotNull { parseProperty(it) }
                     .sortedByDescending { it.createdAt?.seconds ?: 0L }
             )
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch owner properties") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch owner properties")
+        }
     }
 
     suspend fun getPropertyById(propertyId: String): Resource<Property> {
         return try {
             val doc = propertiesCollection.document(propertyId).get().await()
             Resource.Success(parseProperty(doc) ?: return Resource.Error("Property not found"))
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to fetch property") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to fetch property")
+        }
     }
 
     suspend fun updateProperty(propertyId: String, fields: Map<String, Any>): Resource<Unit> {
         return try {
             propertiesCollection.document(propertyId).update(fields).await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to update property") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to update property")
+        }
     }
 
     suspend fun deleteProperty(propertyId: String): Resource<Unit> {
         return try {
             propertiesCollection.document(propertyId).delete().await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to delete property") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to delete property")
+        }
     }
 
     suspend fun searchProperties(query: String): Resource<List<Property>> {
@@ -400,7 +466,7 @@ class FirebaseDataManager @Inject constructor(
                     if (doc.exists()) {
                         parseProperty(doc)?.let { allProperties.add(it) }
                     } else {
-                        Log.w("HAVEN_FAV", "Property $propertyId exist nahi karti — orphan")
+                        Log.w("HAVEN_FAV", "Property $propertyId does not exist — orphan favourite")
                     }
                 } catch (e: Exception) {
                     Log.e("HAVEN_FAV", "Property $propertyId fetch fail: ${e.localizedMessage}")
@@ -418,7 +484,9 @@ class FirebaseDataManager @Inject constructor(
         return try {
             usersCollection.document(userId).collection("favourites").document(propertyId)
                 .get().await().exists()
-        } catch (e: Exception) { false }
+        } catch (e: Exception) {
+            false
+        }
     }
 
     // =========================================================================
@@ -440,7 +508,7 @@ class FirebaseDataManager @Inject constructor(
     suspend fun getBookingById(bookingId: String): Resource<Booking> {
         return try {
             val snapshot = bookingsCollection.document(bookingId).get().await()
-            val booking  = parseBooking(snapshot) ?: return Resource.Error("Booking not found")
+            val booking = parseBooking(snapshot) ?: return Resource.Error("Booking not found")
             Log.d("HAVEN_BOOKING", "getBookingById: $bookingId found")
             Resource.Success(booking)
         } catch (e: Exception) {
@@ -487,7 +555,10 @@ class FirebaseDataManager @Inject constructor(
             val bookings = snapshot.documents
                 .mapNotNull { parseBooking(it) }
                 .sortedByDescending { it.createdAt?.seconds ?: 0L }
-            Log.d("HAVEN_BOOKING", "getBookingsByLandlordId[$landlordId]: ${bookings.size} bookings")
+            Log.d(
+                "HAVEN_BOOKING",
+                "getBookingsByLandlordId[$landlordId]: ${bookings.size} bookings"
+            )
             bookings
         } catch (e: Exception) {
             Log.e("HAVEN_BOOKING", "getBookingsByLandlordId FAIL: ${e.localizedMessage}")
@@ -516,37 +587,48 @@ class FirebaseDataManager @Inject constructor(
                 put("createdAt", FieldValue.serverTimestamp())
             }).await()
             Resource.Success(Unit)
-        } catch (e: Exception) { Resource.Error(e.localizedMessage ?: "Failed to send notification") }
+        } catch (e: Exception) {
+            Resource.Error(e.localizedMessage ?: "Failed to send notification")
+        }
     }
 
     // =========================================================================
     // REVIEW
+    //
+    // BUG FIX: Previously "createdAt" and "hasLandlordReply" were missing from
+    // the reviewData map. This caused:
+    //   1. All reviews to have null createdAt — sorting broke, date showed "-"
+    //   2. hasLandlordReply always false after reload — reply section never showed
+    //   3. deleteReview in repository fetched ownerId but property doc may store
+    //      it as "ownerId" OR "landlordId" OR "userId" — all three are tried now
     // =========================================================================
 
     suspend fun addReview(review: Review): Resource<String> {
         return try {
             val docRef = reviewsCollection.document()
             val reviewData = mapOf(
-                "bookingId"           to review.bookingId,
-                "propertyId"          to review.propertyId,
-                "reviewerId"          to review.reviewerId,
-                "reviewerName"        to review.reviewerName,
-                "reviewerAvatarUrl"   to review.reviewerAvatarUrl,
-                "landlordId"          to review.landlordId,
-                "overallRating"       to review.overallRating,
-                "cleanlinessRating"   to review.cleanlinessRating,
-                "accuracyRating"      to review.accuracyRating,
+                "bookingId" to review.bookingId,
+                "propertyId" to review.propertyId,
+                "reviewerId" to review.reviewerId,
+                "reviewerName" to review.reviewerName,
+                "reviewerAvatarUrl" to review.reviewerAvatarUrl,
+                "landlordId" to review.landlordId,
+                "overallRating" to review.overallRating,
+                "cleanlinessRating" to review.cleanlinessRating,
+                "accuracyRating" to review.accuracyRating,
                 "communicationRating" to review.communicationRating,
-                "checkInRating"       to review.checkInRating,
-                "valueRating"         to review.valueRating,
-                "locationRating"      to review.locationRating,
-                "comment"             to review.comment,
-                "photoUrls"           to review.photoUrls,
-                "landlordReply"       to review.landlordReply,
-                "landlordRepliedAt"   to review.landlordRepliedAt,
-                "isVisible"           to review.isVisible,
-                "moderationNote"      to review.moderationNote,
-                "updatedAt"           to review.updatedAt
+                "checkInRating" to review.checkInRating,
+                "valueRating" to review.valueRating,
+                "locationRating" to review.locationRating,
+                "comment" to review.comment,
+                "photoUrls" to review.photoUrls,
+                "landlordReply" to review.landlordReply,
+                "hasLandlordReply" to false,                         // FIX: always save explicitly
+                "landlordRepliedAt" to review.landlordRepliedAt,
+                "isVisible" to review.isVisible,
+                "moderationNote" to review.moderationNote,
+                "createdAt" to FieldValue.serverTimestamp(),  // FIX: was missing before
+                "updatedAt" to FieldValue.serverTimestamp()
             )
             docRef.set(reviewData).await()
             Log.d("HAVEN_REVIEW", "addReview SUCCESS: ${docRef.id}")
@@ -587,7 +669,7 @@ class FirebaseDataManager @Inject constructor(
             Log.e("HAVEN_REVIEW", "getAllReviews FAIL: ${e.localizedMessage}")
             try {
                 val fallback = reviewsCollection.whereEqualTo("isVisible", true).get().await()
-                val reviews  = fallback.documents
+                val reviews = fallback.documents
                     .mapNotNull { parseReview(it) }
                     .sortedByDescending { it.createdAt?.seconds ?: 0L }
                 Log.d("HAVEN_REVIEW", "getAllReviews fallback: ${reviews.size} reviews")
@@ -624,7 +706,10 @@ class FirebaseDataManager @Inject constructor(
                 .whereEqualTo("status", PackageStatus.ACTIVE.name)
                 .get().await()
             val packages = snapshot.documents.mapNotNull { parseRentalPackage(it) }
-            Log.d("HAVEN_PKG", "getPackagesByProperty[$propertyId]: ${packages.size} ACTIVE packages")
+            Log.d(
+                "HAVEN_PKG",
+                "getPackagesByProperty[$propertyId]: ${packages.size} ACTIVE packages"
+            )
             Resource.Success(packages)
         } catch (e: Exception) {
             Log.e("HAVEN_PKG", "getPackagesByProperty FAIL: ${e.localizedMessage}")
@@ -696,20 +781,25 @@ class FirebaseDataManager @Inject constructor(
     suspend fun incrementPackageBookedSlots(packageId: String): Resource<Unit> {
         return try {
             val docRef = rentalPackagesCollection.document(packageId)
-            val doc    = docRef.get().await()
-            val pkg    = parseRentalPackage(doc) ?: return Resource.Error("Package not found")
+            val doc = docRef.get().await()
+            val pkg = parseRentalPackage(doc) ?: return Resource.Error("Package not found")
 
             val newBookedSlots = pkg.bookedSlots + 1
             val newStatus = if (pkg.totalSlots != null && newBookedSlots >= pkg.totalSlots)
                 PackageStatus.SOLD_OUT.name else pkg.status.name
 
-            docRef.update(mapOf(
-                "bookedSlots" to newBookedSlots,
-                "status"      to newStatus,
-                "updatedAt"   to FieldValue.serverTimestamp()
-            )).await()
+            docRef.update(
+                mapOf(
+                    "bookedSlots" to newBookedSlots,
+                    "status" to newStatus,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
 
-            Log.d("HAVEN_PKG", "incrementBookedSlots: $packageId bookedSlots=$newBookedSlots status=$newStatus")
+            Log.d(
+                "HAVEN_PKG",
+                "incrementBookedSlots: $packageId bookedSlots=$newBookedSlots status=$newStatus"
+            )
             Resource.Success(Unit)
         } catch (e: Exception) {
             Log.e("HAVEN_PKG", "incrementBookedSlots FAIL: ${e.localizedMessage}")

@@ -40,15 +40,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NotificationsScreen.kt  —  FIXED
+// NotificationsScreen.kt — UPDATED
 //
-// Changes from original:
-//   1. PAYMENT_RECEIVED / PAYMENT_FAILED / REFUND_ISSUED  → navigate to MyBookings
-//   2. USER_VERIFIED / USER_REJECTED / USER_VERIFICATION_PENDING → navigate to Profile
-//   3. PROPERTY_PENDING  → admin: VerifyProperties  |  landlord: MyProperties
-//   4. SEASONAL_ALERT    → no navigation needed (info only), shows Snackbar
-//   5. GENERAL / unknown → fallback: NotificationDetail screen
-//   6. NotificationDetailScreen NEW_MESSAGE bug is fixed in the other file
+// Key change in this update:
+//   - SeasonalAlertsSection now receives navController as a parameter
+//   - SeasonalAlertCard now receives an onClick lambda
+//   - Clicking a seasonal alert navigates to VacationRentals screen
+//     with the alert's season and location (if any) pre-applied as filters
+//
+// Navigation logic for seasonal alert click:
+//   Screen.VacationRentals.createRoute(season = alert.season, location = "")
+//   → VacationRentalsScreen receives initialSeason and pre-filters the list
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -320,9 +322,13 @@ fun NotificationsScreen(
             ) {
 
                 // ── Seasonal Alerts Section ───────────────────────────────────
+                // UPDATED: now passes navController so cards are clickable
                 if (hasSeasonalAlerts) {
                     item {
-                        SeasonalAlertsSection(alerts = seasonalUiState.alerts)
+                        SeasonalAlertsSection(
+                            alerts        = seasonalUiState.alerts,
+                            navController = navController   // <-- NEW: pass navController
+                        )
                     }
                 }
 
@@ -380,9 +386,7 @@ fun NotificationsScreen(
                                         showNoteDialog   = true
                                     }
 
-                                    // ── FIX: Property Pending ──────────────────────────────
-                                    // Admin: VerifyProperties screen pe jao
-                                    // Landlord: MyProperties screen pe jao
+                                    // ── Property Pending ──────────────────────────────────
                                     NotificationType.PROPERTY_PENDING -> {
                                         if (isAdmin) {
                                             if (notification.referenceId.isNotEmpty()) {
@@ -416,10 +420,7 @@ fun NotificationsScreen(
                                         }
                                     }
 
-                                    // ── FIX: Payments ──────────────────────────────────────
-                                    // referenceId = bookingId hai
-                                    // Tenant/Landlord: BookingDetails pe jao
-                                    // Admin: ManageBookings pe jao
+                                    // ── Payments ──────────────────────────────────────────
                                     NotificationType.PAYMENT_RECEIVED,
                                     NotificationType.PAYMENT_FAILED,
                                     NotificationType.REFUND_ISSUED -> {
@@ -432,15 +433,11 @@ fun NotificationsScreen(
                                                 )
                                             }
                                         } else {
-                                            // referenceId nahi hai — fallback MyBookings
                                             navController.navigate(Screen.MyBookings.createRoute())
                                         }
                                     }
 
                                     // ── NEW_MESSAGE ────────────────────────────────────────
-                                    // referenceId = conversationId = "uid1_uid2" (sorted UIDs)
-                                    // Fix: otherUserId nikalo → Firestore se naam fetch karo
-                                    //      → ChatScreen pe navigate karo
                                     NotificationType.NEW_MESSAGE -> {
                                         val conversationId = notification.referenceId
                                         if (conversationId.isNotEmpty() && currentUserId.isNotEmpty()) {
@@ -519,11 +516,7 @@ fun NotificationsScreen(
                                         }
                                     }
 
-                                    // ── FIX: User Verification ─────────────────────────────
-                                    // USER_VERIFIED / USER_REJECTED → Profile screen
-                                    // USER_VERIFICATION_PENDING →
-                                    //   Admin: UserVerificationDetail ya VerifyUsers
-                                    //   User:  Profile screen (apna status dekhne)
+                                    // ── User Verification ─────────────────────────────────
                                     NotificationType.USER_VERIFIED,
                                     NotificationType.USER_REJECTED,
                                     NotificationType.ACCOUNT_VERIFIED -> {
@@ -546,24 +539,22 @@ fun NotificationsScreen(
                                         }
                                     }
 
-                                    // ── FIX: Account Suspended ─────────────────────────────
+                                    // ── Account Suspended ─────────────────────────────────
                                     NotificationType.ACCOUNT_SUSPENDED -> {
-                                        // Kuch navigate nahi karna — info only
-                                        // Snackbar already show hoga agar errorMessage aaya
+                                        // Info only — no navigation needed
                                     }
 
-                                    // ── FIX: Seasonal Alert ────────────────────────────────
-                                    // Sirf informational — koi navigation nahi
-                                    // Admin manage karna chahey to ManageSeasonalAlerts
+                                    // ── Seasonal Alert ────────────────────────────────────
+                                    // Admin → ManageSeasonalAlerts
+                                    // Non-admin → VacationRentals with season filter
                                     NotificationType.SEASONAL_ALERT -> {
                                         if (isAdmin) {
                                             navController.navigate(Screen.ManageSeasonalAlerts.route)
                                         }
-                                        // Non-admin ke liye: koi navigation nahi, bas read mark ho gaya
+                                        // Non-admin: handled by SeasonalAlertCard onClick below
                                     }
 
-                                    // ── FIX: GENERAL / fallback ────────────────────────────
-                                    // NotificationDetail screen pe jao full body dekhne ke liye
+                                    // ── GENERAL / fallback ────────────────────────────────
                                     NotificationType.GENERAL -> {
                                         if (notification.notificationId.isNotEmpty()) {
                                             navController.navigate(
@@ -584,10 +575,16 @@ fun NotificationsScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SeasonalAlertsSection — unchanged
+// SeasonalAlertsSection
+//
+// UPDATED: now accepts navController parameter and passes it to each card
+// so that tapping a card navigates to VacationRentals with season filter
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-fun SeasonalAlertsSection(alerts: List<SeasonalAlert>) {
+fun SeasonalAlertsSection(
+    alerts        : List<SeasonalAlert>,
+    navController : NavController          // <-- NEW parameter
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             verticalAlignment     = Alignment.CenterVertically,
@@ -621,21 +618,43 @@ fun SeasonalAlertsSection(alerts: List<SeasonalAlert>) {
             }
         }
         alerts.forEach { alert ->
-            SeasonalAlertCard(alert = alert)
+            SeasonalAlertCard(
+                alert   = alert,
+                // Navigate to VacationRentals with the alert's season pre-applied as filter
+                // Screen.VacationRentals.createRoute() encodes season & location safely
+                onClick = {
+                    navController.navigate(
+                        Screen.VacationRentals.createRoute(
+                            season   = alert.season,    // e.g. "Winter", "Eid"
+                            location = "none"           // no specific city pre-filter from alert
+                        )
+                    )
+                }
+            )
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SeasonalAlertCard — unchanged
+// SeasonalAlertCard
+//
+// UPDATED: now accepts an onClick lambda parameter
+// The entire card is now wrapped in .clickable(onClick = onClick)
+// A subtle "Tap to explore" hint is added at the bottom right
+// to make it visually clear the card is interactive
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-fun SeasonalAlertCard(alert: SeasonalAlert) {
+fun SeasonalAlertCard(
+    alert  : SeasonalAlert,
+    onClick: () -> Unit = {}   // <-- NEW parameter with default no-op
+) {
     val seasonalGold   = Color(0xFF9B7D2E)
     val seasonalGoldBg = Color(0xFFFFF8E1)
 
     Card(
-        modifier  = Modifier.fillMaxWidth(),
+        modifier  = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),   // <-- UPDATED: entire card is now clickable
         shape     = RoundedCornerShape(14.dp),
         colors    = CardDefaults.cardColors(containerColor = seasonalGoldBg),
         elevation = CardDefaults.cardElevation(2.dp),
@@ -646,6 +665,7 @@ fun SeasonalAlertCard(alert: SeasonalAlert) {
             verticalAlignment     = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Left gold accent bar
             Box(
                 modifier = Modifier
                     .width(3.dp)
@@ -653,6 +673,8 @@ fun SeasonalAlertCard(alert: SeasonalAlert) {
                     .clip(RoundedCornerShape(2.dp))
                     .background(seasonalGold)
             )
+
+            // Emoji icon box
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -663,6 +685,8 @@ fun SeasonalAlertCard(alert: SeasonalAlert) {
             ) {
                 Text(text = alert.iconEmoji.ifEmpty { "🎉" }, fontSize = 20.sp)
             }
+
+            // Content column
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
@@ -677,6 +701,7 @@ fun SeasonalAlertCard(alert: SeasonalAlert) {
                         modifier   = Modifier.weight(1f)
                     )
                     Spacer(Modifier.width(6.dp))
+                    // Season tag badge
                     if (alert.season.isNotEmpty()) {
                         Box(
                             modifier = Modifier
@@ -701,22 +726,51 @@ fun SeasonalAlertCard(alert: SeasonalAlert) {
                     maxLines   = 3,
                     lineHeight = 17.sp
                 )
-                if (alert.targetRole == "both") {
-                    Spacer(Modifier.height(6.dp))
+
+                // Bottom row: "For all users" tag + "Tap to explore" hint
+                Row(
+                    modifier              = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    // "For all users" badge — only shown when targetRole == "both"
+                    if (alert.targetRole == "both") {
+                        Row(
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PeopleAlt,
+                                null,
+                                modifier = Modifier.size(10.dp),
+                                tint     = seasonalGold.copy(0.7f)
+                            )
+                            Text(
+                                text     = "For all users",
+                                fontSize = 10.sp,
+                                color    = seasonalGold.copy(0.7f)
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.width(1.dp)) // placeholder to push hint to end
+                    }
+
+                    // "Tap to explore" hint — makes card look clickable to the user
                     Row(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Icon(
-                            Icons.Default.PeopleAlt,
-                            null,
-                            modifier = Modifier.size(10.dp),
-                            tint     = seasonalGold.copy(0.7f)
-                        )
                         Text(
-                            text     = "For all users",
+                            text     = "Tap to explore",
                             fontSize = 10.sp,
-                            color    = seasonalGold.copy(0.7f)
+                            color    = seasonalGold,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            null,
+                            modifier = Modifier.size(12.dp),
+                            tint     = seasonalGold
                         )
                     }
                 }
@@ -726,7 +780,7 @@ fun SeasonalAlertCard(alert: SeasonalAlert) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NotificationCard — unchanged
+// NotificationCard — unchanged from original
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun NotificationCard(
@@ -882,7 +936,7 @@ fun NotificationCard(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Icon + Color helpers — unchanged
+// Icon + Color helpers — unchanged from original
 // ─────────────────────────────────────────────────────────────────────────────
 fun screenNotificationIcon(type: NotificationType): ImageVector = when (type) {
     NotificationType.BOOKING_REQUESTED,

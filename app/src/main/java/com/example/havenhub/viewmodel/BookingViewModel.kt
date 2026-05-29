@@ -45,6 +45,9 @@ class BookingViewModel @Inject constructor(
     private var cachedRole: String = "tenant"
     private var isCreatingBooking: Boolean = false
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // LOAD BOOKINGS
+    // ─────────────────────────────────────────────────────────────────────────
     fun loadBookings(userId: String, role: String) {
         Log.d("BOOKING_VM", "loadBookings CALLED — userId='$userId' role='$role'")
         if (userId.isBlank()) {
@@ -76,23 +79,20 @@ class BookingViewModel @Inject constructor(
         if (cachedUserId.isNotEmpty()) loadBookings(cachedUserId, cachedRole)
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // LOAD SINGLE BOOKING
+    // ─────────────────────────────────────────────────────────────────────────
     fun loadBookingById(bookingId: String) {
         if (bookingId.isBlank()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             when (val result = repository.getBookingById(bookingId)) {
                 is Resource.Success -> _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        currentBooking = result.data
-                    )
+                    it.copy(isLoading = false, currentBooking = result.data)
                 }
 
                 is Resource.Error -> _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = result.message
-                    )
+                    it.copy(isLoading = false, errorMessage = result.message)
                 }
 
                 else -> {}
@@ -100,6 +100,9 @@ class BookingViewModel @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // CREATE BOOKING
+    // ─────────────────────────────────────────────────────────────────────────
     fun createBooking(booking: Booking) {
         if (isCreatingBooking) {
             Log.w("BOOKING_VM", "Already creating — ignored"); return
@@ -142,23 +145,23 @@ class BookingViewModel @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // UPDATE STATUS  (used by admin / landlord to approve / reject / complete)
+    //
+    // Delegates to BookingRepository.updateBookingStatus() which now also
+    // syncs paymentStatus automatically via resolvePaymentStatus().
+    // ─────────────────────────────────────────────────────────────────────────
     fun updateStatusByAdmin(bookingId: String, newStatus: BookingStatus) {
         if (bookingId.isBlank()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             when (val result = repository.updateBookingStatus(bookingId, newStatus)) {
                 is Resource.Success -> _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        actionSuccess = true
-                    )
+                    it.copy(isLoading = false, actionSuccess = true)
                 }
 
                 is Resource.Error -> _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = result.message
-                    )
+                    it.copy(isLoading = false, errorMessage = result.message)
                 }
 
                 else -> {}
@@ -166,8 +169,11 @@ class BookingViewModel @Inject constructor(
         }
     }
 
-    // Called after the tenant pays the 20% deposit for a pre-booking.
-    // Sets status → DEPOSIT_PAID and records the deposit/remaining amounts in Firestore.
+    // ─────────────────────────────────────────────────────────────────────────
+    // MARK DEPOSIT PAID  (pre-booking — tenant pays 20%)
+    //
+    // Sets status → DEPOSIT_PAID and records the deposit/remaining amounts.
+    // ─────────────────────────────────────────────────────────────────────────
     fun markDepositPaid(bookingId: String, depositAmount: Double, totalAmount: Double) {
         if (bookingId.isBlank()) return
         viewModelScope.launch {
@@ -178,6 +184,7 @@ class BookingViewModel @Inject constructor(
                     .update(
                         mapOf(
                             "status" to BookingStatus.DEPOSIT_PAID.name,
+                            "bookingStatus" to BookingStatus.DEPOSIT_PAID.name,
                             "paymentStatus" to PaymentStatus.DEPOSIT_PAID.name,
                             "depositAmount" to depositAmount,
                             "remainingAmount" to remainingAmount,
@@ -193,8 +200,11 @@ class BookingViewModel @Inject constructor(
         }
     }
 
-    // Called when the landlord confirms the tenant has arrived.
-    // Sets status → CHECKED_IN so the tenant can then pay the remaining 80% from the app.
+    // ─────────────────────────────────────────────────────────────────────────
+    // MARK CHECKED IN  (landlord confirms tenant arrived)
+    //
+    // Sets status → CHECKED_IN so the tenant can pay the remaining 80%.
+    // ─────────────────────────────────────────────────────────────────────────
     fun markCheckedIn(bookingId: String) {
         if (bookingId.isBlank()) return
         viewModelScope.launch {
@@ -204,6 +214,9 @@ class BookingViewModel @Inject constructor(
                     .update(
                         mapOf(
                             "status" to BookingStatus.CHECKED_IN.name,
+                            "bookingStatus" to BookingStatus.CHECKED_IN.name,
+                            // paymentStatus stays DEPOSIT_PAID — remaining 80% still owed
+                            "paymentStatus" to PaymentStatus.DEPOSIT_PAID.name,
                             "updatedAt" to FieldValue.serverTimestamp()
                         )
                     ).await()
@@ -215,8 +228,13 @@ class BookingViewModel @Inject constructor(
         }
     }
 
-    // Called after the tenant pays the remaining 80% on arrival.
-    // Sets status → PENDING_APPROVAL and paymentStatus → PAID so the landlord can confirm.
+    // ─────────────────────────────────────────────────────────────────────────
+    // MARK FINAL PAYMENT COMPLETE  (landlord confirms 80% received)
+    //
+    // FIX: was setting status → PENDING_APPROVAL which is confusing.
+    // Now sets status → CONFIRMED and paymentStatus → PAID.
+    // The booking is fully paid and confirmed at this point.
+    // ─────────────────────────────────────────────────────────────────────────
     fun markFinalPaymentComplete(bookingId: String) {
         if (bookingId.isBlank()) return
         viewModelScope.launch {
@@ -225,19 +243,25 @@ class BookingViewModel @Inject constructor(
                 firestore.collection("bookings").document(bookingId)
                     .update(
                         mapOf(
-                            "status" to BookingStatus.PENDING_APPROVAL.name,
+                            // FIX: CONFIRMED not PENDING_APPROVAL — payment is fully done
+                            "status" to BookingStatus.CONFIRMED.name,
+                            "bookingStatus" to BookingStatus.CONFIRMED.name,
+                            // FIX: PAID not DEPOSIT_PAID — full amount now received
                             "paymentStatus" to PaymentStatus.PAID.name,
                             "updatedAt" to FieldValue.serverTimestamp()
                         )
                     ).await()
                 _uiState.update { it.copy(isLoading = false, actionSuccess = true) }
-                Log.d("BOOKING_VM", "Final payment complete — awaiting landlord approval")
+                Log.d("BOOKING_VM", "Final payment complete — booking fully CONFIRMED and PAID")
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
             }
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // CANCEL BOOKING
+    // ─────────────────────────────────────────────────────────────────────────
     fun cancelBooking(bookingId: String) {
         if (bookingId.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Invalid booking ID") }
@@ -250,6 +274,7 @@ class BookingViewModel @Inject constructor(
                     .update(
                         mapOf(
                             "status" to BookingStatus.CANCELLED.name,
+                            "bookingStatus" to BookingStatus.CANCELLED.name,
                             "cancelledAt" to FieldValue.serverTimestamp()
                         )
                     ).await()
@@ -284,6 +309,9 @@ class BookingViewModel @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // SEND MESSAGE
+    // ─────────────────────────────────────────────────────────────────────────
     fun sendMessage(toUserId: String, message: String, bookingId: String, propertyTitle: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSendingMessage = true, errorMessage = null) }
@@ -300,10 +328,7 @@ class BookingViewModel @Inject constructor(
                 )
                 firestore.collection("messages").add(msgData).await()
                 _uiState.update {
-                    it.copy(
-                        isSendingMessage = false,
-                        successMessage = "Message sent successfully"
-                    )
+                    it.copy(isSendingMessage = false, successMessage = "Message sent successfully")
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -316,6 +341,9 @@ class BookingViewModel @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // CLEAR STATE MESSAGES
+    // ─────────────────────────────────────────────────────────────────────────
     fun clearMessages() {
         _uiState.update {
             it.copy(
