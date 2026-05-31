@@ -20,15 +20,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BookingUiState — holds all UI state related to bookings
+// ─────────────────────────────────────────────────────────────────────────────
 data class BookingUiState(
-    val isLoading        : Boolean       = false,
-    val isSendingMessage : Boolean       = false,
-    val bookings         : List<Booking> = emptyList(),
-    val currentBooking   : Booking?      = null,
-    val errorMessage     : String?       = null,
-    val successMessage   : String?       = null,
-    val actionSuccess    : Boolean       = false,
-    val createdBookingId : String?       = null
+    val isLoading        : Boolean       = false,   // true while any async operation is running
+    val isSendingMessage : Boolean       = false,   // true while a message is being sent
+    val bookings         : List<Booking> = emptyList(), // list of bookings loaded for the current user
+    val currentBooking   : Booking?      = null,    // single booking loaded for detail view
+    val errorMessage     : String?       = null,    // non-null when an error has occurred
+    val successMessage   : String?       = null,    // non-null when an action completed successfully
+    val actionSuccess    : Boolean       = false,   // one-shot flag: true after a create/update/cancel succeeds
+    val createdBookingId : String?       = null     // ID of the newly created booking (used for navigation)
 )
 
 @HiltViewModel
@@ -41,17 +44,25 @@ class BookingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BookingUiState())
     val uiState: StateFlow<BookingUiState> = _uiState.asStateFlow()
 
+    // Cached credentials so forceRefresh can reload without re-passing params
     private var cachedUserId: String = ""
     private var cachedRole: String = "tenant"
+
+    // Guard flag to prevent duplicate booking creation on double-tap
     private var isCreatingBooking: Boolean = false
 
     // ─────────────────────────────────────────────────────────────────────────
     // LOAD BOOKINGS
+    // Fetches bookings from the repository based on the user's role.
+    //   admin    → all bookings in the system
+    //   landlord → bookings for properties owned by this landlord
+    //   tenant   → bookings made by this tenant
     // ─────────────────────────────────────────────────────────────────────────
     fun loadBookings(userId: String, role: String) {
         Log.d("BOOKING_VM", "loadBookings CALLED — userId='$userId' role='$role'")
         if (userId.isBlank()) {
-            Log.e("BOOKING_VM", "userId BLANK — aborted"); return
+            Log.e("BOOKING_VM", "userId BLANK — aborted")
+            return
         }
 
         val effectiveRole = role.ifBlank { "tenant" }
@@ -75,12 +86,15 @@ class BookingViewModel @Inject constructor(
         }
     }
 
+    // Re-fetches bookings using the last known userId and role.
+    // Call this after a status change to keep the list in sync.
     fun forceRefreshBookings() {
         if (cachedUserId.isNotEmpty()) loadBookings(cachedUserId, cachedRole)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // LOAD SINGLE BOOKING
+    // Used by BookingDetailScreen to load the full booking object by its ID.
     // ─────────────────────────────────────────────────────────────────────────
     fun loadBookingById(bookingId: String) {
         if (bookingId.isBlank()) return
@@ -102,10 +116,14 @@ class BookingViewModel @Inject constructor(
 
     // ─────────────────────────────────────────────────────────────────────────
     // CREATE BOOKING
+    // Creates a new booking document via the repository.
+    // The isCreatingBooking flag prevents duplicate submissions on rapid taps.
+    // On success, createdBookingId is set so the UI can navigate to confirmation.
     // ─────────────────────────────────────────────────────────────────────────
     fun createBooking(booking: Booking) {
         if (isCreatingBooking) {
-            Log.w("BOOKING_VM", "Already creating — ignored"); return
+            Log.w("BOOKING_VM", "Already creating — ignored")
+            return
         }
         isCreatingBooking = true
         viewModelScope.launch {
@@ -134,10 +152,7 @@ class BookingViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = e.message ?: "Unknown error"
-                    )
+                    it.copy(isLoading = false, errorMessage = e.message ?: "Unknown error")
                 }
             } finally {
                 isCreatingBooking = false
@@ -146,10 +161,9 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // UPDATE STATUS  (used by admin / landlord to approve / reject / complete)
-    //
-    // Delegates to BookingRepository.updateBookingStatus() which now also
-    // syncs paymentStatus automatically via resolvePaymentStatus().
+    // UPDATE BOOKING STATUS  (admin / landlord action)
+    // Delegates to BookingRepository.updateBookingStatus(), which also handles
+    // sending status-change notifications to the tenant automatically.
     // ─────────────────────────────────────────────────────────────────────────
     fun updateStatusByAdmin(bookingId: String, newStatus: BookingStatus) {
         if (bookingId.isBlank()) return
@@ -170,9 +184,13 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // MARK DEPOSIT PAID  (pre-booking — tenant pays 20%)
-    //
-    // Sets status → DEPOSIT_PAID and records the deposit/remaining amounts.
+    // MARK DEPOSIT PAID  (pre-booking flow — tenant pays 20%)
+    // Called by PaymentScreen after a successful 20% deposit payment.
+    // Updates the booking with:
+    //   • status / bookingStatus → DEPOSIT_PAID
+    //   • paymentStatus          → DEPOSIT_PAID
+    //   • depositAmount          → the amount paid
+    //   • remainingAmount        → totalAmount - depositAmount (80% still owed)
     // ─────────────────────────────────────────────────────────────────────────
     fun markDepositPaid(bookingId: String, depositAmount: Double, totalAmount: Double) {
         if (bookingId.isBlank()) return
@@ -201,9 +219,15 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // MARK CHECKED IN  (landlord confirms tenant arrived)
+    // MARK CHECKED IN  (landlord confirms tenant has arrived)
+    // Triggered by the "Mark Checked In" button in BookingDetailScreen /
+    // MyBookingsScreen when the booking is in DEPOSIT_PAID state.
     //
-    // Sets status → CHECKED_IN so the tenant can pay the remaining 80%.
+    // Sets status → CHECKED_IN so the tenant can then pay the remaining 80%.
+    // paymentStatus remains DEPOSIT_PAID because the full amount is not yet paid.
+    //
+    // FIX (from pull): previously this was setting status → AWAITING_FINAL_PAYMENT,
+    // which was confusing. It now correctly sets CHECKED_IN.
     // ─────────────────────────────────────────────────────────────────────────
     fun markCheckedIn(bookingId: String) {
         if (bookingId.isBlank()) return
@@ -229,11 +253,11 @@ class BookingViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // MARK FINAL PAYMENT COMPLETE  (landlord confirms 80% received)
+    // MARK FINAL PAYMENT COMPLETE  (landlord confirms the remaining 80% received)
     //
-    // FIX: was setting status → PENDING_APPROVAL which is confusing.
-    // Now sets status → CONFIRMED and paymentStatus → PAID.
-    // The booking is fully paid and confirmed at this point.
+    // FIX (from pull): was previously setting status → PENDING_APPROVAL, which
+    // was incorrect because the payment is fully done at this point.
+    // Now correctly sets status → CONFIRMED and paymentStatus → PAID.
     // ─────────────────────────────────────────────────────────────────────────
     fun markFinalPaymentComplete(bookingId: String) {
         if (bookingId.isBlank()) return
@@ -243,10 +267,10 @@ class BookingViewModel @Inject constructor(
                 firestore.collection("bookings").document(bookingId)
                     .update(
                         mapOf(
-                            // FIX: CONFIRMED not PENDING_APPROVAL — payment is fully done
+                            // FIX: CONFIRMED, not PENDING_APPROVAL — payment is fully done
                             "status" to BookingStatus.CONFIRMED.name,
                             "bookingStatus" to BookingStatus.CONFIRMED.name,
-                            // FIX: PAID not DEPOSIT_PAID — full amount now received
+                            // FIX: PAID, not DEPOSIT_PAID — full amount has now been received
                             "paymentStatus" to PaymentStatus.PAID.name,
                             "updatedAt" to FieldValue.serverTimestamp()
                         )
@@ -261,6 +285,8 @@ class BookingViewModel @Inject constructor(
 
     // ─────────────────────────────────────────────────────────────────────────
     // CANCEL BOOKING
+    // Sets the booking status to CANCELLED in Firestore, then optimistically
+    // updates the local list and re-fetches a fresh copy from the server.
     // ─────────────────────────────────────────────────────────────────────────
     fun cancelBooking(bookingId: String) {
         if (bookingId.isBlank()) {
@@ -279,6 +305,7 @@ class BookingViewModel @Inject constructor(
                         )
                     ).await()
 
+                // Optimistically update the in-memory list before the server refresh
                 _uiState.update { state ->
                     state.copy(
                         isLoading = false,
@@ -289,6 +316,7 @@ class BookingViewModel @Inject constructor(
                     )
                 }
 
+                // Re-fetch fresh data from Firestore to keep the list accurate
                 if (cachedUserId.isNotEmpty()) {
                     val fresh = when (cachedRole.lowercase()) {
                         "admin" -> repository.getAllBookingsForAdmin()
@@ -311,6 +339,8 @@ class BookingViewModel @Inject constructor(
 
     // ─────────────────────────────────────────────────────────────────────────
     // SEND MESSAGE
+    // Saves a chat message document to the "messages" Firestore collection.
+    // Used from BookingDetailScreen so tenants/landlords can message each other.
     // ─────────────────────────────────────────────────────────────────────────
     fun sendMessage(toUserId: String, message: String, bookingId: String, propertyTitle: String) {
         viewModelScope.launch {
@@ -343,6 +373,8 @@ class BookingViewModel @Inject constructor(
 
     // ─────────────────────────────────────────────────────────────────────────
     // CLEAR STATE MESSAGES
+    // Call this from the UI after consuming errorMessage, successMessage,
+    // actionSuccess, or createdBookingId to reset them back to defaults.
     // ─────────────────────────────────────────────────────────────────────────
     fun clearMessages() {
         _uiState.update {

@@ -21,17 +21,19 @@ import javax.inject.Inject
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PaymentUiState — holds all UI-related payment state
-// isPreBooking flag is used by PaymentScreen to show correct success message
+//
+// isPreBooking flag is read by PaymentScreen / PaymentSuccessScreen to decide
+// which success message and status strip to show (deposit vs. full payment).
 // ─────────────────────────────────────────────────────────────────────────────
 data class PaymentUiState(
-    val isLoading      : Boolean        = false,
-    val payment        : Payment?       = null,
-    val paymentHistory : List<Payment>  = emptyList(),
-    val selectedMethod : PaymentMethod? = null,
-    val defaultMethod  : PaymentMethod? = null,
-    val errorMessage   : String?        = null,
-    val actionSuccess  : Boolean        = false,
-    val isPreBooking   : Boolean        = false   // true when deposit-only flow was used
+    val isLoading      : Boolean        = false,          // true while any async operation is running
+    val payment        : Payment?       = null,           // the latest payment record fetched from Firestore
+    val paymentHistory : List<Payment>  = emptyList(),    // full payment list for the current user
+    val selectedMethod : PaymentMethod? = null,           // payment method the user tapped in the UI
+    val defaultMethod  : PaymentMethod? = null,           // pre-selected default method (if any)
+    val errorMessage   : String?        = null,           // non-null when an error has occurred
+    val actionSuccess  : Boolean        = false,          // one-shot flag: true after a successful payment
+    val isPreBooking   : Boolean        = false           // true when the deposit-only (20%) flow was used
 )
 
 @HiltViewModel
@@ -44,7 +46,8 @@ class PaymentViewModel @Inject constructor(
     val uiState: StateFlow<PaymentUiState> = _uiState.asStateFlow()
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Load full payment history for a tenant user
+    // LOAD PAYMENT HISTORY  (tenant)
+    // Fetches all payment records where the tenant is the payer.
     // ─────────────────────────────────────────────────────────────────────────
     fun loadPaymentHistory(userId: String) {
         if (userId.isBlank()) {
@@ -58,44 +61,53 @@ class PaymentViewModel @Inject constructor(
                     is Resource.Success -> _uiState.update {
                         it.copy(isLoading = false, paymentHistory = result.data)
                     }
-                    is Resource.Error   -> _uiState.update {
+
+                    is Resource.Error -> _uiState.update {
                         it.copy(isLoading = false, errorMessage = result.message)
                     }
-                    Resource.Loading    -> Unit
+
+                    Resource.Loading -> Unit
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load payments")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Failed to load payments"
+                    )
                 }
             }
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Process a payment for a booking
+    // PROCESS PAYMENT
+    // Core payment flow — handles both simple bookings and pre-bookings.
     //
-    // isFinalPayment     → true when tenant pays the remaining 80% after deposit
-    // isPreBookingDirect → true when called directly from the pre-booking flow
+    // Parameters:
+    //   isFinalPayment     → true when the tenant is paying the remaining 80%
+    //                        after a previous deposit
+    //   isPreBookingDirect → true when called directly from the pre-booking
+    //                        screen (i.e., this IS the 20% deposit payment)
+    //   packageId          → rental package ID if applicable; "none" otherwise
     //
-    // Logic:
-    //   • isFinalPayment = true              → status becomes PENDING_APPROVAL
-    //   • booking already AWAITING_FINAL_PAYMENT → status becomes PENDING_APPROVAL
-    //   • isPreBookingDirect = true          → status becomes DEPOSIT_PAID
-    //   • booking has isPreBooking flag or depositAmount > 0 → DEPOSIT_PAID
-    //   • anything else                      → PENDING_APPROVAL (full payment)
+    // Booking status transition logic:
+    //   isFinalPayment = true                         → PENDING_APPROVAL
+    //   current status = CHECKED_IN / AWAITING_FINAL  → PENDING_APPROVAL
+    //   isPreBookingDirect = true                     → DEPOSIT_PAID
+    //   booking has isPreBooking flag or depositAmount → DEPOSIT_PAID
+    //   anything else (simple full payment)           → PENDING_APPROVAL
     // ─────────────────────────────────────────────────────────────────────────
     fun processPayment(
-        bookingId          : String,
-        payerId            : String,
-        payeeId            : String,
-        payerName          : String,
-        payeeName          : String,
-        amount             : String,
-       // amount: Double,
-        packageId: String,
-        method             : PaymentMethod,
-        isFinalPayment     : Boolean = false,
-        isPreBookingDirect : Boolean = false
+        bookingId: String,
+        payerId: String,
+        payeeId: String,
+        payerName: String,
+        payeeName: String,
+        amount: String,
+        packageId: String = "none",
+        method: PaymentMethod,
+        isFinalPayment: Boolean = false,
+        isPreBookingDirect: Boolean = false
     ) {
         val amountDouble = amount.toDoubleOrNull() ?: 0.0
         if (amountDouble <= 0.0) {
@@ -106,14 +118,17 @@ class PaymentViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                // Fetch current booking to determine correct status transition
-                val bookingResult  = bookingRepository.getBookingById(bookingId)
-                val currentBooking = if (bookingResult is Resource.Success) bookingResult.data else null
+                // Fetch the current booking to read its status and pre-booking flags
+                val bookingResult = bookingRepository.getBookingById(bookingId)
+                val currentBooking =
+                    if (bookingResult is Resource.Success) bookingResult.data else null
+                val currentStatusStr = currentBooking?.status ?: currentBooking?.bookingStatus ?: ""
 
-                // Determine if this is a pre-booking (deposit-only) payment
+                // Determine whether this is a pre-booking (deposit-only) payment
                 val isPreBooking = when {
                     isFinalPayment -> false
-                    currentBooking?.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> false
+                    currentStatusStr == BookingStatus.CHECKED_IN.name -> false
+                    currentStatusStr == BookingStatus.AWAITING_FINAL_PAYMENT.name -> false
                     isPreBookingDirect -> true
                     else -> {
                         currentBooking?.isPreBooking == true ||
@@ -121,70 +136,74 @@ class PaymentViewModel @Inject constructor(
                     }
                 }
 
-                // Build the payment record
+                // Build the payment record (status starts as PENDING; updated to COMPLETED below)
                 val payment = Payment(
-                    bookingId     = bookingId,
-                    payerId       = payerId,
-                    payerName     = payerName,
-                    payeeId       = payeeId,
-                    payeeName     = payeeName,
-                    amount        = amount,
+                    bookingId = bookingId,
+                    payerId = payerId,
+                    payerName = payerName,
+                    payeeId = payeeId,
+                    payeeName = payeeName,
+                    amount = amount,
+                    packageId = if (packageId == "none") "" else packageId,
                     paymentMethod = method.name,
-                    status        = PaymentStatus.PENDING.name,
-                    type          = PaymentType.BOOKING.name
+                    status = PaymentStatus.PENDING.name,
+                    type = PaymentType.BOOKING.name
                 )
 
                 when (val result = paymentRepository.savePayment(payment)) {
                     is Resource.Success -> {
 
-                        // Determine the new booking status after payment
+                        // Determine the new booking status based on the payment type
                         val newBookingStatus = when {
+                            // Final payment (80%) or tenant was already checked in → awaiting landlord approval
                             isFinalPayment ||
-                                    currentBooking?.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> {
-                                // Final payment done → move to awaiting landlord approval
+                                    currentStatusStr == BookingStatus.CHECKED_IN.name ||
+                                    currentStatusStr == BookingStatus.AWAITING_FINAL_PAYMENT.name -> {
                                 BookingStatus.PENDING_APPROVAL
                             }
+                            // Deposit (20%) payment → booking secured, awaiting check-in
                             isPreBooking -> {
-                                // Deposit paid → waiting for final payment before check-in
                                 BookingStatus.DEPOSIT_PAID
                             }
+                            // Simple full payment (100%) → awaiting landlord approval
                             else -> {
-                                // Full upfront payment → awaiting landlord approval
                                 BookingStatus.PENDING_APPROVAL
                             }
                         }
 
-                        // Update booking status in Firestore
+                        // Update the booking status in Firestore
                         bookingRepository.updateBookingStatus(bookingId, newBookingStatus)
 
-                        // Stamp the booking document with payment info
+                        // Stamp the booking document with the completed payment info
                         bookingRepository.updatePaymentStatusOnBooking(
-                            bookingId     = bookingId,
+                            bookingId = bookingId,
                             paymentStatus = PaymentStatus.COMPLETED.name,
-                            paymentId     = result.data ?: ""
+                            paymentId = result.data ?: ""
                         )
 
-                        // Mark the payment record itself as completed
+                        // Mark the payment record itself as COMPLETED
                         paymentRepository.updatePaymentStatus(
                             result.data ?: "",
                             PaymentStatus.COMPLETED.name
                         )
 
-                        // Re-fetch the updated payment to reflect latest state
+                        // Re-fetch the updated payment to reflect the latest state in the UI
                         val updated = paymentRepository.getPaymentByBooking(bookingId)
                         _uiState.update {
                             it.copy(
-                                isLoading     = false,
-                                payment       = if (updated is Resource.Success) updated.data else null,
+                                isLoading = false,
+                                payment = if (updated is Resource.Success) updated.data else null,
                                 actionSuccess = true,
-                                isPreBooking  = isPreBooking
+                                isPreBooking = isPreBooking
                             )
                         }
                     }
+
                     is Resource.Error -> _uiState.update {
                         it.copy(isLoading = false, errorMessage = result.message)
                     }
-                    Resource.Loading  -> Unit
+
+                    Resource.Loading -> Unit
                 }
 
             } catch (e: Exception) {
@@ -196,8 +215,13 @@ class PaymentViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Verify the payment status of an existing booking
-    // Used by PaymentScreen after returning from a gateway or on resume
+    // VERIFY PAYMENT STATUS
+    // Used by PaymentSuccessScreen (and PaymentScreen on resume) to refresh
+    // the payment state from Firestore after returning from a payment gateway.
+    //
+    // FIX (from pull): PENDING_APPROVAL and CONFIRMED statuses no longer force
+    // isPreBooking = false, because pre-booking flows can also reach those states.
+    // Instead, the depositAmount field is checked to determine if it was a pre-booking.
     // ─────────────────────────────────────────────────────────────────────────
     fun verifyPaymentStatus(bookingId: String) {
         viewModelScope.launch {
@@ -205,13 +229,13 @@ class PaymentViewModel @Inject constructor(
             try {
                 val paymentResult = paymentRepository.getPaymentByBooking(bookingId)
                 val bookingResult = bookingRepository.getBookingById(bookingId)
-                val booking       = if (bookingResult is Resource.Success) bookingResult.data else null
+                val booking = if (bookingResult is Resource.Success) bookingResult.data else null
+                val currentStatusStr = booking?.status ?: booking?.bookingStatus ?: ""
 
-                // Determine pre-booking flag from booking state
+                // Determine pre-booking flag — only exclude truly non-deposit states
                 val isPreBooking = when {
-                    booking?.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> false
-                    booking?.bookingStatus == BookingStatus.PENDING_APPROVAL        -> false
-                    booking?.bookingStatus == BookingStatus.CONFIRMED                -> false
+                    currentStatusStr == BookingStatus.CHECKED_IN.name -> false
+                    currentStatusStr == BookingStatus.AWAITING_FINAL_PAYMENT.name -> false
                     else -> booking?.isPreBooking == true ||
                             (booking?.depositAmount ?: 0.0) > 0.0
                 }
@@ -219,15 +243,17 @@ class PaymentViewModel @Inject constructor(
                 when (paymentResult) {
                     is Resource.Success -> _uiState.update {
                         it.copy(
-                            isLoading    = false,
-                            payment      = paymentResult.data,
+                            isLoading = false,
+                            payment = paymentResult.data,
                             isPreBooking = isPreBooking
                         )
                     }
-                    is Resource.Error   -> _uiState.update {
+
+                    is Resource.Error -> _uiState.update {
                         it.copy(isLoading = false, errorMessage = paymentResult.message)
                     }
-                    Resource.Loading    -> Unit
+
+                    Resource.Loading -> Unit
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -238,7 +264,8 @@ class PaymentViewModel @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Load all payments received by a landlord
+    // LOAD LANDLORD PAYMENTS
+    // Fetches all payments received by a specific landlord (payee).
     // ─────────────────────────────────────────────────────────────────────────
     fun loadLandlordPayments(landlordId: String) {
         if (landlordId.isBlank()) return
@@ -249,14 +276,19 @@ class PaymentViewModel @Inject constructor(
                     is Resource.Success -> _uiState.update {
                         it.copy(isLoading = false, paymentHistory = result.data)
                     }
-                    is Resource.Error   -> _uiState.update {
+
+                    is Resource.Error -> _uiState.update {
                         it.copy(isLoading = false, errorMessage = result.message)
                     }
-                    Resource.Loading    -> Unit
+
+                    Resource.Loading -> Unit
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load payments")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Failed to load payments"
+                    )
                 }
             }
         }
@@ -264,22 +296,22 @@ class PaymentViewModel @Inject constructor(
 
     // ── Simple state helpers ──────────────────────────────────────────────────
 
-    /** Store the payment method the user tapped on the payment screen */
+    /** Store the payment method the user tapped on the payment screen. */
     fun selectPaymentMethod(method: PaymentMethod) {
         _uiState.update { it.copy(selectedMethod = method) }
     }
 
-    /** Set and immediately select a default payment method */
+    /** Set a default payment method and immediately select it. */
     fun setDefaultMethod(method: PaymentMethod) {
         _uiState.update { it.copy(defaultMethod = method, selectedMethod = method) }
     }
 
-    /** Manually push an error message to the UI (e.g. from PaymentScreen validation) */
+    /** Push a validation error message to the UI (e.g. from PaymentScreen). */
     fun setError(msg: String) {
         _uiState.update { it.copy(errorMessage = msg) }
     }
 
-    /** Clear transient messages after they have been displayed */
+    /** Clear transient messages after the UI has consumed them. */
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, actionSuccess = false) }
     }

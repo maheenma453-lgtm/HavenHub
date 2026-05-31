@@ -30,11 +30,12 @@ class BookingRepository @Inject constructor(
 
     // ─────────────────────────────────────────────────────────────────────────
     // HELPER: Safe Firestore document → Booking parse
-    // Returns null instead of crashing on malformed docs.
+    // Returns null instead of crashing on malformed documents.
     // ─────────────────────────────────────────────────────────────────────────
     private fun parseBookingSafe(doc: com.google.firebase.firestore.DocumentSnapshot): Booking? {
         return try {
             var b = doc.toObject(Booking::class.java) ?: return null
+            // Fallback: if bookingId is empty, use the Firestore document ID
             if (b.bookingId.isBlank()) b = b.copy(bookingId = doc.id)
             b
         } catch (e: Exception) {
@@ -44,19 +45,19 @@ class BookingRepository @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // HELPER: Resolve payment status string from BookingStatus
+    // HELPER: Resolve paymentStatus from a given BookingStatus
     //
-    // This is the single source of truth for what paymentStatus should be
-    // whenever a booking status changes. Keeps both fields in sync.
+    // Single source of truth — keeps paymentStatus in sync with bookingStatus
+    // whenever a status change happens.
     //
-    //   PENDING              → PENDING   (booking made, not paid yet)
-    //   PENDING_APPROVAL     → PAID      (full payment received, awaiting landlord confirm)
-    //   CONFIRMED            → PAID      (landlord confirmed — payment must be done)
-    //   DEPOSIT_PAID         → DEPOSIT_PAID (20% paid for pre-booking)
-    //   CHECKED_IN           → DEPOSIT_PAID (still owes 80%)
+    //   PENDING              → PENDING      (booking created, not yet paid)
+    //   PENDING_APPROVAL     → PAID         (full payment done, awaiting landlord)
+    //   CONFIRMED            → PAID         (landlord confirmed, payment complete)
+    //   DEPOSIT_PAID         → DEPOSIT_PAID (20% advance paid for pre-booking)
+    //   CHECKED_IN           → DEPOSIT_PAID (guest arrived, still owes 80%)
     //   AWAITING_FINAL_PAY   → DEPOSIT_PAID (80% not yet received)
-    //   COMPLETED            → PAID      (stay done, everything settled)
-    //   CANCELLED            → PENDING   (no payment or refunded)
+    //   COMPLETED            → PAID         (stay finished, all settled)
+    //   CANCELLED            → PENDING      (no payment or already refunded)
     // ─────────────────────────────────────────────────────────────────────────
     private fun resolvePaymentStatus(newStatus: BookingStatus): String {
         return when (newStatus) {
@@ -72,19 +73,19 @@ class BookingRepository @Inject constructor(
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // isPropertyBooked — DATE-AWARE CHECK
+    // isPropertyBooked — DATE-AWARE AVAILABILITY CHECK
     //
     // Returns true only if the property has an ACTIVE booking whose
-    // checkOutDate is still in the future (i.e. stay is ongoing).
+    // checkOutDate is still in the future (i.e. the stay is ongoing).
     //
-    // Steps:
+    // Logic:
     //   1. Fetch all CONFIRMED / PENDING / CHECKED_IN bookings for this property
-    //   2. Per booking, check if checkOutDate > now
-    //      - Future  → property is still occupied  → return true
-    //      - Expired → auto-complete booking silently (frees the property)
+    //   2. For each booking, check if checkOutDate > now
+    //      - Future  → property is occupied  → return true
+    //      - Expired → auto-complete booking silently (frees up the property)
     //   3. No active booking found → return false → property is available
     //
-    // Auto-complete happens here so no cron job or Cloud Function is needed.
+    // Auto-complete runs here so no cron job or Cloud Function is needed.
     // ═════════════════════════════════════════════════════════════════════════
     suspend fun isPropertyBooked(propertyId: String): Boolean {
         if (propertyId.isBlank()) return false
@@ -117,7 +118,7 @@ class BookingRepository @Inject constructor(
                 val booking = parseBookingSafe(doc) ?: continue
                 val checkOut = booking.checkOutDate
 
-                // No checkOutDate → treat as still active (safe default)
+                // No checkOutDate means we cannot tell when it ends → treat as active (safe default)
                 if (checkOut == null) {
                     hasActiveBooking = true
                     Log.d(
@@ -128,7 +129,7 @@ class BookingRepository @Inject constructor(
                 }
 
                 if (checkOut.toDate().after(now.toDate())) {
-                    // Stay is still ongoing → property occupied
+                    // Stay is still ongoing → property is occupied
                     hasActiveBooking = true
                     Log.d(
                         "BOOKING_REPO",
@@ -164,7 +165,7 @@ class BookingRepository @Inject constructor(
     private suspend fun autoCompleteExpiredBooking(booking: Booking) {
         try {
             // Only auto-complete bookings that were actually in progress.
-            // Do NOT auto-complete PENDING — those haven't started yet.
+            // PENDING bookings have not started yet — do not touch them.
             if (booking.status != BookingStatus.CONFIRMED.name &&
                 booking.status != BookingStatus.CHECKED_IN.name
             ) {
@@ -176,7 +177,7 @@ class BookingRepository @Inject constructor(
                 mapOf(
                     "status" to BookingStatus.COMPLETED.name,
                     "bookingStatus" to BookingStatus.COMPLETED.name,
-                    // FIX: also update paymentStatus when auto-completing
+                    // Sync paymentStatus to PAID when auto-completing a finished stay
                     "paymentStatus" to PaymentStatus.PAID.name,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
@@ -225,6 +226,7 @@ class BookingRepository @Inject constructor(
         try {
             val now = Timestamp.now()
 
+            // Only look at statuses that represent an in-progress stay
             val snap = bookingsCol
                 .whereIn(
                     "status", listOf(
@@ -244,7 +246,7 @@ class BookingRepository @Inject constructor(
 
             for (doc in snap.documents) {
                 val booking = parseBookingSafe(doc) ?: continue
-                val checkOut = booking.checkOutDate ?: continue   // skip if no date
+                val checkOut = booking.checkOutDate ?: continue  // skip if no checkout date
 
                 if (!checkOut.toDate().after(now.toDate())) {
                     autoCompleteExpiredBooking(booking)
@@ -288,7 +290,7 @@ class BookingRepository @Inject constructor(
                 landlordId = resolvedLandlordId
             )
 
-            // Explicitly save isPreBooking + deposit fields to Firestore.
+            // FIX: Explicitly save isPreBooking + deposit fields to Firestore.
             // This ensures the fields persist even if FirebaseDataManager missed them.
             if (bookingId.isNotBlank()) {
                 try {
@@ -296,6 +298,7 @@ class BookingRepository @Inject constructor(
                         "isPreBooking" to booking.isPreBooking,
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
+                    // For pre-bookings, also save depositAmount and remainingAmount
                     if (booking.isPreBooking) {
                         val deposit =
                             if (booking.depositAmount > 0) booking.depositAmount else booking.totalAmount * 0.2
@@ -350,7 +353,8 @@ class BookingRepository @Inject constructor(
     suspend fun getTenantBookings(tenantId: String): List<Booking> {
         Log.d("BOOKING_REPO", "getTenantBookings START — tenantId='$tenantId'")
         if (tenantId.isBlank()) {
-            Log.e("BOOKING_REPO", "tenantId BLANK — aborting"); return emptyList()
+            Log.e("BOOKING_REPO", "tenantId BLANK — aborting")
+            return emptyList()
         }
         return try {
             val snap = bookingsCol.whereEqualTo("tenantId", tenantId).get().await()
@@ -369,7 +373,8 @@ class BookingRepository @Inject constructor(
     suspend fun getLandlordBookings(landlordId: String): List<Booking> {
         Log.d("BOOKING_REPO", "getLandlordBookings START — landlordId='$landlordId'")
         if (landlordId.isBlank()) {
-            Log.e("BOOKING_REPO", "landlordId BLANK — aborting"); return emptyList()
+            Log.e("BOOKING_REPO", "landlordId BLANK — aborting")
+            return emptyList()
         }
         return try {
             val snap = bookingsCol.whereEqualTo("landlordId", landlordId).get().await()
@@ -386,13 +391,13 @@ class BookingRepository @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // UPDATE STATUS  ← ★ MAIN FIX IS HERE ★
+    // UPDATE STATUS
     //
-    // Previously only updated "status" and "bookingStatus" fields.
+    // KEY FIX: Previously only updated "status" and "bookingStatus".
     // Now also updates "paymentStatus" using resolvePaymentStatus() so both
     // fields always stay in sync after any status change.
     //
-    // Example: CONFIRMED booking now also sets paymentStatus → PAID
+    // Example: CONFIRMED now also sets paymentStatus → PAID
     // ─────────────────────────────────────────────────────────────────────────
     suspend fun updateBookingStatus(
         bookingId: String,
@@ -400,7 +405,7 @@ class BookingRepository @Inject constructor(
     ): Resource<Unit> {
         Log.d("BOOKING_REPO", "updateBookingStatus: '$bookingId' → '${newStatus.name}'")
         return try {
-            // Resolve the correct paymentStatus for this booking status
+            // Derive the correct paymentStatus for this booking status
             val newPaymentStatus = resolvePaymentStatus(newStatus)
 
             bookingsCol.document(bookingId).update(
@@ -418,7 +423,7 @@ class BookingRepository @Inject constructor(
                 "✅ Status updated: bookingStatus=${newStatus.name}, paymentStatus=$newPaymentStatus"
             )
 
-            // Send notification based on the new status
+            // Send a notification to the tenant based on the new status
             try {
                 val bookingResource = getBookingById(bookingId)
                 if (bookingResource is Resource.Success) {
@@ -445,7 +450,8 @@ class BookingRepository @Inject constructor(
                                 propertyTitle = booking.propertyTitle.ifBlank { "Property" }
                             )
 
-                        else -> {}
+                        else -> { /* No notification needed for other statuses */
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -461,6 +467,7 @@ class BookingRepository @Inject constructor(
 
     // ─────────────────────────────────────────────────────────────────────────
     // PAYMENT UPDATE
+    // Called directly after a payment transaction completes.
     // ─────────────────────────────────────────────────────────────────────────
     suspend fun updatePaymentStatusOnBooking(
         bookingId: String,
@@ -482,7 +489,7 @@ class BookingRepository @Inject constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // FLOW
+    // FLOW — Real-time listener for bookings (used by UI layers)
     // ─────────────────────────────────────────────────────────────────────────
     fun getBookingsFlow(userId: String): Flow<List<Booking>> {
         return realtimeListener.getBookingsFlow(userId)
@@ -490,12 +497,13 @@ class BookingRepository @Inject constructor(
 
     // ─────────────────────────────────────────────────────────────────────────
     // CANCEL
+    // FIX: Also resets paymentStatus to PENDING on cancel for consistency.
     // ─────────────────────────────────────────────────────────────────────────
     suspend fun cancelBooking(bookingId: String): Resource<Unit> {
         val updateMap = mapOf(
             "status" to BookingStatus.CANCELLED.name,
             "bookingStatus" to BookingStatus.CANCELLED.name,
-            // FIX: also reset paymentStatus on cancel for consistency
+            // Reset paymentStatus to PENDING when booking is cancelled
             "paymentStatus" to PaymentStatus.PENDING.name,
             "cancelledAt" to FieldValue.serverTimestamp()
         )
@@ -511,6 +519,11 @@ class BookingRepository @Inject constructor(
     // PRIVATE HELPERS
     // ═════════════════════════════════════════════════════════════════════════
 
+    /**
+     * Returns the tenant's display name.
+     * Uses the name already on the booking if present,
+     * otherwise falls back to a Firestore users lookup.
+     */
     private suspend fun resolveTenantName(booking: Booking): String {
         if (booking.tenantName.isNotBlank()) return booking.tenantName
         if (booking.tenantId.isBlank()) return ""
@@ -525,6 +538,11 @@ class BookingRepository @Inject constructor(
         }
     }
 
+    /**
+     * Returns the landlord's UID.
+     * Uses the ID already on the booking if present,
+     * otherwise looks it up from the property document.
+     */
     private suspend fun resolveLandlordId(booking: Booking): String {
         if (booking.landlordId.isNotBlank()) return booking.landlordId
         if (booking.propertyId.isBlank()) return ""
@@ -539,6 +557,7 @@ class BookingRepository @Inject constructor(
         }
     }
 
+    /** Notifies the landlord that a new booking request has been made. */
     private suspend fun sendBookingNotificationToLandlord(booking: Booking) {
         try {
             if (booking.landlordId.isBlank()) return
@@ -553,6 +572,12 @@ class BookingRepository @Inject constructor(
         }
     }
 
+    /**
+     * Notifies the admin that a new booking has been created.
+     * Tries ADMIN role first, then admin (lowercase).
+     * If no admin user document is found, saves a generic notification
+     * targeting the "admin" role so it's still visible in the admin panel.
+     */
     private suspend fun sendBookingNotificationToAdmin(booking: Booking) {
         try {
             var adminQuery = usersCol.whereEqualTo("role", "ADMIN").get().await()
@@ -560,7 +585,7 @@ class BookingRepository @Inject constructor(
                 adminQuery = usersCol.whereEqualTo("role", "admin").get().await()
             }
 
-            // If no admin user found, save a generic notification targeting the admin role
+            // No admin user found → save a fallback notification targeting the admin role
             if (adminQuery.isEmpty) {
                 val notifData = mapOf(
                     "recipientId" to "admin",
@@ -577,6 +602,7 @@ class BookingRepository @Inject constructor(
                 return
             }
 
+            // Send to every admin user found
             adminQuery.documents.forEach { adminDoc ->
                 notificationRepository.sendBookingNotificationToAdmin(
                     adminId = adminDoc.id,

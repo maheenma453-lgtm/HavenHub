@@ -28,10 +28,12 @@ import com.example.havenhub.viewmodel.PaymentViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-private val PSGreen = Color(0xFF22C55E)
-private val PSAmber = Color(0xFFD97706)
-private val PSBlue  = Color(0xFF3B82F6)
+// ── Status color constants ────────────────────────────────────────────────────
+private val PSGreen = Color(0xFF22C55E)  // Payment success / paid state
+private val PSAmber = Color(0xFFD97706)  // Awaiting approval state
+private val PSBlue  = Color(0xFF3B82F6)  // Deposit paid state
 
+// ── Date formatter for the transaction details card ───────────────────────────
 private fun formatPayDate(date: Date?): String {
     if (date == null) return "—"
     return try {
@@ -48,16 +50,19 @@ fun PaymentSuccessScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // Fetch payment record for this booking when the screen opens
     LaunchedEffect(bookingId) {
         viewModel.verifyPaymentStatus(bookingId)
     }
 
-    // Determine payment phase from the route param — not ViewModel state.
-    // This makes the UI deterministic and avoids async timing issues.
+    // Determine payment phase from the route param — NOT from ViewModel state.
+    // This makes the UI deterministic and avoids async timing issues where the
+    // ViewModel may not have finished fetching when the screen first renders.
     val isDepositPayment   = paymentType == "DEPOSIT"
     val isRemainingPayment = paymentType == "REMAINING"
     val isFullPayment      = paymentType == "FULL"
 
+    // Animated scale for the success circle — bouncy spring entrance
     val scale = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         scale.animateTo(
@@ -88,15 +93,13 @@ fun PaymentSuccessScreen(
         ) {
             Spacer(Modifier.height(48.dp))
 
-            // Animated success circle
+            // ── Animated success circle ───────────────────────────────────────
             Box(
                 modifier = Modifier
                     .scale(scale.value)
                     .size(120.dp)
                     .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(listOf(PSGreen.copy(0.25f), PSGreen.copy(0.08f)))
-                    ),
+                    .background(Brush.radialGradient(listOf(PSGreen.copy(0.25f), PSGreen.copy(0.08f)))),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -109,7 +112,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // Title changes based on payment type
+            // ── Title — changes per payment type ──────────────────────────────
             Text(
                 when {
                     isDepositPayment   -> "Deposit Paid!"
@@ -123,7 +126,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(6.dp))
 
-            // Subtitle changes based on payment type
+            // ── Subtitle — explains what happens next ─────────────────────────
             Text(
                 when {
                     isDepositPayment   -> "20% deposit received!\nPay remaining 80% on arrival."
@@ -138,6 +141,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(8.dp))
 
+            // ── Formatted payment amount from ViewModel ───────────────────────
             Text(
                 uiState.payment?.formattedAmount ?: "—",
                 fontSize   = 32.sp,
@@ -147,8 +151,9 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Status strip — blue for deposit, amber for full/remaining
+            // ── Status strip — blue for deposit, amber for full/remaining ─────
             if (isDepositPayment) {
+                // Blue strip: booking is secured, final payment due at check-in
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -165,6 +170,7 @@ fun PaymentSuccessScreen(
                     }
                 }
             } else {
+                // Amber strip: payment done, waiting for landlord to approve
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -188,7 +194,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // Transaction details card
+            // ── Transaction details card ──────────────────────────────────────
             Card(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(20.dp),
@@ -196,12 +202,11 @@ fun PaymentSuccessScreen(
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
                 Column(Modifier.padding(20.dp)) {
+
+                    // Card header
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            Modifier
-                                .size(30.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(tertiary.copy(0.15f)),
+                            Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(tertiary.copy(0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.Receipt, null, tint = tertiary, modifier = Modifier.size(16.dp))
@@ -211,20 +216,20 @@ fun PaymentSuccessScreen(
                     }
 
                     Spacer(Modifier.height(14.dp))
+                    // Decorative gradient divider
                     Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
+                        Modifier.fillMaxWidth().height(1.dp)
                             .background(Brush.horizontalGradient(listOf(tertiary.copy(0.4f), Color.Transparent)))
                     )
                     Spacer(Modifier.height(14.dp))
 
+                    // Transaction detail rows
                     PSDetailRow("Booking ID",     "#${bookingId.take(8).uppercase()}",                            onSurface, onSurfaceVariant)
                     PSDetailRow("Transaction ID", uiState.payment?.gatewayTransactionId?.ifEmpty { "—" } ?: "—", onSurface, onSurfaceVariant)
                     PSDetailRow("Date",           formatPayDate(uiState.payment?.createdAt?.toDate()),            onSurface, onSurfaceVariant)
                     PSDetailRow("Method",         uiState.payment?.paymentMethodEnum?.displayName() ?: "—",      onSurface, onSurfaceVariant)
 
-                    // Payment type row — accurate label from route param
+                    // Payment type label — accurate label derived from route param, not ViewModel
                     PSDetailRow(
                         "Type",
                         when {
@@ -237,13 +242,11 @@ fun PaymentSuccessScreen(
 
                     Spacer(Modifier.height(8.dp))
 
-                    // Payment status chip — always "Paid"
+                    // Payment status chip — always green "Paid" on this screen
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("Payment", color = onSurfaceVariant, fontSize = 13.sp)
                         Box(
-                            Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(PSGreen.copy(0.12f))
+                            Modifier.clip(RoundedCornerShape(20.dp)).background(PSGreen.copy(0.12f))
                                 .padding(horizontal = 14.dp, vertical = 5.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -255,14 +258,12 @@ fun PaymentSuccessScreen(
 
                     Spacer(Modifier.height(6.dp))
 
-                    // Booking status chip — blue for deposit, amber for awaiting approval
+                    // Booking status chip — blue for DEPOSIT, amber for awaiting approval
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("Booking", color = onSurfaceVariant, fontSize = 13.sp)
                         if (isDepositPayment) {
                             Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(PSBlue.copy(0.12f))
+                                Modifier.clip(RoundedCornerShape(20.dp)).background(PSBlue.copy(0.12f))
                                     .padding(horizontal = 14.dp, vertical = 5.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -272,9 +273,7 @@ fun PaymentSuccessScreen(
                             }
                         } else {
                             Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(PSAmber.copy(0.12f))
+                                Modifier.clip(RoundedCornerShape(20.dp)).background(PSAmber.copy(0.12f))
                                     .padding(horizontal = 14.dp, vertical = 5.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -289,10 +288,11 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // Navigation button:
-            // DEPOSIT   → tab=1 (Deposit Paid tab)
-            // REMAINING → tab=3 (Awaiting Approval tab)
-            // FULL      → tab=3 (Awaiting Approval tab)
+            // ── "View Booking" navigation button ─────────────────────────────
+            // Tab mapping (matches MyBookingsScreen 7-tab structure):
+            //   DEPOSIT   → tab=1 (Deposit Paid tab)
+            //   REMAINING → tab=3 (Awaiting Approval tab)
+            //   FULL      → tab=3 (Awaiting Approval tab)
             Button(
                 onClick = {
                     val tab = if (isDepositPayment) 1 else 3
@@ -320,6 +320,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(12.dp))
 
+            // ── "Back to Home" outlined button ────────────────────────────────
             OutlinedButton(
                 onClick = {
                     navController.navigate(Screen.Home.route) {
@@ -336,6 +337,7 @@ fun PaymentSuccessScreen(
                 Text("Back to Home", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = primary)
             }
 
+            // Error message (e.g. if verifyPaymentStatus fails)
             uiState.errorMessage?.let { err ->
                 Spacer(Modifier.height(12.dp))
                 Text(err, color = error, fontSize = 13.sp)
@@ -346,21 +348,22 @@ fun PaymentSuccessScreen(
     }
 }
 
+// ── Helper: single labelled row in the transaction details card ───────────────
 @Composable
 private fun PSDetailRow(label: String, value: String, onSurface: Color, onSurfaceVariant: Color) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        modifier              = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+        verticalAlignment     = Alignment.Top
     ) {
         Text(label, color = onSurfaceVariant, fontSize = 13.sp)
         Text(
             value,
-            color = onSurface,
-            fontSize = 13.sp,
+            color      = onSurface,
+            fontSize   = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f).padding(start = 16.dp)
+            textAlign  = TextAlign.End,
+            modifier   = Modifier.weight(1f).padding(start = 16.dp)
         )
     }
 }

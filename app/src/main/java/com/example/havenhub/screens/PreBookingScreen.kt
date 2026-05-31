@@ -46,7 +46,7 @@ import com.google.firebase.Timestamp
 import java.util.*
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COLOR PALETTE
+// COLOR PALETTE — navy / gold theme local to this screen
 // ─────────────────────────────────────────────────────────────────────────────
 private val PB_NavyDeep     = Color(0xFF060E20)
 private val PB_NavyPrime    = Color(0xFF0D1B3E)
@@ -67,13 +67,14 @@ private val PB_TextMuted    = Color(0xFF8899AA)
 private val PB_TextLight    = Color(0xFFBBCCDD)
 private val PB_Divider      = Color(0xFFE8EEF5)
 
-private val GoldGradient    = Brush.horizontalGradient(listOf(PB_Gold.copy(0.9f), PB_GoldLight.copy(0.6f), PB_Gold.copy(0.9f)))
-private val GoldBorder      = Brush.horizontalGradient(listOf(PB_Gold.copy(0.85f), PB_GoldLight.copy(0.5f), PB_Gold.copy(0.85f)))
-private val NavyGradient    = Brush.linearGradient(listOf(PB_NavyDeep, PB_NavyMid))
-private val NavySoftGradient= Brush.linearGradient(listOf(PB_NavyPrime, PB_NavyLight))
+private val GoldGradient     = Brush.horizontalGradient(listOf(PB_Gold.copy(0.9f), PB_GoldLight.copy(0.6f), PB_Gold.copy(0.9f)))
+private val GoldBorder       = Brush.horizontalGradient(listOf(PB_Gold.copy(0.85f), PB_GoldLight.copy(0.5f), PB_Gold.copy(0.85f)))
+private val NavyGradient     = Brush.linearGradient(listOf(PB_NavyDeep, PB_NavyMid))
+private val NavySoftGradient = Brush.linearGradient(listOf(PB_NavyPrime, PB_NavyLight))
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RESPONSIVE SIZE SYSTEM
+// Adjusts padding, font sizes and icon sizes based on screen width buckets.
 // ─────────────────────────────────────────────────────────────────────────────
 private data class PBSizes(
     val hPad        : Dp,
@@ -111,13 +112,14 @@ private fun rememberPBSizes(): PBSizes {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DATE HELPER: build a Firebase Timestamp from day + month + year
-// Uses noon (12:00) to avoid timezone edge-cases shifting the date.
+// DATE HELPER
+// Builds a Firebase Timestamp at 12:00 noon for the given day/month/year.
+// Using noon avoids timezone edge-cases that could shift the date by one day.
 // ─────────────────────────────────────────────────────────────────────────────
 private fun buildTimestamp(day: Int, month: Int, year: Int): Timestamp {
     val cal = Calendar.getInstance().apply {
         set(Calendar.YEAR,         year)
-        set(Calendar.MONTH,        month)
+        set(Calendar.MONTH,        month)   // 0-indexed (January = 0)
         set(Calendar.DAY_OF_MONTH, day)
         set(Calendar.HOUR_OF_DAY,  12)
         set(Calendar.MINUTE,       0)
@@ -127,7 +129,7 @@ private fun buildTimestamp(day: Int, month: Int, year: Int): Timestamp {
     return Timestamp(cal.time)
 }
 
-// Month name array used by the date picker header
+// Month names used by the calendar header and check-in/check-out summary boxes
 private val MONTH_NAMES = arrayOf(
     "January","February","March","April","May","June",
     "July","August","September","October","November","December"
@@ -136,14 +138,20 @@ private val MONTH_NAMES = arrayOf(
 // ─────────────────────────────────────────────────────────────────────────────
 // PRE-BOOKING SCREEN
 //
-// Flow:
-//   1. Tenant selects a rental package
-//   2. Tenant picks check-in date from inline calendar
-//   3. Tenant picks check-out date from inline calendar
-//   4. Nights are auto-calculated from date range
+// Booking flow:
+//   1. Tenant selects a rental package from the list
+//   2. Tenant picks check-in date from the inline calendar
+//   3. Tenant picks a check-out date after check-in; nights auto-calculated
+//   4. If dates are NOT picked, a manual nights counter is shown as fallback
 //   5. Tenant adjusts guest count
-//   6. Payment summary shows deposit (20%) and total
-//   7. "Pay Deposit" creates Booking and navigates to PaymentScreen
+//   6. Payment summary shows deposit (20%) and remaining (80%) amounts
+//   7. "Pay Deposit" creates the Booking document and navigates to PaymentScreen
+//      with paymentType = "DEPOSIT" so the 20% flow is triggered correctly
+//
+// KEY FIX:
+//   checkInDay and checkOutDay use -1 as "not selected" (not 0).
+//   datesSelected = checkInDay > 0 && checkOutDay > 0
+//   This correctly distinguishes "not chosen" from day 1 of a month.
 // ─────────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,17 +174,16 @@ fun PreBookingScreen(
     val minNights   = selectedPkg?.minNights ?: 1
     val maxNights   = selectedPkg?.maxNights ?: 30
 
-    // Manual nights counter — used only when tenant has NOT picked dates
+    // Manual nights counter — shown when tenant has NOT picked dates from calendar.
+    // Initialized to minNights and resets whenever the package changes.
     var selectedNights by remember(selectedPkg?.packageId) {
         mutableIntStateOf(minNights)
     }
-
-    // Reset nights counter whenever the selected package changes
     LaunchedEffect(selectedPkg?.packageId) {
         selectedNights = minNights
     }
 
-    // Load packages when screen opens
+    // Load available packages when the screen opens
     LaunchedEffect(propertyId) {
         Log.d("PRE_BOOKING", "Loading packages for propertyId='$propertyId'")
         if (propertyId.isNotEmpty()) {
@@ -186,25 +193,28 @@ fun PreBookingScreen(
         }
     }
 
-    // Read date state from ViewModel
-    val checkInDay   = uiState.checkInDay
-    val checkInMonth = uiState.checkInMonth
-    val checkInYear  = uiState.checkInYear
-    val checkOutDay  = uiState.checkOutDay
-    val checkOutMonth= uiState.checkOutMonth
-    val checkOutYear = uiState.checkOutYear
+    // Read date state from ViewModel (set by the inline calendar)
+    val checkInDay    = uiState.checkInDay
+    val checkInMonth  = uiState.checkInMonth
+    val checkInYear   = uiState.checkInYear
+    val checkOutDay   = uiState.checkOutDay
+    val checkOutMonth = uiState.checkOutMonth
+    val checkOutYear  = uiState.checkOutYear
 
-    // Whether both dates are properly selected
-    val datesSelected = checkInDay > 0 && checkOutDay > 0
+    // ── FIX: use -1 sentinel, NOT 0, to detect "date not selected" ───────────
+    // checkInDay  = -1 → tenant has not chosen check-in yet
+    // checkOutDay = -1 → tenant has not chosen check-out yet
+    // Both > 0    → both dates are selected, calendar drives the night count
+    val datesSelected   = checkInDay > 0 && checkOutDay > 0
 
-    // Nights from date range (takes priority over manual counter)
+    // Nights from the calendar range takes priority over the manual counter
     val nightsFromDates = if (datesSelected) viewModel.calculateNights() else -1
     val effectiveNights = if (nightsFromDates > 0) nightsFromDates else selectedNights
 
     val totalAmount   = (selectedPkg?.discountedPricePerNight ?: 0.0) * effectiveNights
     val depositAmount = totalAmount * 0.20
 
-    // Navigate to Payment screen once booking is created
+    // Navigate to PaymentScreen once booking creation succeeds
     LaunchedEffect(bookingUiState.actionSuccess, bookingUiState.createdBookingId) {
         if (bookingUiState.actionSuccess && !bookingUiState.createdBookingId.isNullOrEmpty()) {
             val createdId = bookingUiState.createdBookingId!!
@@ -218,13 +228,15 @@ fun PreBookingScreen(
                     payerName   = currentUserName,
                     payeeName   = pkg.propertyTitle,
                     amount      = depositAmount,
-                    paymentType = "DEPOSIT"
+                    paymentType = "DEPOSIT"   // triggers the 20% deposit flow
                 )
             )
         }
     }
 
     val packages = uiState.propertyPackages
+    // "Pay Deposit" is only enabled when a package is chosen and
+    // effectiveNights meets the minimum requirement for that package
     val canBook  = selectedPkg != null && effectiveNights >= minNights
 
     Scaffold(
@@ -252,9 +264,9 @@ fun PreBookingScreen(
                         onPay         = {
                             val pid = propertyId.ifEmpty { selectedPkg.propertyId }
 
-                            // Build check-in / check-out Timestamps from tenant-selected dates.
-                            // If tenant did not pick dates, they remain null and the
-                            // nights counter is used for pricing only.
+                            // Build Firebase Timestamps only when tenant selected dates.
+                            // If no dates were picked, timestamps are null and the
+                            // nights counter value is used for pricing only.
                             val checkIn  = if (checkInDay  > 0) buildTimestamp(checkInDay,  checkInMonth,  checkInYear)  else null
                             val checkOut = if (checkOutDay > 0) buildTimestamp(checkOutDay, checkOutMonth, checkOutYear) else null
 
@@ -270,7 +282,7 @@ fun PreBookingScreen(
                                 totalAmount     = totalAmount,
                                 depositAmount   = depositAmount,
                                 remainingAmount = totalAmount - depositAmount,
-                                isPreBooking    = true,
+                                isPreBooking    = true,         // flags this as a deposit-flow booking
                                 securityDeposit = 0.0,
                                 status          = BookingStatus.PENDING_APPROVAL.name,
                                 paymentStatus   = PaymentStatus.PENDING.name,
@@ -296,13 +308,13 @@ fun PreBookingScreen(
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
 
-            // Advance booking banner
+            // Advance booking information banner
             item {
                 Spacer(Modifier.height(sz.sectionGap))
                 PBAdvanceBanner(sz)
             }
 
-            // Available packages header
+            // Section header for the packages list
             item {
                 Spacer(Modifier.height(sz.sectionGap + 4.dp))
                 PBSectionHeader(
@@ -313,7 +325,7 @@ fun PreBookingScreen(
                 Spacer(Modifier.height(sz.vPad - 4.dp))
             }
 
-            // Loading / empty / package list
+            // Package list — loading / empty / cards
             if (uiState.isLoading) {
                 item { PBLoadingState(sz) }
             } else if (packages.isEmpty()) {
@@ -340,8 +352,8 @@ fun PreBookingScreen(
                 )
             }
 
-            // Date picker — shown only when a package is selected.
-            // Tenant independently picks check-in and check-out from calendar.
+            // Inline calendar date picker — only shown when a package is selected.
+            // Tenant picks check-in first, then check-out from the same calendar.
             item {
                 AnimatedVisibility(
                     visible = selectedPkg != null,
@@ -351,13 +363,13 @@ fun PreBookingScreen(
                     if (selectedPkg != null) {
                         Spacer(Modifier.height(sz.sectionGap - 4.dp))
                         PBDatePicker(
-                            checkInDay    = checkInDay,
-                            checkInMonth  = checkInMonth,
-                            checkInYear   = checkInYear,
-                            checkOutDay   = checkOutDay,
-                            checkOutMonth = checkOutMonth,
-                            checkOutYear  = checkOutYear,
-                            sz            = sz,
+                            checkInDay         = checkInDay,
+                            checkInMonth       = checkInMonth,
+                            checkInYear        = checkInYear,
+                            checkOutDay        = checkOutDay,
+                            checkOutMonth      = checkOutMonth,
+                            checkOutYear       = checkOutYear,
+                            sz                 = sz,
                             onCheckInSelected  = { day, month, year ->
                                 viewModel.setCheckInDate(day, month, year)
                             },
@@ -373,7 +385,7 @@ fun PreBookingScreen(
             }
 
             // Manual nights selector — shown only when dates are NOT selected.
-            // Once tenant picks dates, nights are auto-calculated.
+            // Automatically hides once tenant picks both check-in and check-out.
             item {
                 AnimatedVisibility(
                     visible = selectedPkg != null && !datesSelected,
@@ -394,7 +406,7 @@ fun PreBookingScreen(
                 }
             }
 
-            // Payment summary
+            // Payment summary card — total, deposit (20%), remaining (80%)
             item {
                 AnimatedVisibility(
                     visible = selectedPkg != null,
@@ -415,7 +427,7 @@ fun PreBookingScreen(
                 }
             }
 
-            // Error message
+            // Error banner from ViewModel
             if (uiState.errorMessage != null) {
                 item {
                     Spacer(Modifier.height(sz.vPad - 4.dp))
@@ -429,16 +441,22 @@ fun PreBookingScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DATE PICKER COMPOSABLE
+// INLINE DATE PICKER
 //
-// Two-step inline calendar:
-//   Step 1: Tenant taps a day → sets check-in
-//   Step 2: Tenant taps a later day → sets check-out
+// Two-step calendar selection (tenant-driven, no landlord involvement):
+//   Step 1: Tenant taps any available day → sets check-in (checkInDay > 0)
+//   Step 2: Tenant taps a day AFTER check-in → sets check-out (checkOutDay > 0)
 //
-// Supports month navigation (previous/next month arrows).
-// Days before today are disabled.
-// Selected range is highlighted in gold.
-// Landlord is NOT involved — tenant alone picks both dates.
+// Features:
+//   • Previous / next month navigation
+//   • Days before today are disabled (no past bookings)
+//   • Selected range highlighted in gold
+//   • "Reset" button clears both dates back to -1
+//
+// Sentinel rules (IMPORTANT — do NOT change to 0):
+//   checkInDay  = -1 → not selected
+//   checkOutDay = -1 → not selected
+//   day > 0          → date is selected
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBDatePicker(
@@ -453,38 +471,38 @@ private fun PBDatePicker(
     onCheckOutSelected : (day: Int, month: Int, year: Int) -> Unit,
     onReset            : () -> Unit
 ) {
-    // Calendar currently displayed in the grid (can be navigated independently)
-    val today         = Calendar.getInstance()
-    val todayDay      = today.get(Calendar.DAY_OF_MONTH)
-    val todayMonth    = today.get(Calendar.MONTH)
-    val todayYear     = today.get(Calendar.YEAR)
+    // Today's components — used to disable past dates
+    val today      = Calendar.getInstance()
+    val todayDay   = today.get(Calendar.DAY_OF_MONTH)
+    val todayMonth = today.get(Calendar.MONTH)
+    val todayYear  = today.get(Calendar.YEAR)
 
-    // Displayed calendar state — starts at current month
+    // Which month/year is currently visible in the calendar grid
     var displayMonth by remember { mutableIntStateOf(todayMonth) }
     var displayYear  by remember { mutableIntStateOf(todayYear) }
 
-    // True when tenant is still choosing check-in
-    val isPickingCheckIn  = checkInDay == -1
-    // True when check-in is set but check-out is not
-    val isPickingCheckOut = checkInDay > 0 && checkOutDay == -1
-    // True when both dates are chosen
-    val bothSelected      = checkInDay > 0 && checkOutDay > 0
+    // Step-state derived from sentinel values
+    // -1 = not selected, > 0 = selected
+    val isPickingCheckIn  = checkInDay == -1              // No check-in yet
+    val isPickingCheckOut = checkInDay > 0 && checkOutDay == -1  // Check-in set, need check-out
+    val bothSelected      = checkInDay > 0 && checkOutDay > 0    // Both dates confirmed
 
-    // Last valid day of the displayed month
+    // Days in the displayed month
     val daysInMonth = Calendar.getInstance().apply {
         set(Calendar.YEAR, displayYear)
         set(Calendar.MONTH, displayMonth)
     }.getActualMaximum(Calendar.DAY_OF_MONTH)
 
-    // Day-of-week for the 1st of the displayed month (0=Sun .. 6=Sat)
+    // Weekday offset for the 1st of the month (0 = Sunday … 6 = Saturday)
     val firstDayOfWeek = Calendar.getInstance().apply {
         set(Calendar.YEAR, displayYear)
         set(Calendar.MONTH, displayMonth)
         set(Calendar.DAY_OF_MONTH, 1)
-    }.get(Calendar.DAY_OF_WEEK) - 1  // convert to 0-indexed
+    }.get(Calendar.DAY_OF_WEEK) - 1
 
-    // Helpers to compare calendar dates as absolute "day index" values
+    // Convert a date to a comparable integer for easy range checks
     fun toAbsoluteDay(d: Int, m: Int, y: Int) = y * 366 + m * 32 + d
+
     val checkInAbs  = if (checkInDay  > 0) toAbsoluteDay(checkInDay,  checkInMonth,  checkInYear)  else -1
     val checkOutAbs = if (checkOutDay > 0) toAbsoluteDay(checkOutDay, checkOutMonth, checkOutYear) else -1
     val todayAbs    = toAbsoluteDay(todayDay, todayMonth, todayYear)
@@ -498,7 +516,7 @@ private fun PBDatePicker(
             .background(PB_CardBg)
             .border(1.5.dp, GoldBorder, RoundedCornerShape(sz.cardRadius))
     ) {
-        // Gold left accent bar
+        // Left gold accent bar
         Box(
             Modifier
                 .width(4.dp)
@@ -513,7 +531,7 @@ private fun PBDatePicker(
                 .padding(horizontal = sz.cardPad + 6.dp, vertical = sz.vPad + 2.dp)
         ) {
 
-            // ── Header row ───────────────────────────────────────────────────
+            // ── Header: icon + title + step hint + reset ──────────────────────
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier          = Modifier.fillMaxWidth()
@@ -540,14 +558,16 @@ private fun PBDatePicker(
                         text = when {
                             isPickingCheckIn  -> "Tap a day to set check-in"
                             isPickingCheckOut -> "Now tap your check-out day"
-                            else              -> "${MONTH_NAMES[checkInMonth]} $checkInDay → ${MONTH_NAMES[checkOutMonth]} $checkOutDay  •  ${viewModel_nights(checkInDay, checkInMonth, checkInYear, checkOutDay, checkOutMonth, checkOutYear)} night(s)"
+                            else -> "${MONTH_NAMES[checkInMonth]} $checkInDay → " +
+                                    "${MONTH_NAMES[checkOutMonth]} $checkOutDay  •  " +
+                                    "${calcNightsLocal(checkInDay, checkInMonth, checkInYear, checkOutDay, checkOutMonth, checkOutYear)} night(s)"
                         },
                         color      = if (bothSelected) PB_Success else PB_TextMuted,
                         fontSize   = sz.captionSp.sp,
                         fontWeight = if (bothSelected) FontWeight.SemiBold else FontWeight.Normal
                     )
                 }
-                // Reset button — appears after check-in is selected
+                // Reset button — visible only after check-in is selected
                 if (checkInDay > 0) {
                     Box(
                         modifier = Modifier
@@ -572,13 +592,14 @@ private fun PBDatePicker(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Check-in box
+                // Check-in summary box
                 Column(
                     Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (checkInDay > 0) PB_SuccessLight else PB_NavyDeep.copy(0.04f))
-                        .border(1.dp,
+                        .border(
+                            1.dp,
                             if (isPickingCheckIn) GoldBorder
                             else Brush.horizontalGradient(listOf(PB_Divider, PB_Divider)),
                             RoundedCornerShape(10.dp)
@@ -604,18 +625,19 @@ private fun PBDatePicker(
                     )
                 }
 
-                // Arrow
+                // Arrow between boxes
                 Box(Modifier.align(Alignment.CenterVertically)) {
                     Icon(Icons.Default.ArrowForward, null, tint = PB_TextLight, modifier = Modifier.size(sz.iconSize))
                 }
 
-                // Check-out box
+                // Check-out summary box
                 Column(
                     Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (checkOutDay > 0) Color(0xFFFEE2E2) else PB_NavyDeep.copy(0.04f))
-                        .border(1.dp,
+                        .border(
+                            1.dp,
                             if (isPickingCheckOut) GoldBorder
                             else Brush.horizontalGradient(listOf(PB_Divider, PB_Divider)),
                             RoundedCornerShape(10.dp)
@@ -644,13 +666,13 @@ private fun PBDatePicker(
 
             Spacer(Modifier.height(sz.vPad))
 
-            // ── Month navigation row ─────────────────────────────────────────
+            // ── Month navigation: ← [Month Year] → ───────────────────────────
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                // Previous month button
+                // Previous month — disabled if already at current month
                 Box(
                     modifier = Modifier
                         .size(sz.avatarSize - 8.dp)
@@ -660,7 +682,6 @@ private fun PBDatePicker(
                             interactionSource = remember { MutableInteractionSource() },
                             indication        = null
                         ) {
-                            // Go back one month; do not go before current month
                             val prevCal = Calendar.getInstance().apply {
                                 set(Calendar.YEAR, displayYear)
                                 set(Calendar.MONTH, displayMonth)
@@ -668,9 +689,8 @@ private fun PBDatePicker(
                             }
                             val prevMonth = prevCal.get(Calendar.MONTH)
                             val prevYear  = prevCal.get(Calendar.YEAR)
-                            val prevAbs   = toAbsoluteDay(1, prevMonth, prevYear)
-                            val curAbs    = toAbsoluteDay(1, todayMonth, todayYear)
-                            if (prevAbs >= curAbs) {
+                            // Block navigation before the current month
+                            if (toAbsoluteDay(1, prevMonth, prevYear) >= toAbsoluteDay(1, todayMonth, todayYear)) {
                                 displayMonth = prevMonth
                                 displayYear  = prevYear
                             }
@@ -680,7 +700,6 @@ private fun PBDatePicker(
                     Icon(Icons.Default.ChevronLeft, null, tint = PB_TextMuted, modifier = Modifier.size(sz.iconSize))
                 }
 
-                // Current month + year label
                 Text(
                     "${MONTH_NAMES[displayMonth]} $displayYear",
                     fontWeight = FontWeight.ExtraBold,
@@ -688,7 +707,7 @@ private fun PBDatePicker(
                     fontSize   = sz.titleSp.sp
                 )
 
-                // Next month button
+                // Next month — no forward limit
                 Box(
                     modifier = Modifier
                         .size(sz.avatarSize - 8.dp)
@@ -714,7 +733,7 @@ private fun PBDatePicker(
 
             Spacer(Modifier.height(sz.vPad - 4.dp))
 
-            // ── Weekday header labels ────────────────────────────────────────
+            // ── Weekday column labels ─────────────────────────────────────────
             Row(Modifier.fillMaxWidth()) {
                 listOf("Su","Mo","Tu","We","Th","Fr","Sa").forEach { label ->
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -731,10 +750,10 @@ private fun PBDatePicker(
 
             Spacer(Modifier.height(4.dp))
 
-            // ── Calendar day grid ────────────────────────────────────────────
-            // Build a grid of 7 columns with leading empty cells for alignment
+            // ── Calendar day grid ─────────────────────────────────────────────
+            // Leading empty cells align the 1st to the correct weekday column.
             val totalCells = firstDayOfWeek + daysInMonth
-            val rows       = (totalCells + 6) / 7  // ceiling division
+            val rows       = (totalCells + 6) / 7   // ceiling division
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 for (row in 0 until rows) {
@@ -747,24 +766,24 @@ private fun PBDatePicker(
                             val day       = cellIndex - firstDayOfWeek + 1
 
                             if (day < 1 || day > daysInMonth) {
-                                // Empty cell (before month start or after month end)
+                                // Empty filler cell before the 1st or after the last day
                                 Box(Modifier.weight(1f).aspectRatio(1f))
                             } else {
-                                val cellAbs       = toAbsoluteDay(day, displayMonth, displayYear)
-                                val isPast        = cellAbs < todayAbs
-                                val isToday       = cellAbs == todayAbs
-                                val isCheckIn     = cellAbs == checkInAbs
-                                val isCheckOut    = cellAbs == checkOutAbs
-                                val isInRange     = checkInAbs > 0 && checkOutAbs > 0 &&
+                                val cellAbs    = toAbsoluteDay(day, displayMonth, displayYear)
+                                val isPast     = cellAbs < todayAbs
+                                val isToday    = cellAbs == todayAbs
+                                val isCheckIn  = cellAbs == checkInAbs
+                                val isCheckOut = cellAbs == checkOutAbs
+                                val isInRange  = checkInAbs > 0 && checkOutAbs > 0 &&
                                         cellAbs > checkInAbs && cellAbs < checkOutAbs
 
-                                // A day is selectable if:
-                                //   - Not in the past
-                                //   - When picking check-out: must be after check-in
-                                val isSelectable  = !isPast && when {
+                                // A cell is tappable when:
+                                //   • It is not in the past
+                                //   • When picking check-out: it must be after check-in
+                                val isSelectable = !isPast && when {
                                     isPickingCheckIn  -> true
                                     isPickingCheckOut -> cellAbs > checkInAbs
-                                    else              -> true  // both set; tap resets check-in
+                                    else              -> true // both set — tap resets to new check-in
                                 }
 
                                 val bgColor = when {
@@ -793,19 +812,19 @@ private fun PBDatePicker(
                                                 indication        = null
                                             ) {
                                                 when {
-                                                    // Both dates already set → reset and set new check-in
+                                                    // Both dates already set → reset and start new check-in
                                                     checkInDay > 0 && checkOutDay > 0 -> {
                                                         onCheckInSelected(day, displayMonth, displayYear)
                                                     }
-                                                    // No check-in yet → set check-in
+                                                    // No check-in yet (sentinel = -1) → set this day as check-in
                                                     checkInDay == -1 -> {
                                                         onCheckInSelected(day, displayMonth, displayYear)
                                                     }
-                                                    // Check-in set, tap is after → set check-out
+                                                    // Check-in set, tapped day is after it → set as check-out
                                                     cellAbs > checkInAbs -> {
                                                         onCheckOutSelected(day, displayMonth, displayYear)
                                                     }
-                                                    // Tap is before check-in → reset to new check-in
+                                                    // Tapped day is before or on check-in → treat as new check-in
                                                     else -> {
                                                         onCheckInSelected(day, displayMonth, displayYear)
                                                     }
@@ -832,8 +851,12 @@ private fun PBDatePicker(
     }
 }
 
-// ── Local helper: calculate nights between two date selections ────────────────
-private fun viewModel_nights(
+// ─────────────────────────────────────────────────────────────────────────────
+// LOCAL NIGHT CALCULATION
+// Used inside PBDatePicker header subtitle only.
+// ViewModel.calculateNights() is the source of truth for pricing.
+// ─────────────────────────────────────────────────────────────────────────────
+private fun calcNightsLocal(
     inDay  : Int, inMonth  : Int, inYear  : Int,
     outDay : Int, outMonth : Int, outYear : Int
 ): Int {
@@ -846,12 +869,14 @@ private fun viewModel_nights(
         set(Calendar.YEAR, outYear); set(Calendar.MONTH, outMonth); set(Calendar.DAY_OF_MONTH, outDay)
         set(Calendar.HOUR_OF_DAY, 12); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
     }
-    return ((checkOut.timeInMillis - checkIn.timeInMillis) / (1000 * 60 * 60 * 24)).toInt().coerceAtLeast(0)
+    return ((checkOut.timeInMillis - checkIn.timeInMillis) / (1000L * 60 * 60 * 24))
+        .toInt().coerceAtLeast(0)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NIGHTS SELECTOR
-// Shown only when tenant has NOT selected dates from calendar.
+// Shown only when tenant has NOT selected dates from the calendar.
+// Hides automatically once both check-in and check-out are chosen.
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBNightsSelector(
@@ -873,7 +898,7 @@ private fun PBNightsSelector(
     ) {
         Box(Modifier.width(4.dp).fillMaxHeight().align(Alignment.CenterStart).background(GoldGradient))
         Row(
-            modifier = Modifier
+            modifier              = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = sz.cardPad + 6.dp, vertical = sz.vPad + 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -916,7 +941,7 @@ private fun PBNightsSelector(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TOP BAR
+// TOP BAR — navy gradient with gold accent and "20% OFF" badge
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBTopBar(
@@ -926,6 +951,7 @@ private fun PBTopBar(
     onBack       : () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth().background(NavyGradient)) {
+        // Decorative circles
         Box(
             Modifier.size((sz.avatarSize.value * 3.2f).dp).align(Alignment.TopEnd)
                 .offset(x = (sz.avatarSize.value * 1.2f).dp, y = -(sz.avatarSize.value * 1.2f).dp)
@@ -936,11 +962,14 @@ private fun PBTopBar(
                 .offset(x = -(sz.avatarSize.value * 0.5f).dp, y = (sz.avatarSize.value * 0.5f).dp)
                 .clip(CircleShape).background(PB_Gold.copy(0.04f))
         )
+        // Gold bottom border line
         Box(Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter).background(GoldBorder))
+
         Row(
             modifier          = Modifier.statusBarsPadding().padding(horizontal = sz.hPad, vertical = sz.vPad),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Back button
             Box(
                 modifier = Modifier.size(sz.avatarSize).clip(CircleShape)
                     .background(PB_Gold.copy(0.15f)).border(1.5.dp, GoldBorder, CircleShape)
@@ -965,6 +994,7 @@ private fun PBTopBar(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            // Discount badge
             Box(
                 modifier = Modifier.clip(RoundedCornerShape((sz.cardRadius.value * 0.55f).dp))
                     .background(PB_Gold.copy(0.12f))
@@ -978,7 +1008,7 @@ private fun PBTopBar(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BOTTOM BAR
+// BOTTOM BAR — sticky "Pay Deposit" button with deposit and total amounts
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBBottomBar(
@@ -996,16 +1026,25 @@ private fun PBBottomBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
+            // Amount info
             Column(Modifier.weight(1f).padding(end = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(7.dp).clip(CircleShape).background(PB_Success))
                     Spacer(Modifier.width(5.dp))
-                    Text("Deposit Required (20%)", color = PB_TextMuted, fontSize = sz.captionSp.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "Deposit Required (20%)",
+                        color    = PB_TextMuted,
+                        fontSize = sz.captionSp.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 Spacer(Modifier.height(2.dp))
                 Text("PKR ${"%,.0f".format(depositAmount)}", color = PB_NavyDeep, fontWeight = FontWeight.Black, fontSize = sz.depositSize.sp, letterSpacing = (-0.5).sp, maxLines = 1)
                 Text("Total: PKR ${"%,.0f".format(totalAmount)}", color = PB_TextMuted, fontSize = sz.captionSp.sp, maxLines = 1)
             }
+            // Pay Deposit button
             Box(
                 modifier = Modifier.height(sz.btnHeight)
                     .clip(RoundedCornerShape((sz.cardRadius.value * 0.85f).dp))
@@ -1029,7 +1068,7 @@ private fun PBBottomBar(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ADVANCE BOOKING BANNER
+// ADVANCE BOOKING BANNER — explains the 20% deposit concept to the tenant
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBAdvanceBanner(sz: PBSizes) {
@@ -1056,9 +1095,9 @@ private fun PBAdvanceBanner(sz: PBSizes) {
                 Spacer(Modifier.height(3.dp))
                 Text(
                     "Pay only 20% deposit now to secure your stay. Remaining amount due on arrival.",
-                    fontSize  = sz.captionSp.sp,
-                    color     = Color.White.copy(0.65f),
-                    lineHeight= (sz.captionSp + 5f).sp
+                    fontSize   = sz.captionSp.sp,
+                    color      = Color.White.copy(0.65f),
+                    lineHeight = (sz.captionSp + 5f).sp
                 )
             }
         }
@@ -1066,7 +1105,7 @@ private fun PBAdvanceBanner(sz: PBSizes) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION HEADER
+// SECTION HEADER — gold accent bar + title + optional deal count badge
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBSectionHeader(title: String, badgeCount: Int?, sz: PBSizes) {
@@ -1102,7 +1141,7 @@ private fun PBLoadingState(sz: PBSizes) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMPTY STATE
+// EMPTY STATE — shown when no packages exist for the property
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBEmptyState(propertyId: String, sz: PBSizes) {
@@ -1156,6 +1195,8 @@ private fun PBErrorCard(message: String, sz: PBSizes) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PACKAGE CARD
+// Shows rental package details with animated gold border when selected.
+// Selecting a new package also resets dates (handled in ViewModel.selectPackage).
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBPackageCard(pkg: RentalPackage, isSelected: Boolean, sz: PBSizes, onClick: () -> Unit) {
@@ -1182,10 +1223,12 @@ private fun PBPackageCard(pkg: RentalPackage, isSelected: Boolean, sz: PBSizes, 
             )
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClick() }
     ) {
+        // Gold top stripe shown only when selected
         if (isSelected) Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopCenter).background(GoldBorder))
         Column(Modifier.padding(horizontal = sz.cardPad, vertical = sz.vPad + 4.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f).padding(end = sz.hPad - 4.dp)) {
+                    // Optional badge (e.g. "🔥 Summer Deal")
                     if (pkg.badgeLabel.isNotEmpty()) {
                         Box(
                             Modifier.clip(RoundedCornerShape((sz.cardRadius.value * 0.55f).dp))
@@ -1201,6 +1244,7 @@ private fun PBPackageCard(pkg: RentalPackage, isSelected: Boolean, sz: PBSizes, 
                     Spacer(Modifier.height(2.dp))
                     Text(pkg.propertyTitle, color = PB_TextMuted, fontSize = sz.bodySp.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                // Animated checkmark when selected
                 AnimatedVisibility(visible = isSelected, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
                     Box(
                         Modifier.size(sz.checkSize + 16.dp).clip(CircleShape)
@@ -1212,6 +1256,7 @@ private fun PBPackageCard(pkg: RentalPackage, isSelected: Boolean, sz: PBSizes, 
                 }
             }
             Spacer(Modifier.height(sz.vPad))
+            // Pricing: discounted / original strikethrough / savings badge
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
                 Text(pkg.formattedDiscountedPrice, fontWeight = FontWeight.Black, fontSize = sz.priceSize.sp, color = PB_TextDark, letterSpacing = (-1).sp)
                 Text("/night", color = PB_TextMuted, fontSize = sz.bodySp.sp, modifier = Modifier.padding(start = 4.dp, bottom = 3.dp))
@@ -1225,6 +1270,7 @@ private fun PBPackageCard(pkg: RentalPackage, isSelected: Boolean, sz: PBSizes, 
                 }
             }
             Spacer(Modifier.height(sz.vPad))
+            // Info chips: min nights, max nights, remaining slots
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 PBInfoChip(Icons.Default.NightsStay, "Min ${pkg.minNights}N", PB_TextMuted, sz)
                 if (pkg.maxNights != null) PBInfoChip(Icons.Default.EventAvailable, "Max ${pkg.maxNights}N", PB_TextMuted, sz)
@@ -1234,6 +1280,7 @@ private fun PBPackageCard(pkg: RentalPackage, isSelected: Boolean, sz: PBSizes, 
                         if (isLow) MaterialTheme.colorScheme.error else PB_Success, sz)
                 }
             }
+            // Inclusions (if any)
             if (pkg.inclusions.isNotEmpty()) {
                 Spacer(Modifier.height(sz.vPad))
                 Divider(color = PB_Divider)
@@ -1244,6 +1291,7 @@ private fun PBPackageCard(pkg: RentalPackage, isSelected: Boolean, sz: PBSizes, 
                     Text("Includes", color = PB_TextDark, fontSize = sz.bodySp.sp, fontWeight = FontWeight.ExtraBold)
                 }
                 Spacer(Modifier.height(sz.vPad - 4.dp))
+                // Up to 4 inclusions in a 2-column grid
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     pkg.inclusions.take(4).chunked(2).forEach { rowItems ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1274,7 +1322,7 @@ private fun PBPackageCard(pkg: RentalPackage, isSelected: Boolean, sz: PBSizes, 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INFO CHIP
+// INFO CHIP — small pill for min/max nights and slot count
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBInfoChip(icon: ImageVector, label: String, tint: Color, sz: PBSizes) {
@@ -1292,7 +1340,7 @@ private fun PBInfoChip(icon: ImageVector, label: String, tint: Color, sz: PBSize
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GUEST COUNTER
+// GUEST COUNTER — min 1, max 20
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBGuestCounter(guestCount: Int, sz: PBSizes, onMinus: () -> Unit, onPlus: () -> Unit) {
@@ -1305,7 +1353,7 @@ private fun PBGuestCounter(guestCount: Int, sz: PBSizes, onMinus: () -> Unit, on
     ) {
         Box(Modifier.width(4.dp).fillMaxHeight().align(Alignment.CenterStart).background(GoldGradient))
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = sz.cardPad + 6.dp, vertical = sz.vPad + 2.dp),
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = sz.cardPad + 6.dp, vertical = sz.vPad + 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
@@ -1328,6 +1376,7 @@ private fun PBGuestCounter(guestCount: Int, sz: PBSizes, onMinus: () -> Unit, on
     }
 }
 
+// Reusable circular counter button (increment / decrement)
 @Composable
 private fun PBCounterButton(symbol: String, enabled: Boolean, onClick: () -> Unit, sz: PBSizes) {
     Box(
@@ -1342,7 +1391,8 @@ private fun PBCounterButton(symbol: String, enabled: Boolean, onClick: () -> Uni
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAYMENT SUMMARY
+// PAYMENT SUMMARY CARD
+// Shows package, nights, guests, total, deposit (20%), and remaining (80%).
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBPaymentSummary(
@@ -1362,6 +1412,7 @@ private fun PBPaymentSummary(
     ) {
         Box(Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopCenter).background(GoldBorder))
         Column(Modifier.padding(horizontal = sz.cardPad, vertical = sz.vPad + 4.dp)) {
+            // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(sz.avatarSize)
@@ -1381,18 +1432,20 @@ private fun PBPaymentSummary(
             Spacer(Modifier.height(sz.vPad))
             Divider(color = PB_Divider)
             Spacer(Modifier.height(sz.vPad - 2.dp))
-            PBSummaryRow("Package",    pkg.packageName,             sz)
+            PBSummaryRow("Package",    pkg.packageName,              sz)
             PBSummaryRow("Rate/Night", pkg.formattedDiscountedPrice, sz, strikethrough = pkg.formattedOriginalPrice)
             PBSummaryRow("Duration",   "$nights nights",             sz)
             PBSummaryRow("Guests",     "$guestCount guests",         sz)
             Spacer(Modifier.height(sz.vPad - 2.dp))
             Divider(color = PB_Divider)
             Spacer(Modifier.height(sz.vPad - 2.dp))
+            // Total amount row
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Total Amount", fontWeight = FontWeight.Bold, color = PB_TextDark, fontSize = sz.titleSp.sp)
                 Text("PKR ${"%,.0f".format(totalAmount)}", fontWeight = FontWeight.Black, color = PB_TextDark, fontSize = (sz.titleSp + 1f).sp)
             }
             Spacer(Modifier.height(sz.vPad - 2.dp))
+            // Deposit highlight box — 20% to pay now, 80% due on arrival
             Box(
                 modifier = Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape((sz.cardRadius.value * 0.75f).dp))
@@ -1420,7 +1473,7 @@ private fun PBPaymentSummary(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SUMMARY ROW
+// SUMMARY ROW — label on left, value (+ optional strikethrough) on right
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PBSummaryRow(label: String, value: String, sz: PBSizes, strikethrough: String? = null) {

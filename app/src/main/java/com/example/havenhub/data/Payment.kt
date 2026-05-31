@@ -14,7 +14,7 @@ data class Payment(
     val payeeId   : String = "",
     val payeeName : String = "",
 
-    val packageId : String = "",   // Rental package reference (empty if none)
+    val packageId : String = "",   // ← NEW: rental package reference (empty if none)
 
     val amount         : String = "0",
     val platformFee    : String = "0",
@@ -61,7 +61,7 @@ data class Payment(
         catch (_: Exception) { PaymentType.BOOKING }
 }
 
-// Payment Method
+// ── Payment Method ─────────────────────────────────────────────────
 enum class PaymentMethod {
     JAZZCASH, EASYPAISA, BANK_TRANSFER, CREDIT_CARD, DEBIT_CARD, CASH;
 
@@ -75,12 +75,12 @@ enum class PaymentMethod {
     }
 }
 
-// Payment Type
+// ── Payment Type ───────────────────────────────────────────────────
 enum class PaymentType {
     BOOKING, REFUND, PAYOUT
 }
 
-// Payment Status
+// ── Payment Status ─────────────────────────────────────────────────
 enum class PaymentStatus {
     PENDING,
     PROCESSING,
@@ -88,9 +88,9 @@ enum class PaymentStatus {
     FAILED,
     REFUNDED,
     PARTIALLY_REFUNDED,
-    PAID,
-    DEPOSIT_PAID,
-    PARTIALLY_PAID;
+    PAID,           // ✅  for BookingDetailScreen
+    DEPOSIT_PAID,   // ✅ for BookingDetailScreen + BookingViewModel
+    PARTIALLY_PAID; // ✅ for BookingDetailScreen
 
     fun displayName(): String = when (this) {
         PENDING            -> "Pending"
@@ -104,27 +104,4 @@ enum class PaymentStatus {
         PARTIALLY_PAID     -> "Partially Paid"
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,46 +35,48 @@ import com.example.havenhub.viewmodel.PropertyViewModel
 import com.example.havenhub.viewmodel.SeasonalAlertViewModel
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.ui.platform.LocalLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingScreen(
-    navController    : NavController,
-    propertyId       : String,
-    viewModel        : BookingViewModel      = hiltViewModel(),
-    propertyViewModel: PropertyViewModel     = hiltViewModel(),
-    authViewModel    : AuthViewModel         = hiltViewModel(),
-    // ✦ NEW — inject SeasonalAlertViewModel to show relevant alerts on booking
-    seasonalViewModel: SeasonalAlertViewModel = hiltViewModel()
+    navController     : NavController,
+    propertyId        : String,
+    viewModel         : BookingViewModel      = hiltViewModel(),
+    propertyViewModel : PropertyViewModel     = hiltViewModel(),
+    authViewModel     : AuthViewModel         = hiltViewModel(),
+    // Injected to display active seasonal alerts as contextual tips on the booking form.
+    seasonalViewModel : SeasonalAlertViewModel = hiltViewModel()
 ) {
-    val uiState        by viewModel.uiState.collectAsState()
-    val authUiState    by authViewModel.uiState.collectAsState()
-    val propUiState    by propertyViewModel.uiState.collectAsState()
-    val seasonalState  by seasonalViewModel.uiState.collectAsState()  // ✦ NEW
+    val uiState       by viewModel.uiState.collectAsState()
+    val authUiState   by authViewModel.uiState.collectAsState()
+    val propUiState   by propertyViewModel.uiState.collectAsState()
+    val seasonalState by seasonalViewModel.uiState.collectAsState()
 
     val isDark = isSystemInDarkTheme()
 
+    // ── Theme Colors ──────────────────────────────────────────────────────────
     val screenBg    = if (isDark) DarkBg           else Color(0xFFF5F7FA)
     val cardBg      = if (isDark) DarkSurface       else Color.White
     val navyColor   = if (isDark) DarkBgSecondary   else Color(0xFF0D1B3E)
     val goldColor   = if (isDark) DarkGoldPrimary   else Color(0xFFD4AF37)
     val textPrimary = if (isDark) DarkTextPrimary   else Color(0xFF0D1B3E)
-    val textSecond  = if (isDark) DarkTextSecondary else Color(0xFF8899AA)
     val hintColor   = if (isDark) DarkTextSecondary else Color(0xFF8899AA)
     val categoryBg  = if (isDark) DarkBgElevated    else Color(0xFFF5F7FA)
     val dividerCol  = if (isDark) DarkBorder        else Color.White.copy(0.2f)
 
+    // ── Auth State ────────────────────────────────────────────────────────────
     val currentUid  = authUiState.currentUser?.uid         ?: ""
     val currentName = authUiState.currentUser?.displayName ?: ""
-    val userRole    = authUiState.userRole.lowercase().trim()  // ✦ NEW
+    // Used to gate seasonal alert loading (admins don't book properties).
+    val userRole    = authUiState.userRole.lowercase().trim()
 
+    // ── Load Property Details ─────────────────────────────────────────────────
     LaunchedEffect(propertyId) {
         propertyViewModel.loadPropertyDetail(propertyId)
     }
 
-    // ✦ NEW — Load seasonal alerts for tenant role when screen opens
-    // Tenants are the ones booking so role = "tenant"
+    // ── Load Seasonal Alerts ──────────────────────────────────────────────────
+    // Only load for tenant/landlord roles; admins manage alerts, not view them here.
     LaunchedEffect(userRole) {
         if (userRole.isNotEmpty() && userRole != "admin") {
             seasonalViewModel.loadAlertsForRole(userRole)
@@ -82,44 +85,84 @@ fun BookingScreen(
 
     val property = propUiState.propertyDetail
 
+    // ── Form State ────────────────────────────────────────────────────────────
     var selectedDuration   by remember { mutableStateOf("Daily") }
-    var nights             by remember { mutableIntStateOf(1) }
     var guests             by remember { mutableIntStateOf(1) }
     var checkInDate        by remember { mutableStateOf("") }
     var checkOutDate       by remember { mutableStateOf("") }
     var showCheckInPicker  by remember { mutableStateOf(false) }
     var showCheckOutPicker by remember { mutableStateOf(false) }
 
-    // Double-tap guard — booking created only once
+    // Double-tap guard — prevents duplicate booking creation on rapid taps.
     var isSubmitting by remember { mutableStateOf(false) }
 
-    val dateFormatter = SimpleDateFormat("dd MMM yyyy", LocalLocale.current.platformLocale)
+    // ── Date Formatter ────────────────────────────────────────────────────────
+    // Keyed on the application context so it survives recompositions without
+    // recreating the formatter on every frame.
+    val context = LocalContext.current
+    val staticDateFormatter = remember(context) {
+        val staticLocale = context.applicationContext.resources.configuration.locales[0]
+        SimpleDateFormat("dd MMM yyyy", staticLocale)
+    }
 
-    val totalAmount = remember(nights, selectedDuration, property) {
+    // ── Auto-Calculate Nights from Date Selection ─────────────────────────────
+    // Automatically derives the number of nights from the selected check-in /
+    // check-out dates so the tenant doesn't have to enter nights manually.
+    val calculatedNights = remember(checkInDate, checkOutDate, staticDateFormatter) {
+        try {
+            if (checkInDate.isNotEmpty() && checkOutDate.isNotEmpty()) {
+                val dIn  = staticDateFormatter.parse(checkInDate)
+                val dOut = staticDateFormatter.parse(checkOutDate)
+                if (dIn != null && dOut != null && dOut.time > dIn.time) {
+                    ((dOut.time - dIn.time) / (1000 * 60 * 60 * 24)).toInt().coerceAtLeast(1)
+                } else { 1 }
+            } else { 1 }
+        } catch (e: Exception) { 1 }
+    }
+
+    // ── Hybrid Continuous Price Calculation ───────────────────────────────────
+    // For Weekly/Monthly packages: full package units are priced at the
+    // discounted package rate; leftover nights revert to the base nightly rate.
+    // This avoids the discontinuity where crossing a week/month boundary would
+    // suddenly make the total cheaper.
+    val totalAmount = remember(calculatedNights, selectedDuration, property) {
+        val baseNightPrice = property?.pricePerNight ?: 0.0
         when (selectedDuration) {
-            "Weekly"  -> (property?.pricePerWeek  ?: (property?.pricePerNight?.times(7)  ?: 0.0)) * (nights / 7).coerceAtLeast(1)
-            "Monthly" -> (property?.pricePerMonth ?: (property?.pricePerNight?.times(30) ?: 0.0)) * (nights / 30).coerceAtLeast(1)
-            else      -> (property?.pricePerNight ?: 0.0) * nights
+            "Weekly" -> {
+                val weeklyPrice = property?.pricePerWeek ?: (baseNightPrice * 7.0)
+                val fullWeeks   = calculatedNights / 7
+                val extraNights = calculatedNights % 7
+                (fullWeeks * weeklyPrice) + (extraNights * baseNightPrice)
+            }
+            "Monthly" -> {
+                val monthlyPrice = property?.pricePerMonth ?: (baseNightPrice * 30.0)
+                val fullMonths  = calculatedNights / 30
+                val extraNights = calculatedNights % 30
+                (fullMonths * monthlyPrice) + (extraNights * baseNightPrice)
+            }
+            else -> baseNightPrice * calculatedNights
         }
     }
 
-    // Navigate to confirmation on success
+    // ── Navigation: Booking Success ───────────────────────────────────────────
     LaunchedEffect(uiState.actionSuccess, uiState.createdBookingId) {
         if (uiState.actionSuccess && !uiState.createdBookingId.isNullOrEmpty()) {
             isSubmitting = false
-            navController.navigate(Screen.BookingConfirmation.createRoute(uiState.createdBookingId!!)) {
+            navController.navigate(
+                Screen.BookingConfirmation.createRoute(uiState.createdBookingId!!)
+            ) {
                 popUpTo(Screen.Booking.route) { inclusive = true }
             }
             viewModel.clearMessages()
         }
     }
 
-    // Reset submitting flag on error
+    // Reset submitting guard when an error is returned from the ViewModel.
     LaunchedEffect(uiState.errorMessage) {
         if (uiState.errorMessage != null) isSubmitting = false
     }
 
-    // ── Date pickers ──────────────────────────────────────────────────────────
+    // ── Check-In Date Picker ──────────────────────────────────────────────────
     if (showCheckInPicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = System.currentTimeMillis()
@@ -129,7 +172,7 @@ fun BookingScreen(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
-                        checkInDate = dateFormatter.format(Date(it))
+                        checkInDate = staticDateFormatter.format(Date(it))
                     }
                     showCheckInPicker = false
                 }) { Text("OK") }
@@ -140,16 +183,24 @@ fun BookingScreen(
         ) { DatePicker(state = datePickerState) }
     }
 
+    // ── Check-Out Date Picker ─────────────────────────────────────────────────
+    // Pre-selects a sensible default based on the chosen duration type so the
+    // picker opens closer to the expected check-out date.
     if (showCheckOutPicker) {
+        val offsetMillis = when (selectedDuration) {
+            "Weekly"  -> 86400000L * 7
+            "Monthly" -> 86400000L * 30
+            else      -> 86400000L          // 1 day default for Daily
+        }
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = System.currentTimeMillis() + 86400000L
+            initialSelectedDateMillis = System.currentTimeMillis() + offsetMillis
         )
         DatePickerDialog(
             onDismissRequest = { showCheckOutPicker = false },
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
-                        checkOutDate = dateFormatter.format(Date(it))
+                        checkOutDate = staticDateFormatter.format(Date(it))
                     }
                     showCheckOutPicker = false
                 }) { Text("OK") }
@@ -160,14 +211,13 @@ fun BookingScreen(
         ) { DatePicker(state = datePickerState) }
     }
 
+    // ── Scaffold ──────────────────────────────────────────────────────────────
     Scaffold(
         containerColor      = screenBg,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = {
-                    Text("Complete Booking", fontWeight = FontWeight.Bold)
-                },
+                title = { Text("Complete Booking", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -181,6 +231,7 @@ fun BookingScreen(
             )
         }
     ) { paddingValues ->
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -188,10 +239,11 @@ fun BookingScreen(
                 .background(screenBg)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             when {
-                // Loading
+
+                // ── Loading State ─────────────────────────────────────────────
                 propUiState.isLoading -> {
                     Box(
                         Modifier.fillMaxWidth().height(200.dp),
@@ -203,32 +255,32 @@ fun BookingScreen(
                     }
                 }
 
-                // Property load failed
+                // ── Property Failed to Load ───────────────────────────────────
                 property == null -> {
                     BookingBlockedCard(
                         message = "Property load nahi ho rahi. Wapas jao aur dobara try karo."
                     )
                 }
 
-                property.status.equals(PropertyStatus.APPROVED.name, ignoreCase = true).not()
-                        && property.status.equals("BOOKED", ignoreCase = true) -> {
+                // ── Property Already Booked ───────────────────────────────────
+                property.status.equals("BOOKED", ignoreCase = true) -> {
                     BookingBlockedCard(
                         message  = "Yeh property abhi already booked hai — phir baad mein try karein.",
                         isBooked = true
                     )
                 }
 
-                // Not approved by admin yet
-                property.status.equals(PropertyStatus.APPROVED.name, ignoreCase = true).not() -> {
+                // ── Property Not Yet Approved by Admin ────────────────────────
+                !property.status.equals(PropertyStatus.APPROVED.name, ignoreCase = true) -> {
                     BookingBlockedCard(
                         message = "Yeh property abhi admin se approve nahi hui — booking nahi ho sakti."
                     )
                 }
 
-                // Property is APPROVED and available — show booking form
+                // ── Booking Form (Property APPROVED + Available) ──────────────
                 else -> {
 
-                    // 1. Property Summary card
+                    // ── 1. Property Summary Card ──────────────────────────────
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -263,21 +315,21 @@ fun BookingScreen(
                         }
                     }
 
-                    // ✦ NEW — Seasonal Alert Warning Card
-                    // Shows the first active seasonal alert as a tip above the booking form.
-                    // Example: "Eid holidays aa rahi hain — book early to avoid disappointment!"
-                    // This helps tenants make informed booking decisions during peak seasons.
+                    // ── 2. Seasonal Alert Warning Card ────────────────────────
+                    // Shows the first active seasonal alert as an informational
+                    // tip above the booking form (e.g. "Eid holidays! Book early").
+                    // Helps tenants make informed decisions during peak seasons.
                     val firstAlert = seasonalState.alerts.firstOrNull()
                     if (firstAlert != null) {
                         SeasonalBookingWarningCard(
-                            emoji    = firstAlert.iconEmoji,
-                            title    = firstAlert.title,
-                            message  = firstAlert.message,
-                            isDark   = isDark
+                            emoji   = firstAlert.iconEmoji,
+                            title   = firstAlert.title,
+                            message = firstAlert.message,
+                            isDark  = isDark
                         )
                     }
 
-                    // 2. Duration Type card
+                    // ── 3. Duration Type Card ─────────────────────────────────
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -316,7 +368,9 @@ fun BookingScreen(
                         }
                     }
 
-                    // 3. Date Selection card
+                    // ── 4. Date Selection Card ────────────────────────────────
+                    // Nights are auto-calculated from the date diff (calculatedNights)
+                    // so the tenant only needs to pick dates — no manual night entry.
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -372,7 +426,7 @@ fun BookingScreen(
                         }
                     }
 
-                    // 4. Stay Details card
+                    // ── 5. Stay Details Card ──────────────────────────────────
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -386,20 +440,9 @@ fun BookingScreen(
                                 fontWeight = FontWeight.Bold,
                                 color      = textPrimary
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
 
-                            // Nights counter (no max restriction)
-                            CounterRow(
-                                label       = "Number of Nights",
-                                count       = nights,
-                                onDecrement = { if (nights > 1) nights-- },
-                                onIncrement = { nights++ },
-                                isDark      = isDark
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Guests counter — restricted to maxGuests
+                            // Guest counter — capped at property.maxGuests.
                             val atGuestMax = guests >= property.maxGuests
 
                             CounterRow(
@@ -408,11 +451,12 @@ fun BookingScreen(
                                 onDecrement = { if (guests > 1) guests-- },
                                 onIncrement = { if (guests < property.maxGuests) guests++ },
                                 isDark      = isDark,
-                                atMax       = atGuestMax
+                                atMax       = atGuestMax   // Disables "+" and greys out the button.
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
 
+                            // Guest limit notice — turns red with a warning when limit is reached.
                             Text(
                                 text = if (atGuestMax)
                                     "⚠️ Maximum limit reached! (${property.maxGuests} guests allowed)"
@@ -425,7 +469,9 @@ fun BookingScreen(
                         }
                     }
 
-                    // 5. Price Breakdown card
+                    // ── 6. Price Breakdown Card ───────────────────────────────
+                    // Shows the hybrid continuous price: package rate for full
+                    // weeks/months + base nightly rate for leftover nights.
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(16.dp),
@@ -440,9 +486,11 @@ fun BookingScreen(
                                 color      = Color.White
                             )
                             Spacer(modifier = Modifier.height(12.dp))
+
+                            // Label includes the active package type and auto-calculated nights.
                             PriceRow(
-                                "${property.formattedPrice} × $nights nights",
-                                "PKR ${"%.0f".format(property.pricePerNight * nights)}"
+                                "${property.formattedPrice} ($selectedDuration Package) × $calculatedNights nights",
+                                "PKR ${"%.0f".format(totalAmount)}"
                             )
                             if (property.securityDeposit > 0) {
                                 PriceRow(
@@ -474,7 +522,7 @@ fun BookingScreen(
                         }
                     }
 
-                    // Error message card
+                    // ── Error Message Card ────────────────────────────────────
                     uiState.errorMessage?.let { error ->
                         Card(
                             colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
@@ -489,7 +537,8 @@ fun BookingScreen(
                         }
                     }
 
-                    // 6. Confirm Booking button
+                    // ── 7. Confirm Booking Button ─────────────────────────────
+                    // Disabled until both dates are selected and no request is in flight.
                     val isFormComplete = checkInDate.isNotEmpty() && checkOutDate.isNotEmpty()
 
                     Button(
@@ -497,9 +546,8 @@ fun BookingScreen(
                             if (isSubmitting) return@Button
                             isSubmitting = true
 
-                            val sdfParse = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-                            val checkIn  = try { sdfParse.parse(checkInDate)  } catch (e: Exception) { null }
-                            val checkOut = try { sdfParse.parse(checkOutDate) } catch (e: Exception) { null }
+                            val checkIn  = try { staticDateFormatter.parse(checkInDate)  } catch (e: Exception) { null }
+                            val checkOut = try { staticDateFormatter.parse(checkOutDate) } catch (e: Exception) { null }
 
                             val booking = Booking(
                                 propertyId       = propertyId,
@@ -509,17 +557,17 @@ fun BookingScreen(
                                 tenantId         = currentUid,
                                 tenantName       = currentName,
                                 pricePerNight    = property.pricePerNight,
-                                totalAmount      = totalAmount,
+                                totalAmount      = totalAmount + property.securityDeposit,
                                 subtotal         = totalAmount,
                                 securityDeposit  = property.securityDeposit,
                                 status           = BookingStatus.PENDING.name,
                                 paymentStatus    = PaymentStatus.PENDING.name,
                                 propertyAddress  = "${property.address}, ${property.city}",
                                 propertyCoverUrl = property.coverImageUrl,
-                                totalNights      = nights,
+                                totalNights      = calculatedNights,  // Auto-derived from date diff.
                                 guestCount       = guests,
                                 paymentMethod    = "Pending",
-                                checkInDate      = checkIn?.let { com.google.firebase.Timestamp(it) },
+                                checkInDate      = checkIn?.let  { com.google.firebase.Timestamp(it) },
                                 checkOutDate     = checkOut?.let { com.google.firebase.Timestamp(it) }
                             )
                             viewModel.createBooking(booking)
@@ -555,26 +603,26 @@ fun BookingScreen(
                         color    = hintColor,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
-                }
-            }
-        }
-    }
+                } // end else (approved property)
+            } // end when
+        } // end Column
+    } // end Scaffold
 }
 
 // =============================================================================
-// ✦ NEW — SEASONAL BOOKING WARNING CARD
+// SEASONAL BOOKING WARNING CARD
 //
-// Shows active seasonal alert as a contextual tip inside the booking form.
-// Placed between the Property Summary card and the Duration Type card so the
-// tenant sees it before filling in any details.
+// Displays the first active seasonal alert as an amber-toned informational tip
+// inside the booking form, positioned between the Property Summary card and the
+// Duration Type card. Amber is intentionally distinct from error-red and
+// success-green so tenants read it as a helpful heads-up, not an error.
 //
-// Design: amber-toned card (distinct from error red and success green) so it
-// reads as informational, not alarming. No dismiss button — it stays visible
-// as a reminder throughout the booking process.
+// There is no dismiss button — the card stays visible as a reminder throughout
+// the booking process.
 //
-// Example use cases:
-//   Eid holiday  → "Book early! Properties fill up fast during Eid holidays."
-//   Summer peak  → "Summer demand is high — confirm your dates soon."
+// Example messages:
+//   "Eid holidays aa rahi hain — book early to avoid disappointment!"
+//   "Summer peak season: properties fill up fast. Confirm your dates soon."
 // =============================================================================
 @Composable
 private fun SeasonalBookingWarningCard(
@@ -583,11 +631,11 @@ private fun SeasonalBookingWarningCard(
     message: String,
     isDark : Boolean
 ) {
-    val bgColor     = if (isDark) Color(0xFF1A1608) else Color(0xFFFFFBEA)
-    val borderColor = if (isDark) Color(0xFFB8962E).copy(0.5f) else Color(0xFFD4AF37).copy(0.5f)
-    val titleColor  = if (isDark) Color(0xFFF5D060) else Color(0xFF4A3800)
-    val msgColor    = if (isDark) Color(0xFFD4AF37).copy(0.75f) else Color(0xFF5C4800).copy(0.85f)
-    val accentColor = if (isDark) Color(0xFFD4AF37) else Color(0xFF9B7D2E)
+    val bgColor     = if (isDark) Color(0xFF1A1608)              else Color(0xFFFFFBEA)
+    val borderColor = if (isDark) Color(0xFFB8962E).copy(0.5f)  else Color(0xFFD4AF37).copy(0.5f)
+    val titleColor  = if (isDark) Color(0xFFF5D060)              else Color(0xFF4A3800)
+    val msgColor    = if (isDark) Color(0xFFD4AF37).copy(0.75f)  else Color(0xFF5C4800).copy(0.85f)
+    val accentColor = if (isDark) Color(0xFFD4AF37)              else Color(0xFF9B7D2E)
 
     Row(
         modifier = Modifier
@@ -608,7 +656,7 @@ private fun SeasonalBookingWarningCard(
                 .background(accentColor)
         )
 
-        // Emoji icon
+        // Emoji / icon
         Box(
             modifier = Modifier
                 .size(38.dp)
@@ -619,9 +667,8 @@ private fun SeasonalBookingWarningCard(
             Text(text = emoji.ifEmpty { "🎉" }, fontSize = 18.sp)
         }
 
-        // Text block
+        // Text content
         Column(modifier = Modifier.weight(1f)) {
-            // "Seasonal Alert" label
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -659,11 +706,16 @@ private fun SeasonalBookingWarningCard(
 
 // =============================================================================
 // BOOKING BLOCKED CARD
+//
+// Replaces the inline error Cards for the three "can't book" states:
+//   • Property failed to load
+//   • Property is already booked (amber tone)
+//   • Property not yet approved by admin (red tone)
 // =============================================================================
 @Composable
 private fun BookingBlockedCard(
     message : String,
-    isBooked: Boolean = false
+    isBooked: Boolean = false    // true → amber (already booked), false → red (unavailable)
 ) {
     val bgColor   = if (isBooked) Color(0xFFFFF3E0) else Color(0xFFFFEBEE)
     val textColor = if (isBooked) Color(0xFFE65100) else Color(0xFFB71C1C)
@@ -696,7 +748,9 @@ private fun BookingBlockedCard(
 
 // =============================================================================
 // COUNTER ROW
-// atMax = true → "+" button grey + disabled (used for guest limit)
+//
+// Generic increment / decrement row used for Guests counter.
+// atMax = true → "+" button is greyed out and disabled (used for guest limit).
 // =============================================================================
 @Composable
 private fun CounterRow(
@@ -705,7 +759,7 @@ private fun CounterRow(
     onDecrement: () -> Unit,
     onIncrement: () -> Unit,
     isDark     : Boolean,
-    atMax      : Boolean = false
+    atMax      : Boolean = false    // When true, disables the increment button.
 ) {
     val textColor    = if (isDark) DarkTextPrimary else Color(0xFF0D1B3E)
     val minusBg      = if (isDark) DarkBgElevated  else Color(0xFFE0E6ED)
@@ -736,7 +790,7 @@ private fun CounterRow(
                 )
             }
 
-            // Count display
+            // Current count
             Text(
                 text       = "$count",
                 fontSize   = 17.sp,
@@ -745,7 +799,7 @@ private fun CounterRow(
                 color      = textColor
             )
 
-            // Increment button — disabled + grey when atMax = true
+            // Increment button — disabled and greyed when atMax is true.
             IconButton(
                 onClick  = onIncrement,
                 enabled  = !atMax,
@@ -767,11 +821,12 @@ private fun CounterRow(
 
 // =============================================================================
 // PRICE ROW
+// Simple label + value row used inside the Price Breakdown card.
 // =============================================================================
 @Composable
 private fun PriceRow(label: String, value: String) {
     Row(
-        modifier              = Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween

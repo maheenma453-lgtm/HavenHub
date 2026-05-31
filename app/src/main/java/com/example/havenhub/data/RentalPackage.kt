@@ -1,5 +1,4 @@
 package com.example.havenhub.data
-
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
@@ -14,7 +13,7 @@ import com.google.firebase.firestore.ServerTimestamp
  * a specific date range or minimum stay.
  *
  * Package status: [PackageStatus]
- * Duration type:  [PackageDuration]
+ * Duration type: [PackageDuration]
  */
 data class RentalPackage(
 
@@ -173,9 +172,9 @@ enum class PackageStatus {
     EXPIRED;
 
     fun displayName(): String = when (this) {
-        ACTIVE   -> "Active"
-        PAUSED   -> "Paused"
+        ACTIVE -> "Active"
+        PAUSED -> "Paused"
         SOLD_OUT -> "Sold Out"
-        EXPIRED  -> "Expired"
+        EXPIRED -> "Expired"
     }
 }
