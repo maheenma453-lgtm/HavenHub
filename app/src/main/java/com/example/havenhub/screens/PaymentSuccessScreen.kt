@@ -43,7 +43,7 @@ private fun formatPayDate(date: Date?): String {
 fun PaymentSuccessScreen(
     navController: NavController,
     bookingId    : String,
-    paymentType  : String = "FULL",   // ← NEW: "FULL" | "DEPOSIT" | "REMAINING"
+    paymentType  : String = "FULL",   // NEW: "FULL" | "DEPOSIT" | "REMAINING"
     viewModel    : PaymentViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -52,7 +52,7 @@ fun PaymentSuccessScreen(
         viewModel.verifyPaymentStatus(bookingId)
     }
 
-    // ── paymentType se direct flags — ViewModel state pe depend nahi ─
+    // Determine payment type flags directly from paymentType — no dependency on ViewModel state
     val isDepositPayment   = paymentType == "DEPOSIT"
     val isRemainingPayment = paymentType == "REMAINING"
     val isFullPayment      = paymentType == "FULL"
@@ -87,7 +87,7 @@ fun PaymentSuccessScreen(
         ) {
             Spacer(Modifier.height(48.dp))
 
-            // ── Animated success circle ───────────────────────────────────────
+            // Animated success circle
             Box(
                 modifier = Modifier
                     .scale(scale.value)
@@ -106,7 +106,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Title ─────────────────────────────────────────────────────────
+            // Title
             Text(
                 when {
                     isDepositPayment   -> "Deposit Paid!"
@@ -120,12 +120,12 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(6.dp))
 
-            // ── Subtitle ──────────────────────────────────────────────────────
+            // Subtitle
             Text(
                 when {
-                    isDepositPayment   -> "20% deposit receive ho gaya!\nBaaki 80% arrival pe pay karna hoga."
-                    isRemainingPayment -> "80% remaining payment complete!\nLandlord ki approval ka intezaar karo."
-                    else               -> "Payment receive ho gayi!\nLandlord ki approval ka intezaar karo."
+                    isDepositPayment   -> "20% deposit received!\nPay the remaining 80% on arrival."
+                    isRemainingPayment -> "80% remaining payment complete!\nWaiting for landlord approval."
+                    else               -> "Payment received!\nWaiting for landlord approval."
                 },
                 fontSize   = 14.sp,
                 color      = onSurfaceVariant,
@@ -144,7 +144,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Status strip ──────────────────────────────────────────────────
+            // Status strip
             if (isDepositPayment) {
                 // DEPOSIT → blue strip
                 Row(
@@ -156,7 +156,7 @@ fun PaymentSuccessScreen(
                     Icon(Icons.Default.AccountBalanceWallet, null, tint = PSBlue, modifier = Modifier.size(20.dp))
                     Column {
                         Text("Deposit Paid — Booking Secured", fontWeight = FontWeight.Bold, color = PSBlue, fontSize = 13.sp)
-                        Text("Remaining amount check-in pe pay karein.", color = PSBlue.copy(0.75f), fontSize = 11.sp, lineHeight = 16.sp)
+                        Text("Pay the remaining amount at check-in.", color = PSBlue.copy(0.75f), fontSize = 11.sp, lineHeight = 16.sp)
                     }
                 }
             } else {
@@ -174,14 +174,14 @@ fun PaymentSuccessScreen(
                             else "Awaiting Landlord Approval",
                             fontWeight = FontWeight.Bold, color = PSAmber, fontSize = 13.sp
                         )
-                        Text("Landlord approve kare ga tab booking confirmed hogi.", color = PSAmber.copy(0.75f), fontSize = 11.sp, lineHeight = 16.sp)
+                        Text("Booking will be confirmed once the landlord approves.", color = PSAmber.copy(0.75f), fontSize = 11.sp, lineHeight = 16.sp)
                     }
                 }
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Transaction Details Card ──────────────────────────────────────
+            // Transaction Details Card
             Card(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(20.dp),
@@ -212,7 +212,7 @@ fun PaymentSuccessScreen(
                     PSDetailRow("Date",           formatPayDate(uiState.payment?.createdAt?.toDate()),            onSurface, onSurfaceVariant)
                     PSDetailRow("Method",         uiState.payment?.paymentMethodEnum?.displayName() ?: "—",      onSurface, onSurfaceVariant)
 
-                    // ── Type row — paymentType se accurate label ──────────────────
+                    // Type row — accurate label derived directly from paymentType
                     PSDetailRow(
                         "Type",
                         when {
@@ -262,7 +262,7 @@ fun PaymentSuccessScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // ── View Booking button ───────────────────────────────────────────
+            // View Booking button
             // DEPOSIT   → tab=1 (Deposit Paid)
             // REMAINING → tab=3 (Awaiting Approval)
             // FULL      → tab=3 (Awaiting Approval)
@@ -322,18 +322,18 @@ fun PaymentSuccessScreen(
 @Composable
 private fun PSDetailRow(label: String, value: String, onSurface: Color, onSurfaceVariant: Color) {
     Row(
-        modifier              = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.Top
+        verticalAlignment = Alignment.Top
     ) {
         Text(label, color = onSurfaceVariant, fontSize = 13.sp)
         Text(
             value,
-            color      = onSurface,
-            fontSize   = 13.sp,
+            color = onSurface,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            textAlign  = TextAlign.End,
-            modifier   = Modifier.weight(1f).padding(start = 16.dp)
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f).padding(start = 16.dp)
         )
     }
 }
