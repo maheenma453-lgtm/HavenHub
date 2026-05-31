@@ -19,8 +19,8 @@ import com.example.havenhub.viewmodel.NotificationViewModel
 import com.example.havenhub.viewmodel.MessagingViewModel
 import com.example.havenhub.viewmodel.SearchViewModel
 
-// ── Route Groupings ───────────────────────────────────────────────────────────
-// Auth-only routes: no bottom navigation bar shown on these screens.
+// ── Route groupings ───────────────────────────────────────────────────────────
+
 private val authRoutes = listOf(
     Screen.Splash.route,
     Screen.Onboarding.route,
@@ -30,7 +30,6 @@ private val authRoutes = listOf(
     Screen.ForgotPassword.route
 )
 
-// Routes that always render the Admin bottom nav bar regardless of user role.
 private val strictAdminRoutes = listOf(
     Screen.AdminDashboard.route,
     Screen.ManageUsers.route,
@@ -46,9 +45,6 @@ private val strictAdminRoutes = listOf(
     Screen.CreateSeasonalAlert.route,
 )
 
-// Routes shared between tenants and admins/sub-admins.
-// When an admin navigates to these routes, the Admin bottom nav bar is used;
-// when a tenant navigates to them, the regular bottom nav bar is used.
 private val sharedRoutes = listOf(
     Screen.Notifications.route,
     Screen.NotificationDetail.route,
@@ -64,24 +60,18 @@ private val sharedRoutes = listOf(
     Screen.GlobalReviews.route,
 )
 
-// ── Sub-Admin Permission Helper ───────────────────────────────────────────────
-/**
- * Returns true if the given [role] has access to [permission].
- * - "admin"     → always has every permission.
- * - "sub_admin" → only if [permissions] list explicitly contains [permission].
- * - Any other role → denied.
- */
+// ── Sub-admin permission model ────────────────────────────────────────────────
+
 private fun hasPermission(
-    role       : String?,
+    role: String?,
     permissions: List<String>,
-    permission : String
+    permission: String
 ): Boolean = when (role) {
     "admin"     -> true
     "sub_admin" -> permissions.contains(permission)
     else        -> false
 }
 
-/** Constant keys for sub-admin permission strings stored in Firestore. */
 object SubAdminPermission {
     const val MANAGE_USERS         = "manage_users"
     const val MANAGE_PROPERTIES    = "manage_properties"
@@ -92,31 +82,18 @@ object SubAdminPermission {
     const val VIEW_PAYMENT_REPORTS = "view_payment_reports"
 }
 
-// ── Root Nav Graph ────────────────────────────────────────────────────────────
-/**
- * HavenHubNavGraph — single-activity Navigation component for the entire app.
- *
- * Responsibilities:
- *  • Observes auth state and redirects to Sign-In when the session ends.
- *  • Starts real-time Firestore listeners (notifications, conversations) once
- *    the authenticated user UID is available.
- *  • Decides which bottom navigation bar to render based on the current route
- *    and the authenticated user's role.
- *  • Declares every composable destination in the app, enforcing role-based
- *    access control inline (popBackStack for unauthorised access).
- */
+// ── Nav graph ─────────────────────────────────────────────────────────────────
+
 @Composable
 fun HavenHubNavGraph(
     navController: NavHostController
 ) {
-    // ── ViewModels ────────────────────────────────────────────────────────────
     val authViewModel        : AuthViewModel         = hiltViewModel()
     val uiState              by authViewModel.uiState.collectAsState()
     val notificationViewModel: NotificationViewModel = hiltViewModel()
     val messagingViewModel   : MessagingViewModel    = hiltViewModel()
-    val messagingUiState     by messagingViewModel.uiState.collectAsState()
+    val messagingUiState      by messagingViewModel.uiState.collectAsState()
 
-    // ── Derived Auth State ────────────────────────────────────────────────────
     val currentUserId       = uiState.currentUser?.uid ?: ""
     val userRole            = uiState.userRole
     val subAdminPermissions = uiState.subAdminPermissions ?: emptyList()
@@ -124,10 +101,8 @@ fun HavenHubNavGraph(
     val isCurrentUserLandlord = userRole == "landlord"
     val isCurrentUserAdmin    = userRole == "admin"
     val isCurrentUserSubAdmin = userRole == "sub_admin"
-    // Convenience flag covering both full admin and sub-admin roles.
     val isCurrentUserAnyAdmin = isCurrentUserAdmin || isCurrentUserSubAdmin
 
-    // ── Sub-Admin Permission Flags ────────────────────────────────────────────
     val canManageUsers        = hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_USERS)
     val canManageProperties   = hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_PROPERTIES)
     val canManageBookings     = hasPermission(userRole, subAdminPermissions, SubAdminPermission.MANAGE_BOOKINGS)
@@ -136,10 +111,6 @@ fun HavenHubNavGraph(
     val canViewReports        = hasPermission(userRole, subAdminPermissions, SubAdminPermission.VIEW_REPORTS)
     val canViewPaymentReports = hasPermission(userRole, subAdminPermissions, SubAdminPermission.VIEW_PAYMENT_REPORTS)
 
-    // ── Auth Session Guard ────────────────────────────────────────────────────
-    // When auth is ready and the user is no longer logged in, pop the entire
-    // back-stack and navigate to Sign-In (except from the Splash screen which
-    // handles its own initial routing).
     LaunchedEffect(uiState.isLoggedIn, uiState.isAuthReady) {
         if (uiState.isAuthReady && !uiState.isLoggedIn) {
             val currentRoute = navController.currentBackStackEntry?.destination?.route
@@ -151,8 +122,6 @@ fun HavenHubNavGraph(
         }
     }
 
-    // ── Real-Time Listeners ───────────────────────────────────────────────────
-    // Start notification and messaging listeners as soon as the UID is known.
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
             notificationViewModel.startListening(currentUserId)
@@ -160,37 +129,27 @@ fun HavenHubNavGraph(
         }
     }
 
-    // ── Current Route Tracking ────────────────────────────────────────────────
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
     val isAuthRoute  = currentRoute in authRoutes
-    // ExploreMap hides the bottom bar so the map fills the entire screen.
     val isExploreMap = currentRoute == Screen.ExploreMap.route
 
-    // Determine whether the Admin bottom nav bar should be shown.
     val isAdminRoute = when {
-        // Strict admin-only routes always use the admin nav bar.
         strictAdminRoutes.any { currentRoute == it }                     -> true
-        // Dynamic detail routes checked by prefix.
         currentRoute?.startsWith("property_verification_detail") == true -> true
         currentRoute?.startsWith("user_verification_detail") == true     -> true
-        // Shared routes use the admin nav bar only when the user is an admin.
         sharedRoutes.any { currentRoute == it }                          -> isCurrentUserAnyAdmin
         currentRoute?.startsWith("notification_detail") == true          -> isCurrentUserAnyAdmin
         else                                                             -> false
     }
 
-    // ── Scaffold with Dynamic Bottom Bar ──────────────────────────────────────
     Scaffold(
         bottomBar = {
             when {
-                // No bottom bar on auth screens or the full-screen map.
-                isAuthRoute || isExploreMap -> { /* intentionally empty */ }
-
+                isAuthRoute || isExploreMap -> { /* No Bottom Bar */ }
                 isAdminRoute -> AdminBottomNavBar(navController = navController)
-
-                else -> BottomNavBar(
+                else         -> BottomNavBar(
                     navController      = navController,
                     unreadMessageCount = messagingUiState.unreadCount,
                     userRole           = userRole,
@@ -198,24 +157,21 @@ fun HavenHubNavGraph(
             }
         }
     ) { innerPadding ->
-
         NavHost(
             navController    = navController,
             startDestination = Screen.Splash.route,
             modifier         = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
         ) {
 
-            // ── Auth Screens ──────────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────────────────
             composable(Screen.Splash.route)        { SplashScreen(navController) }
             composable(Screen.Onboarding.route)    { OnboardingScreen(navController) }
             composable(Screen.RoleSelection.route) { RoleSelectionScreen(navController) }
 
-            // Sign-Up accepts a "role" argument pre-filled from the Role Selection screen.
             composable(
                 route     = Screen.SignUp.route,
                 arguments = listOf(navArgument(Screen.SignUp.ARG_ROLE) {
-                    type         = NavType.StringType
-                    defaultValue = ""
+                    type = NavType.StringType; defaultValue = ""
                 })
             ) { back ->
                 SignUpScreen(
@@ -227,11 +183,9 @@ fun HavenHubNavGraph(
             composable(Screen.SignIn.route)         { SignInScreen(navController) }
             composable(Screen.ForgotPassword.route) { ForgotPasswordScreen(navController) }
 
-            // ── Home / Search ─────────────────────────────────────────────────
+// ── Home / Search ─────────────────────────────────────────────────────────────
             composable(Screen.Home.route) { HomeScreen(navController) }
 
-            // SearchViewModel is scoped to this back-stack entry so it is shared
-            // with the Filter screen (see below).
             composable(Screen.Search.route) { searchEntry ->
                 val searchViewModel: SearchViewModel = hiltViewModel(searchEntry)
                 SearchScreen(
@@ -240,12 +194,8 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // Filter screen retrieves the SearchViewModel from the Search entry
-            // so that both screens share the same filter/search state.
-            composable(Screen.Filter.route) { filterEntry ->
-                // Key on filterEntry so the remembered value recomputes if the
-                // back-stack entry changes (e.g. after popping and re-entering).
-                val searchEntry = remember(filterEntry) {
+            composable(Screen.Filter.route) { filterEntry ->   // ← FIXED: named lambda param
+                val searchEntry = remember(filterEntry) {    // ← FIXED: keyed on NavBackStackEntry
                     navController.getBackStackEntry(Screen.Search.route)
                 }
                 val searchViewModel: SearchViewModel = hiltViewModel(searchEntry)
@@ -255,47 +205,32 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Explore Map ───────────────────────────────────────────────────
-            // Full-screen map with no bottom bar (isExploreMap guard above).
+// ── Explore Map ───────────────────────────────────────────────────────────────
             composable(Screen.ExploreMap.route) {
                 ExploreMapScreen(navController = navController)
             }
 
-            // ── Global Reviews ────────────────────────────────────────────────
-            // Passes role flags so the screen can show landlord/admin-specific
-            // controls (e.g. long-press delete for landlords).
+// ── Global Reviews ────────────────────────────────────────────────────────────
             composable(Screen.GlobalReviews.route) {
                 GlobalReviewsScreen(
                     navController = navController,
                     isLandlord    = isCurrentUserLandlord,
-                    isAdmin       = isCurrentUserAdmin,
                     currentUserId = currentUserId
                 )
             }
 
-            // ── Property Screens ──────────────────────────────────────────────
+// ── Property ──────────────────────────────────────────────────────────────────
             composable(Screen.PropertyList.route) { PropertyListScreen(navController) }
 
-            // AddProperty is landlord-only and requires admin verification.
             composable(Screen.AddProperty.route) {
                 val isVerified = uiState.isVerified
                 when {
-                    // Show a spinner while auth state is still loading.
-                    uiState.isLoading -> Box(
-                        Modifier.fillMaxSize(), Alignment.Center
-                    ) { CircularProgressIndicator() }
-
-                    // Non-landlords cannot add properties — pop back immediately.
-                    !isCurrentUserLandlord -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-
-                    // Unverified landlords see an informative gate screen.
-                    !isVerified -> UnverifiedAccessScreen(
+                    uiState.isLoading      -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    !isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }
+                    !isVerified            -> UnverifiedAccessScreen(
                         message = "Your account needs to be verified by admin before you can add properties.",
                         onBack  = { navController.popBackStack() }
                     )
-
                     else -> AddPropertyScreen(navController)
                 }
             }
@@ -304,9 +239,7 @@ fun HavenHubNavGraph(
 
             composable(
                 route     = Screen.PropertyDetail.route,
-                arguments = listOf(navArgument(Screen.PropertyDetail.ARG_PROPERTY_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.PropertyDetail.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 PropertyDetailScreen(
                     navController = navController,
@@ -316,9 +249,7 @@ fun HavenHubNavGraph(
 
             composable(
                 route     = Screen.EditProperty.route,
-                arguments = listOf(navArgument(Screen.EditProperty.ARG_PROPERTY_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.EditProperty.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 EditPropertyScreen(
                     navController = navController,
@@ -326,12 +257,9 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // AddRentalPackage — landlord creates a time-limited deal for a property.
             composable(
                 route     = Screen.AddRentalPackage.route,
-                arguments = listOf(navArgument(Screen.AddRentalPackage.ARG_PROPERTY_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.AddRentalPackage.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 AddRentalPackageScreen(
                     navController = navController,
@@ -339,17 +267,10 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Booking Screens ───────────────────────────────────────────────
-
-            // MyBookings supports a "tab" query parameter so that other screens
-            // can deep-link directly to a specific booking status tab (e.g. tab=1
-            // for "Deposit Paid" after a deposit payment).
+// ── Bookings ──────────────────────────────────────────────────────────────────
             composable(
                 route     = "my_bookings?tab={tab}",
-                arguments = listOf(navArgument("tab") {
-                    type         = NavType.IntType
-                    defaultValue = 0
-                })
+                arguments = listOf(navArgument("tab") { type = NavType.IntType; defaultValue = 0 })
             ) { back ->
                 MyBookingsScreen(
                     navController = navController,
@@ -358,30 +279,18 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // Booking screen is tenant-only and requires admin verification.
             composable(
                 route     = Screen.Booking.route,
-                arguments = listOf(navArgument(Screen.Booking.ARG_PROPERTY_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.Booking.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 val isVerified = uiState.isVerified
                 when {
-                    uiState.isLoading -> Box(
-                        Modifier.fillMaxSize(), Alignment.Center
-                    ) { CircularProgressIndicator() }
-
-                    // Landlords cannot book properties — pop back.
-                    isCurrentUserLandlord -> {
-                        LaunchedEffect(Unit) { navController.popBackStack() }
-                    }
-
-                    // Unverified tenants see an informative gate screen.
-                    !isVerified -> UnverifiedAccessScreen(
+                    uiState.isLoading     -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    isCurrentUserLandlord -> { LaunchedEffect(Unit) { navController.popBackStack() } }
+                    !isVerified           -> UnverifiedAccessScreen(
                         message = "Your account needs to be verified by admin before you can book properties.",
                         onBack  = { navController.popBackStack() }
                     )
-
                     else -> BookingScreen(
                         navController = navController,
                         propertyId    = back.arguments?.getString(Screen.Booking.ARG_PROPERTY_ID) ?: ""
@@ -391,9 +300,7 @@ fun HavenHubNavGraph(
 
             composable(
                 route     = Screen.BookingConfirmation.route,
-                arguments = listOf(navArgument(Screen.BookingConfirmation.ARG_BOOKING_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.BookingConfirmation.ARG_BOOKING_ID) { type = NavType.StringType })
             ) { back ->
                 BookingConfirmationScreen(
                     navController = navController,
@@ -403,29 +310,17 @@ fun HavenHubNavGraph(
 
             composable(
                 route     = Screen.BookingDetails.route,
-                arguments = listOf(navArgument(Screen.BookingDetails.ARG_BOOKING_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.BookingDetails.ARG_BOOKING_ID) { type = NavType.StringType })
             ) { back ->
                 BookingDetailScreen(
-                    navController         = navController,
-                    bookingId             = back.arguments?.getString(Screen.BookingDetails.ARG_BOOKING_ID) ?: "",
-                    isCurrentUserLandlord = isCurrentUserLandlord  // Enables landlord-specific actions in the detail screen.
+                    navController = navController,
+                    bookingId     = back.arguments?.getString(Screen.BookingDetails.ARG_BOOKING_ID) ?: ""
                 )
             }
 
-            // ── Payment Screens ───────────────────────────────────────────────
-            // Payment route carries all necessary booking/payer/payee details as
-            // path segments so they survive process death without a ViewModel.
-            //
-            // paymentType values:
-            //   "FULL"      → tenant pays 100% for a standard booking
-            //   "DEPOSIT"   → tenant pays 20% deposit for a pre-booking
-            //   "REMAINING" → tenant pays the remaining 80% at check-in
-            //
-            // packageId is only relevant for the DEPOSIT flow; pass "none" otherwise.
+// ── Payment ───────────────────────────────────────────────────────────────────
             composable(
-                route     = Screen.Payment.route,
+                route = Screen.Payment.route,
                 arguments = listOf(
                     navArgument(Screen.Payment.ARG_BOOKING_ID)   { type = NavType.StringType },
                     navArgument(Screen.Payment.ARG_PAYER_ID)     { type = NavType.StringType },
@@ -433,14 +328,8 @@ fun HavenHubNavGraph(
                     navArgument(Screen.Payment.ARG_PAYER_NAME)   { type = NavType.StringType },
                     navArgument(Screen.Payment.ARG_PAYEE_NAME)   { type = NavType.StringType },
                     navArgument(Screen.Payment.ARG_AMOUNT)       { type = NavType.StringType },
-                    navArgument(Screen.Payment.ARG_PAYMENT_TYPE) {
-                        type         = NavType.StringType
-                        defaultValue = "FULL"
-                    },
-                    navArgument(Screen.Payment.ARG_PACKAGE_ID)   {
-                        type         = NavType.StringType
-                        defaultValue = "none"
-                    },
+                    navArgument(Screen.Payment.ARG_PAYMENT_TYPE) { type = NavType.StringType; defaultValue = "FULL" },
+                    navArgument(Screen.Payment.ARG_PACKAGE_ID)   { type = NavType.StringType; defaultValue = "none" },
                 )
             ) { back ->
                 PaymentScreen(
@@ -460,9 +349,7 @@ fun HavenHubNavGraph(
 
             composable(
                 route     = Screen.PaymentSuccess.route,
-                arguments = listOf(navArgument(Screen.PaymentSuccess.ARG_BOOKING_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.PaymentSuccess.ARG_BOOKING_ID) { type = NavType.StringType })
             ) { back ->
                 PaymentSuccessScreen(
                     navController = navController,
@@ -470,12 +357,11 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Review Screens ────────────────────────────────────────────────
+// ── Reviews ───────────────────────────────────────────────────────────────────
             composable(
                 route     = Screen.AddReview.route,
                 arguments = listOf(navArgument(Screen.AddReview.ARG_PROPERTY_ID) {
-                    type         = NavType.StringType
-                    defaultValue = ""
+                    type = NavType.StringType; defaultValue = ""
                 })
             ) { back ->
                 AddReviewScreen(
@@ -488,9 +374,7 @@ fun HavenHubNavGraph(
 
             composable(
                 route     = Screen.ViewReviews.route,
-                arguments = listOf(navArgument(Screen.ViewReviews.ARG_PROPERTY_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.ViewReviews.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 ViewReviewsScreen(
                     navController = navController,
@@ -498,14 +382,14 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Profile Screens ───────────────────────────────────────────────
+// ── Profile ───────────────────────────────────────────────────────────────────
             composable(Screen.Profile.route)     { ProfileScreen(navController) }
             composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
 
-            // ── Favourites ────────────────────────────────────────────────────
+// ── Favourites ────────────────────────────────────────────────────────────────
             composable(Screen.Favourites.route) { FavouritesScreen(navController) }
 
-            // ── Settings Screens ──────────────────────────────────────────────
+// ── Settings ──────────────────────────────────────────────────────────────────
             composable(Screen.Settings.route)             { SettingsScreen(navController) }
             composable(Screen.AccountSettings.route)      { AccountSettingsScreen(navController) }
             composable(Screen.NotificationSettings.route) { NotificationSettingsScreen(navController) }
@@ -513,14 +397,12 @@ fun HavenHubNavGraph(
             composable(Screen.About.route)                { AboutScreen(navController) }
             composable(Screen.HelpAndSupport.route)       { HelpAndSupportScreen(navController) }
 
-            // ── Notification Screens ──────────────────────────────────────────
+// ── Notifications ─────────────────────────────────────────────────────────────
             composable(Screen.Notifications.route) { NotificationsScreen(navController) }
 
             composable(
                 route     = Screen.NotificationDetail.route,
-                arguments = listOf(navArgument(Screen.NotificationDetail.ARG_NOTIFICATION_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.NotificationDetail.ARG_NOTIFICATION_ID) { type = NavType.StringType })
             ) { back ->
                 NotificationDetailScreen(
                     navController  = navController,
@@ -528,24 +410,15 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Messaging Screens ─────────────────────────────────────────────
+// ── Messaging ─────────────────────────────────────────────────────────────────
             composable(Screen.MessageList.route) { MessageListScreen(navController) }
 
-            // Chat screen encodes the property ID as "none" when there is no
-            // associated property; the sentinel is decoded back to an empty string
-            // before being forwarded to the screen.
             composable(
                 route     = Screen.Chat.route,
                 arguments = listOf(
                     navArgument(Screen.Chat.ARG_USER_ID)     { type = NavType.StringType },
-                    navArgument(Screen.Chat.ARG_OWNER_NAME)  {
-                        type         = NavType.StringType
-                        defaultValue = "Owner"
-                    },
-                    navArgument(Screen.Chat.ARG_PROPERTY_ID) {
-                        type         = NavType.StringType
-                        defaultValue = "none"
-                    }
+                    navArgument(Screen.Chat.ARG_OWNER_NAME)  { type = NavType.StringType; defaultValue = "Owner" },
+                    navArgument(Screen.Chat.ARG_PROPERTY_ID) { type = NavType.StringType; defaultValue = "none" }
                 )
             ) { back ->
                 val rawPropertyId = back.arguments?.getString(Screen.Chat.ARG_PROPERTY_ID) ?: ""
@@ -553,50 +426,18 @@ fun HavenHubNavGraph(
                     navController = navController,
                     userId        = back.arguments?.getString(Screen.Chat.ARG_USER_ID)    ?: "",
                     ownerName     = back.arguments?.getString(Screen.Chat.ARG_OWNER_NAME) ?: "Owner",
-                    // Convert the "none" sentinel back to an empty string.
                     propertyId    = if (rawPropertyId == "none") "" else rawPropertyId,
                     currentUserId = currentUserId
                 )
             }
 
-            // ── Vacation Rentals / Pre-Booking ────────────────────────────────
-            // VacationRentals accepts optional `season` and `location` query
-            // parameters so that Seasonal Alert cards can deep-link with
-            // pre-applied filters.
-            //
-            // Both parameters default to "none" so that existing navigation
-            // (BottomNavBar, HomeScreen) continues to work without any changes.
-            composable(
-                route     = Screen.VacationRentals.route,
-                arguments = listOf(
-                    navArgument(Screen.VacationRentals.ARG_SEASON) {
-                        type         = NavType.StringType
-                        defaultValue = "none"   // No season filter by default.
-                    },
-                    navArgument(Screen.VacationRentals.ARG_LOCATION) {
-                        type         = NavType.StringType
-                        defaultValue = "none"   // No city pre-filter by default.
-                    }
-                )
-            ) { back ->
-                // Decode the "none" sentinel back to an empty string so that
-                // VacationRentalsScreen can simply check `initialSeason.isEmpty()`.
-                val rawSeason   = back.arguments?.getString(Screen.VacationRentals.ARG_SEASON)   ?: "none"
-                val rawLocation = back.arguments?.getString(Screen.VacationRentals.ARG_LOCATION) ?: "none"
+// ── Vacation / Pre-booking ────────────────────────────────────────────────────
+            composable(Screen.VacationRentals.route) { VacationRentalsScreen(navController) }
 
-                VacationRentalsScreen(
-                    navController   = navController,
-                    initialSeason   = if (rawSeason   == "none") "" else rawSeason,
-                    initialLocation = if (rawLocation == "none") "" else rawLocation
-                )
-            }
-
-            // PreBooking — tenant selects a rental package and pays a 20% deposit.
             composable(
                 route     = Screen.PreBooking.route,
                 arguments = listOf(navArgument(Screen.PreBooking.ARG_PROPERTY_ID) {
-                    type         = NavType.StringType
-                    defaultValue = ""
+                    type = NavType.StringType; defaultValue = ""
                 })
             ) { back ->
                 PreBookingScreen(
@@ -605,12 +446,9 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // VacationCalendar — shows availability calendar for a specific property.
             composable(
                 route     = Screen.VacationCalendar.route,
-                arguments = listOf(navArgument(Screen.VacationCalendar.ARG_PROPERTY_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.VacationCalendar.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 VacationCalendarScreen(
                     navController = navController,
@@ -618,9 +456,7 @@ fun HavenHubNavGraph(
                 )
             }
 
-            // ── Tenants (Landlord Only) ───────────────────────────────────────
-            // Only landlords can view their tenant list; all other roles are
-            // immediately popped back to avoid a blank screen.
+// ── Tenants (landlord only) ───────────────────────────────────────────────────
             composable(Screen.Tenants.route) {
                 if (isCurrentUserLandlord) {
                     TenantsScreen(navController = navController)
@@ -629,60 +465,35 @@ fun HavenHubNavGraph(
                 }
             }
 
-            // ── Admin / Sub-Admin Screens ─────────────────────────────────────
-
-            // Admin Dashboard — accessible to both full admin and sub-admin roles.
+// ── Admin / Sub-admin screens ─────────────────────────────────────────────────
             composable(Screen.AdminDashboard.route) {
                 if (isCurrentUserAnyAdmin) AdminDashboardScreen(navController = navController)
                 else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
-            // Manage Users — guarded by the MANAGE_USERS sub-admin permission.
             composable(Screen.ManageUsers.route) {
-                when {
-                    canManageUsers -> ManageUsersScreen(navController)
-                    else           -> LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                when { canManageUsers -> ManageUsersScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
             }
 
-            // Manage Properties — guarded by the MANAGE_PROPERTIES sub-admin permission.
             composable(Screen.ManageProperties.route) {
-                when {
-                    canManageProperties -> ManagePropertiesScreen(navController)
-                    else                -> LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                when { canManageProperties -> ManagePropertiesScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
             }
 
-            // Manage Bookings — guarded by the MANAGE_BOOKINGS sub-admin permission.
             composable(Screen.ManageBookings.route) {
-                when {
-                    canManageBookings -> ManageBookingsScreen(navController)
-                    else              -> LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                when { canManageBookings -> ManageBookingsScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
             }
 
-            // Verify Properties — guarded by the VERIFY_PROPERTIES sub-admin permission.
             composable(Screen.VerifyProperties.route) {
-                when {
-                    canVerifyProperties -> VerifyPropertiesScreen(navController)
-                    else                -> LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                when { canVerifyProperties -> VerifyPropertiesScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
             }
 
-            // Verify Users — guarded by the VERIFY_USERS sub-admin permission.
             composable(Screen.VerifyUsers.route) {
-                when {
-                    canVerifyUsers -> VerifyUsersScreen(navController)
-                    else           -> LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                when { canVerifyUsers -> VerifyUsersScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
             }
 
-            // Property Verification Detail — shows full property details for review.
             composable(
                 route     = Screen.PropertyVerificationDetail.route,
-                arguments = listOf(navArgument(Screen.PropertyVerificationDetail.ARG_PROPERTY_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.PropertyVerificationDetail.ARG_PROPERTY_ID) { type = NavType.StringType })
             ) { back ->
                 when {
                     canVerifyProperties -> PropertyVerificationDetailScreen(
@@ -693,12 +504,9 @@ fun HavenHubNavGraph(
                 }
             }
 
-            // User Verification Detail — shows full user profile for KYC review.
             composable(
                 route     = Screen.UserVerificationDetail.route,
-                arguments = listOf(navArgument(Screen.UserVerificationDetail.ARG_USER_ID) {
-                    type = NavType.StringType
-                })
+                arguments = listOf(navArgument(Screen.UserVerificationDetail.ARG_USER_ID) { type = NavType.StringType })
             ) { back ->
                 when {
                     canVerifyUsers -> UserVerificationDetailScreen(
@@ -709,34 +517,23 @@ fun HavenHubNavGraph(
                 }
             }
 
-            // Reports — platform-level booking/revenue reports.
             composable(Screen.Reports.route) {
-                when {
-                    canViewReports -> ReportsScreen(navController)
-                    else           -> LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                when { canViewReports -> ReportsScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
             }
 
-            // Payment Reports — detailed payment/payout reports.
             composable(Screen.PaymentReports.route) {
-                when {
-                    canViewPaymentReports -> PaymentReportsScreen(navController)
-                    else                  -> LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                when { canViewPaymentReports -> PaymentReportsScreen(navController); else -> LaunchedEffect(Unit) { navController.popBackStack() } }
             }
 
-            // Manage Seasonal Alerts — admin creates/edits seasonal promotion alerts.
             composable(Screen.ManageSeasonalAlerts.route) {
                 if (isCurrentUserAnyAdmin) ManageSeasonalAlertsScreen(navController)
                 else LaunchedEffect(Unit) { navController.popBackStack() }
             }
 
-            // Create Seasonal Alert — form to publish a new seasonal alert.
             composable(Screen.CreateSeasonalAlert.route) {
                 if (isCurrentUserAnyAdmin) CreateSeasonalAlertScreen(navController)
                 else LaunchedEffect(Unit) { navController.popBackStack() }
             }
-
-        } // end NavHost
-    } // end Scaffold
+        }
+    }
 }

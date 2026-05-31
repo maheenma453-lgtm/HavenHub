@@ -172,9 +172,9 @@ enum class PackageStatus {
     EXPIRED;
 
     fun displayName(): String = when (this) {
-        ACTIVE -> "Active"
-        PAUSED -> "Paused"
+        ACTIVE   -> "Active"
+        PAUSED   -> "Paused"
         SOLD_OUT -> "Sold Out"
-        EXPIRED -> "Expired"
+        EXPIRED  -> "Expired"
     }
 }

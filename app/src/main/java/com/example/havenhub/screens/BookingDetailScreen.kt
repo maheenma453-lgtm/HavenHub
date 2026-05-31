@@ -20,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,7 +34,6 @@ import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ── Private color palette ─────────────────────────────────────────────────────
 private val BN  = Color(0xFF0B1829)
 private val BG  = Color(0xFFD4AF37)
 private val BBg = Color(0xFFF0F3F8)
@@ -43,23 +41,21 @@ private val BW  = Color(0xFFFFFFFF)
 private val BM  = Color(0xFF8A9BB0)
 private val BL  = Color(0xFFE8EDF4)
 
-// ── Status theme data class ───────────────────────────────────────────────────
 private data class BStatusTheme(
     val fg: Color, val bg: Color, val icon: ImageVector, val label: String, val desc: String
 )
 
 private fun bTheme(s: BookingStatus) = when (s) {
-    BookingStatus.PENDING                -> BStatusTheme(Color(0xFFB45309), Color(0xFFFEF3C7), Icons.Default.HourglassEmpty,       "Pending",               "Waiting for landlord approval.")
-    BookingStatus.PENDING_APPROVAL       -> BStatusTheme(Color(0xFF6D28D9), Color(0xFFEDE9FE), Icons.Default.AccessTime,            "Awaiting Approval",     "Payment received — under review.")
-    BookingStatus.CONFIRMED              -> BStatusTheme(Color(0xFF15803D), Color(0xFFDCFCE7), Icons.Default.CheckCircle,           "Confirmed",             "Landlord accepted your booking.")
+    BookingStatus.PENDING                -> BStatusTheme(Color(0xFFB45309), Color(0xFFFEF3C7), Icons.Default.HourglassEmpty,        "Pending",               "Waiting for landlord approval.")
+    BookingStatus.PENDING_APPROVAL       -> BStatusTheme(Color(0xFF6D28D9), Color(0xFFEDE9FE), Icons.Default.AccessTime,             "Awaiting Approval",     "Payment received — under review.")
+    BookingStatus.CONFIRMED              -> BStatusTheme(Color(0xFF15803D), Color(0xFFDCFCE7), Icons.Default.CheckCircle,            "Confirmed",             "Landlord accepted your booking.")
     BookingStatus.DEPOSIT_PAID           -> BStatusTheme(Color(0xFF0369A1), Color(0xFFE0F2FE), Icons.Default.Savings,               "Deposit Paid",          "20% deposit paid. Awaiting check-in.")
-    BookingStatus.CHECKED_IN             -> BStatusTheme(Color(0xFF1D4ED8), Color(0xFFDBEAFE), Icons.AutoMirrored.Filled.Login,     "Checked In",            "Guest is at the property.")
+    BookingStatus.CHECKED_IN             -> BStatusTheme(Color(0xFF1D4ED8), Color(0xFFDBEAFE), Icons.AutoMirrored.Filled.Login,      "Checked In",            "Guest is at the property.")
     BookingStatus.AWAITING_FINAL_PAYMENT -> BStatusTheme(Color(0xFFB45309), Color(0xFFFEF3C7), Icons.Default.AccountBalanceWallet,  "Final Payment Pending", "Pay remaining 80% on arrival.")
     BookingStatus.COMPLETED              -> BStatusTheme(Color(0xFF374151), Color(0xFFF3F4F6), Icons.Default.Done,                  "Completed",             "Stay completed successfully.")
     BookingStatus.CANCELLED              -> BStatusTheme(Color(0xFFB91C1C), Color(0xFFFEE2E2), Icons.Default.Cancel,                "Cancelled",             "Booking has been cancelled.")
 }
 
-// ── Date formatter — returns "—" if date is null ─────────────────────────────
 private fun bfmt(d: Date?) = if (d == null) "—" else
     try { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(d) } catch (e: Exception) { "—" }
 
@@ -78,66 +74,39 @@ fun BookingDetailScreen(
     var showReject   by remember { mutableStateOf(false) }
     var showApprove  by remember { mutableStateOf(false) }
     var showCheckIn  by remember { mutableStateOf(false) }
-    var showFinalPay by remember { mutableStateOf(false) }
     var selectedTab  by remember { mutableIntStateOf(0) }
 
-    var tenantName by remember { mutableStateOf("...") }
-    var hostName   by remember { mutableStateOf("...") }
+    var tenantName   by remember { mutableStateOf("...") }
+    var hostName     by remember { mutableStateOf("...") }
 
-    // Fetch tenant display name — falls back through name fields then email
     LaunchedEffect(booking?.tenantId) {
-        val tid = booking?.tenantId
+        val currentBooking = booking ?: return@LaunchedEffect
+        val tid = currentBooking.tenantId
         tenantName = when {
-            !booking?.tenantName.isNullOrBlank() -> booking!!.tenantName
-            !tid.isNullOrBlank() -> {
+            currentBooking.tenantName.isNotBlank() && currentBooking.tenantName != currentBooking.propertyTitle -> currentBooking.tenantName
+            tid.isNotBlank() -> {
                 try {
-                    val doc = FirebaseFirestore.getInstance()
-                        .collection("users").document(tid).get().await()
-                    doc.getString("fullName")
-                        ?: doc.getString("name")
-                        ?: doc.getString("displayName")
-                        ?: booking?.tenantEmail?.takeIf { it.isNotBlank() }
-                        ?: "—"
-                } catch (e: Exception) {
-                    booking?.tenantEmail?.takeIf { it.isNotBlank() } ?: "—"
-                }
+                    val doc = FirebaseFirestore.getInstance().collection("users").document(tid).get().await()
+                    doc.getString("fullName") ?: doc.getString("name") ?: doc.getString("displayName")
+                    ?: currentBooking.tenantEmail.takeIf { it.isNotBlank() } ?: "—"
+                } catch (e: Exception) { currentBooking.tenantEmail.takeIf { it.isNotBlank() } ?: "—" }
             }
-            !booking?.tenantEmail.isNullOrBlank() -> booking!!.tenantEmail
+            currentBooking.tenantEmail.isNotBlank() -> currentBooking.tenantEmail
             else -> "—"
         }
     }
 
-    // Fetch host (owner) display name.
-    // Step 1: Try ownerName from property doc (manual properties).
-    // Step 2: If blank, look up owner's user doc via ownerId (auto-added properties).
-    // Step 3: Fall back to landlordName stored on the booking.
     LaunchedEffect(booking?.propertyId) {
         val currentBooking = booking ?: return@LaunchedEffect
         hostName = try {
-            val db = FirebaseFirestore.getInstance()
-
-            val propertyDoc = db.collection("properties")
+            val propertyDoc = FirebaseFirestore.getInstance()
+                .collection("properties")
                 .document(currentBooking.propertyId)
-                .get().await()
-
-            val nameFromProperty = propertyDoc.getString("ownerName")?.takeIf { it.isNotBlank() }
-
-            if (nameFromProperty != null) {
-                nameFromProperty
-            } else {
-                val ownerId = propertyDoc.getString("ownerId")?.takeIf { it.isNotBlank() }
-                    ?: currentBooking.landlordId.takeIf { it.isNotBlank() }
-
-                if (!ownerId.isNullOrBlank()) {
-                    val userDoc = db.collection("users").document(ownerId).get().await()
-                    userDoc.getString("fullName")
-                        ?: userDoc.getString("name")
-                        ?: userDoc.getString("displayName")
-                        ?: currentBooking.landlordName.ifBlank { "—" }
-                } else {
-                    currentBooking.landlordName.ifBlank { "—" }
-                }
-            }
+                .get()
+                .await()
+            propertyDoc.getString("ownerName")
+                ?: currentBooking.landlordName
+                ?: "—"
         } catch (e: Exception) {
             currentBooking.landlordName.ifBlank { "—" }
         }
@@ -145,36 +114,31 @@ fun BookingDetailScreen(
 
     LaunchedEffect(bookingId) { viewModel.loadBookingById(bookingId) }
     LaunchedEffect(uiState.actionSuccess) {
-        if (uiState.actionSuccess) {
-            navController.popBackStack()
-            viewModel.clearMessages()
-        }
+        if (uiState.actionSuccess) { navController.popBackStack(); viewModel.clearMessages() }
     }
 
-    // ── Confirmation dialogs ──────────────────────────────────────────────────
+    // ── Dialogs ───────────────────────────────────────────────────
     if (showCancel) BDialog(
         "Cancel Booking", "Cancel this booking? This cannot be undone.",
-        "Yes, Cancel", Color(0xFFDC2626), Icons.Default.Cancel,
-        Color(0xFFFEE2E2), Color(0xFFDC2626),
+        "Yes, Cancel", Color(0xFFDC2626), Icons.Default.Cancel, Color(0xFFFEE2E2), Color(0xFFDC2626),
         onConfirm = { booking?.bookingId?.let { viewModel.cancelBooking(it) }; showCancel = false },
         onDismiss = { showCancel = false }
     )
     if (showReject) BDialog(
         "Reject Request", "Reject this booking? Tenant will be notified.",
-        "Reject", Color(0xFFDC2626), Icons.Default.ThumbDown,
-        Color(0xFFFEE2E2), Color(0xFFDC2626),
+        "Reject", Color(0xFFDC2626), Icons.Default.ThumbDown, Color(0xFFFEE2E2), Color(0xFFDC2626),
         onConfirm = { booking?.bookingId?.let { viewModel.updateStatusByAdmin(it, BookingStatus.CANCELLED) }; showReject = false },
         onDismiss = { showReject = false }
     )
     if (showApprove) BDialog(
         "Approve Booking", "Approve this booking? Tenant will be notified.",
-        "Approve", Color(0xFF16A34A), Icons.Default.ThumbUp,
-        Color(0xFFDCFCE7), Color(0xFF16A34A),
+        "Approve", Color(0xFF16A34A), Icons.Default.ThumbUp, Color(0xFFDCFCE7), Color(0xFF16A34A),
         onConfirm = {
             booking?.bookingId?.let { bid ->
-                // Pre-bookings go to DEPOSIT_PAID; regular bookings go to CONFIRMED
-                val newStatus = if (booking.isPreBooking) BookingStatus.DEPOSIT_PAID
-                else BookingStatus.CONFIRMED
+                val newStatus = if (booking.isPreBooking)
+                    BookingStatus.DEPOSIT_PAID
+                else
+                    BookingStatus.CONFIRMED
                 viewModel.updateStatusByAdmin(bid, newStatus)
             }
             showApprove = false
@@ -183,108 +147,53 @@ fun BookingDetailScreen(
     )
     if (showCheckIn) BDialog(
         "Mark Checked In", "Confirm tenant has arrived? Remaining payment will be due.",
-        "Mark Checked In", Color(0xFF1D4ED8), Icons.Default.Home,
-        Color(0xFFDBEAFE), Color(0xFF1D4ED8),
+        "Mark Checked In", Color(0xFF1D4ED8), Icons.Default.Home, Color(0xFFDBEAFE), Color(0xFF1D4ED8),
         onConfirm = { booking?.bookingId?.let { viewModel.markCheckedIn(it) }; showCheckIn = false },
         onDismiss = { showCheckIn = false }
     )
-    if (showFinalPay) BDialog(
-        "Final Payment Received", "Confirm remaining 80% payment received from tenant?",
-        "Confirm Payment", Color(0xFF16A34A), Icons.Default.Payments,
-        Color(0xFFDCFCE7), Color(0xFF16A34A),
-        onConfirm = { booking?.bookingId?.let { viewModel.markFinalPaymentComplete(it) }; showFinalPay = false },
-        onDismiss = { showFinalPay = false }
-    )
+    // ✅ FIX: showFinalPay dialog removed — tenant app se khud 80% pay karta hai
 
     Scaffold(containerColor = BBg) { pad ->
+        val currentBooking = booking
         when {
             uiState.isLoading -> Box(Modifier.fillMaxSize().padding(pad), Alignment.Center) {
                 CircularProgressIndicator(color = BN, strokeWidth = 2.5.dp, modifier = Modifier.size(36.dp))
             }
-            booking == null -> Box(Modifier.fillMaxSize().padding(pad), Alignment.Center) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+            currentBooking == null -> Box(Modifier.fillMaxSize().padding(pad), Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.SearchOff, null, tint = BM, modifier = Modifier.size(48.dp))
                     Text("Booking not found", color = BN, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 }
             }
             else -> {
-                val t = bTheme(booking.bookingStatus)
-
-                // isPreBooking: true if any pre-booking indicator is set
-                val isPreBooking = booking.isPreBooking ||
-                        booking.depositAmount > 0 ||
-                        booking.bookingStatus == BookingStatus.DEPOSIT_PAID ||
-                        booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT ||
-                        booking.bookingStatus == BookingStatus.CHECKED_IN
-
-                // isPending: true only for PENDING status (landlord not yet approved)
-                val isPending = booking.bookingStatus == BookingStatus.PENDING
-
-                // Dates are not yet set for pending pre-bookings
-                // (landlord confirms dates after approval)
-                val datesNotConfirmed = isPreBooking &&
-                        booking.checkInDate == null &&
-                        booking.checkOutDate == null
+                val t            = bTheme(currentBooking.bookingStatus)
+                val isPending    = currentBooking.bookingStatus == BookingStatus.PENDING
+                val isPreBooking = currentBooking.isPreBooking ||
+                        currentBooking.depositAmount > 0 ||
+                        currentBooking.bookingStatus == BookingStatus.DEPOSIT_PAID ||
+                        currentBooking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT ||
+                        currentBooking.bookingStatus == BookingStatus.CHECKED_IN
 
                 Column(Modifier.fillMaxSize()) {
 
-                    // ── Top bar ───────────────────────────────────────────────
+                    // TOP BAR
                     Column(Modifier.fillMaxWidth().background(BN).statusBarsPadding()) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { navController.popBackStack() }) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    "Back",
-                                    tint = BW.copy(alpha = 0.8f)
-                                )
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = BW.copy(alpha = 0.8f))
                             }
                             Column(Modifier.weight(1f)) {
-                                Text(
-                                    "Booking Details",
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = BW,
-                                    fontSize = 16.sp
-                                )
-                                Text(
-                                    "#${booking.bookingId.take(8).uppercase()}",
-                                    color = BW.copy(alpha = 0.4f),
-                                    fontSize = 11.sp
-                                )
+                                Text("Booking Details", fontWeight = FontWeight.SemiBold, color = BW, fontSize = 16.sp)
+                                Text("#${currentBooking.bookingId.take(8).uppercase()}", color = BW.copy(alpha = 0.4f), fontSize = 11.sp)
                             }
-                            // Pre-Booking badge in top bar
                             if (isPreBooking) {
-                                Box(
-                                    Modifier
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(BG.copy(0.2f))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        "Pre-Booking",
-                                        color = BG,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                Box(Modifier.clip(RoundedCornerShape(20.dp)).background(BG.copy(0.2f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                    Text("Pre-Booking", color = BG, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Spacer(Modifier.width(6.dp))
                             }
-                            // Status badge
-                            Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(t.bg)
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
+                            Box(Modifier.clip(RoundedCornerShape(20.dp)).background(t.bg).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     Icon(t.icon, null, tint = t.fg, modifier = Modifier.size(12.dp))
                                     Text(t.label, color = t.fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
@@ -292,7 +201,6 @@ fun BookingDetailScreen(
                             Spacer(Modifier.width(8.dp))
                         }
 
-                        // Tab row
                         val tabs = listOf("Details", "Payment", "Info")
                         TabRow(
                             selectedTabIndex = selectedTab,
@@ -300,234 +208,98 @@ fun BookingDetailScreen(
                             contentColor     = BW,
                             indicator = { pos ->
                                 if (selectedTab < pos.size)
-                                    Box(
-                                        Modifier
-                                            .tabIndicatorOffset(pos[selectedTab])
-                                            .height(2.dp)
-                                            .padding(horizontal = 20.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(BG)
-                                    )
+                                    Box(Modifier.tabIndicatorOffset(pos[selectedTab]).height(2.dp).padding(horizontal = 20.dp).clip(RoundedCornerShape(2.dp)).background(BG))
                             },
                             divider = {}
                         ) {
                             tabs.forEachIndexed { i, tab ->
-                                Tab(
-                                    selected = selectedTab == i,
-                                    onClick  = { selectedTab = i },
-                                    modifier = Modifier.height(42.dp)
-                                ) {
-                                    Text(
-                                        tab,
-                                        fontSize   = 13.sp,
-                                        color      = if (selectedTab == i) BW else BW.copy(alpha = 0.4f),
-                                        fontWeight = if (selectedTab == i) FontWeight.SemiBold else FontWeight.Normal
-                                    )
+                                Tab(selected = selectedTab == i, onClick = { selectedTab = i }, modifier = Modifier.height(42.dp)) {
+                                    Text(tab, fontSize = 13.sp, color = if (selectedTab == i) BW else BW.copy(alpha = 0.4f), fontWeight = if (selectedTab == i) FontWeight.SemiBold else FontWeight.Normal)
                                 }
                             }
                         }
                     }
 
-                    // ── Tab content ───────────────────────────────────────────
+                    // TAB CONTENT
                     Column(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp),
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         when (selectedTab) {
 
-                            // ─────────────────────────────────────────────────
-                            // TAB 0: Details
-                            // ─────────────────────────────────────────────────
+                            // ── TAB 0: Details ──────────────────────────────────
                             0 -> {
-                                // Status strip
                                 BStrip(t.icon, t.desc, t.fg, t.bg)
-
-                                // Property info card
                                 BCard("Property", Icons.Default.Apartment) {
-                                    BRow("Property Name", booking.propertyTitle)
-                                    BRow("Address",       booking.propertyAddress)
+                                    BRow("Property Name", currentBooking.propertyTitle)
+                                    BRow("Address",       currentBooking.propertyAddress)
                                 }
-
-                                // Stay dates card
                                 BCard("Stay Dates", Icons.Default.CalendarMonth) {
-
-                                    if (datesNotConfirmed) {
-                                        // ── Pre-booking: dates not yet confirmed by landlord ──
-                                        // Show a friendly amber banner instead of empty dashes
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(Color(0xFFFEF3C7))
-                                                .padding(12.dp)
-                                        ) {
-                                            Row(
-                                                verticalAlignment     = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.HourglassEmpty,
-                                                    contentDescription = null,
-                                                    tint     = Color(0xFFB45309),
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Column {
-                                                    Text(
-                                                        "Dates to be confirmed",
-                                                        color      = Color(0xFFB45309),
-                                                        fontSize   = 13.sp,
-                                                        fontWeight = FontWeight.SemiBold
-                                                    )
-                                                    Spacer(Modifier.height(2.dp))
-                                                    Text(
-                                                        "Landlord will confirm exact check-in & check-out dates after approving your booking.",
-                                                        color      = Color(0xFFB45309).copy(alpha = 0.75f),
-                                                        fontSize   = 11.sp,
-                                                        lineHeight = 16.sp
-                                                    )
-                                                }
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Color(0xFFDCFCE7)).padding(12.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF16A34A)))
+                                                Text("Check-in", color = Color(0xFF15803D), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                                             }
+                                            Spacer(Modifier.height(5.dp))
+                                            Text(bfmt(currentBooking.checkInDate?.toDate()), color = BN, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                         }
-                                    } else {
-                                        // ── Regular booking or confirmed pre-booking: show dates ──
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            // Check-in box (green)
-                                            Column(
-                                                Modifier
-                                                    .weight(1f)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(Color(0xFFDCFCE7))
-                                                    .padding(12.dp)
-                                            ) {
-                                                Row(
-                                                    verticalAlignment     = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                                ) {
-                                                    Box(
-                                                        Modifier
-                                                            .size(6.dp)
-                                                            .clip(CircleShape)
-                                                            .background(Color(0xFF16A34A))
-                                                    )
-                                                    Text(
-                                                        "Check-in",
-                                                        color      = Color(0xFF15803D),
-                                                        fontSize   = 10.sp,
-                                                        fontWeight = FontWeight.SemiBold
-                                                    )
-                                                }
-                                                Spacer(Modifier.height(5.dp))
-                                                Text(
-                                                    bfmt(booking.checkInDate?.toDate()),
-                                                    color      = BN,
-                                                    fontSize   = 13.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
+                                        Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFEE2E2)).padding(12.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFDC2626)))
+                                                Text("Check-out", color = Color(0xFFB91C1C), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                                             }
-                                            // Check-out box (red)
-                                            Column(
-                                                Modifier
-                                                    .weight(1f)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(Color(0xFFFEE2E2))
-                                                    .padding(12.dp)
-                                            ) {
-                                                Row(
-                                                    verticalAlignment     = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                                ) {
-                                                    Box(
-                                                        Modifier
-                                                            .size(6.dp)
-                                                            .clip(CircleShape)
-                                                            .background(Color(0xFFDC2626))
-                                                    )
-                                                    Text(
-                                                        "Check-out",
-                                                        color      = Color(0xFFB91C1C),
-                                                        fontSize   = 10.sp,
-                                                        fontWeight = FontWeight.SemiBold
-                                                    )
-                                                }
-                                                Spacer(Modifier.height(5.dp))
-                                                Text(
-                                                    bfmt(booking.checkOutDate?.toDate()),
-                                                    color      = BN,
-                                                    fontSize   = 13.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
+                                            Spacer(Modifier.height(5.dp))
+                                            Text(bfmt(currentBooking.checkOutDate?.toDate()), color = BN, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
-
-                                    // Nights & guests pills — always shown
                                     Spacer(Modifier.height(10.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        BPill(Icons.Default.NightsStay, "${booking.totalNights} Night(s)")
-                                        BPill(Icons.Default.Group,      "${booking.guestCount} Guest(s)")
+                                        BPill(Icons.Default.NightsStay, "${currentBooking.totalNights} Night(s)")
+                                        BPill(Icons.Default.Group, "${currentBooking.guestCount} Guest(s)")
                                     }
                                 }
                             }
 
-                            // ─────────────────────────────────────────────────
-                            // TAB 1: Payment
-                            // ─────────────────────────────────────────────────
+                            // ── TAB 1: Payment ──────────────────────────────────
                             1 -> {
                                 if (isPreBooking) {
                                     BCard("Pre-Booking Payment", Icons.Default.AccountBalanceWallet) {
 
-                                        // Resolve total cost from whichever field is available
                                         val totalCost = when {
-                                            booking.depositAmount > 0 && booking.remainingAmount > 0 ->
-                                                booking.depositAmount + booking.remainingAmount
-                                            booking.totalAmount > 0 -> booking.totalAmount
-                                            else -> booking.subtotal
+                                            currentBooking.depositAmount > 0 && currentBooking.remainingAmount > 0 ->
+                                                currentBooking.depositAmount + currentBooking.remainingAmount
+                                            currentBooking.totalAmount > 0 -> currentBooking.totalAmount
+                                            else -> currentBooking.subtotal
                                         }
-                                        val depositAmt   = if (booking.depositAmount > 0) booking.depositAmount else totalCost * 0.2
+                                        val depositAmt = when {
+                                            currentBooking.depositAmount > 0 -> currentBooking.depositAmount
+                                            else -> totalCost * 0.2
+                                        }
                                         val remainingAmt = when {
-                                            booking.remainingAmount > 0 -> booking.remainingAmount
-                                            booking.depositAmount > 0   -> totalCost - booking.depositAmount
-                                            else                        -> totalCost * 0.8
+                                            currentBooking.remainingAmount > 0 -> currentBooking.remainingAmount
+                                            currentBooking.depositAmount > 0   -> totalCost - currentBooking.depositAmount
+                                            else -> totalCost * 0.8
                                         }
 
-                                        BPayRow("Price / Night",       "PKR ${"%,.0f".format(booking.pricePerNight)}")
-                                        BPayRow("Total Nights",        "${booking.totalNights} nights")
-                                        BPayRow("Total Property Cost", "PKR ${"%,.0f".format(totalCost)}")
+                                        BRow("Price / Night", "PKR ${"%,.0f".format(currentBooking.pricePerNight)}")
+                                        BRow("Total Nights",  "${currentBooking.totalNights} nights")
+                                        BRow("Total Property Cost", "PKR ${"%,.0f".format(totalCost)}")
                                         Spacer(Modifier.height(8.dp))
                                         HorizontalDivider(color = BL)
                                         Spacer(Modifier.height(8.dp))
 
-                                        // Deposit paid box (always green — already paid)
+                                        // Deposit paid box
                                         Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
+                                            modifier = Modifier.fillMaxWidth()
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .background(Color(0xFFDCFCE7))
                                                 .padding(12.dp)
                                         ) {
-                                            Row(
-                                                Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment     = Alignment.CenterVertically
-                                            ) {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Column {
-                                                    Text(
-                                                        "Deposit Paid (20%)",
-                                                        fontWeight = FontWeight.Bold,
-                                                        color      = Color(0xFF15803D),
-                                                        fontSize   = 13.sp
-                                                    )
-                                                    Text(
-                                                        "Already paid ✓",
-                                                        color    = Color(0xFF15803D).copy(0.7f),
-                                                        fontSize = 10.sp
-                                                    )
+                                                    Text("Deposit Paid (20%)", fontWeight = FontWeight.Bold, color = Color(0xFF15803D), fontSize = 13.sp)
+                                                    Text("Already paid ✓", color = Color(0xFF15803D).copy(0.7f), fontSize = 10.sp)
                                                 }
                                                 Text(
                                                     "PKR ${"%,.0f".format(depositAmt)}",
@@ -540,38 +312,32 @@ fun BookingDetailScreen(
 
                                         Spacer(Modifier.height(8.dp))
 
-                                        // Remaining amount — color depends on payment state
+                                        // Remaining amount box
                                         val isRemainPaid =
-                                            booking.paymentStatusEnum == PaymentStatus.PAID ||
-                                                    booking.bookingStatus == BookingStatus.COMPLETED ||
-                                                    booking.bookingStatus == BookingStatus.PENDING_APPROVAL ||
-                                                    booking.bookingStatus == BookingStatus.CONFIRMED
-
+                                            currentBooking.paymentStatusEnum == PaymentStatus.PAID ||
+                                                    currentBooking.bookingStatus == BookingStatus.COMPLETED ||
+                                                    currentBooking.bookingStatus == BookingStatus.PENDING_APPROVAL ||
+                                                    currentBooking.bookingStatus == BookingStatus.CONFIRMED
                                         Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
+                                            modifier = Modifier.fillMaxWidth()
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .background(
                                                     when {
                                                         isRemainPaid -> Color(0xFFDCFCE7)
-                                                        booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> Color(0xFFFEE2E2)
+                                                        currentBooking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> Color(0xFFFEE2E2)
                                                         else -> Color(0xFFFEF3C7)
                                                     }
                                                 )
                                                 .padding(12.dp)
                                         ) {
-                                            Row(
-                                                Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment     = Alignment.CenterVertically
-                                            ) {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                 Column {
                                                     Text(
                                                         "Due on Arrival (80%)",
                                                         fontWeight = FontWeight.Bold,
                                                         color = when {
                                                             isRemainPaid -> Color(0xFF15803D)
-                                                            booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> Color(0xFFDC2626)
+                                                            currentBooking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> Color(0xFFDC2626)
                                                             else -> Color(0xFFB45309)
                                                         },
                                                         fontSize = 13.sp
@@ -580,7 +346,7 @@ fun BookingDetailScreen(
                                                         if (isRemainPaid) "Paid ✓" else "Pay at check-in",
                                                         color = when {
                                                             isRemainPaid -> Color(0xFF15803D)
-                                                            booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> Color(0xFFDC2626)
+                                                            currentBooking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT -> Color(0xFFDC2626)
                                                             else -> Color(0xFFB45309)
                                                         },
                                                         fontSize = 10.sp
@@ -589,7 +355,7 @@ fun BookingDetailScreen(
                                                 Text(
                                                     "PKR ${"%,.0f".format(remainingAmt)}",
                                                     fontWeight = FontWeight.ExtraBold,
-                                                    color = when {
+                                                    color      = when {
                                                         isRemainPaid -> Color(0xFF15803D)
                                                         else -> Color(0xFFB45309)
                                                     },
@@ -602,18 +368,8 @@ fun BookingDetailScreen(
                                         HorizontalDivider(color = BG.copy(alpha = 0.2f))
                                         Spacer(Modifier.height(10.dp))
 
-                                        // Total paid so far
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment     = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                "Total Paid Amount",
-                                                fontWeight = FontWeight.SemiBold,
-                                                color      = BN,
-                                                fontSize   = 14.sp
-                                            )
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Total Paid Amount", fontWeight = FontWeight.SemiBold, color = BN, fontSize = 14.sp)
                                             Text(
                                                 "PKR ${"%,.0f".format(if (isRemainPaid) totalCost else depositAmt)}",
                                                 fontWeight = FontWeight.ExtraBold,
@@ -623,19 +379,8 @@ fun BookingDetailScreen(
                                         }
 
                                         Spacer(Modifier.height(4.dp))
-
-                                        // Total booking cost
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment     = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                "Total Booking Cost",
-                                                fontWeight = FontWeight.SemiBold,
-                                                color      = BM,
-                                                fontSize   = 13.sp
-                                            )
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Total Booking Cost", fontWeight = FontWeight.SemiBold, color = BM, fontSize = 13.sp)
                                             Text(
                                                 "PKR ${"%,.0f".format(totalCost)}",
                                                 fontWeight = FontWeight.Bold,
@@ -645,233 +390,105 @@ fun BookingDetailScreen(
                                         }
 
                                         Spacer(Modifier.height(8.dp))
-
-                                        // Payment status badge
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment     = Alignment.CenterVertically
-                                        ) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Text("Payment Status", color = BM, fontSize = 13.sp)
-                                            val ps = booking.paymentStatusEnum.displayName()
-                                            val (pf, pb) = when (booking.paymentStatusEnum) {
+                                            val ps = currentBooking.paymentStatusEnum.displayName()
+                                            val (pf, pb) = when (currentBooking.paymentStatusEnum) {
                                                 PaymentStatus.PAID           -> Color(0xFF15803D) to Color(0xFFDCFCE7)
                                                 PaymentStatus.DEPOSIT_PAID   -> Color(0xFF0369A1) to Color(0xFFE0F2FE)
                                                 PaymentStatus.PARTIALLY_PAID -> Color(0xFFB45309) to Color(0xFFFEF3C7)
                                                 PaymentStatus.PENDING        -> Color(0xFFB45309) to Color(0xFFFEF3C7)
                                                 else                         -> Color(0xFFB91C1C) to Color(0xFFFEE2E2)
                                             }
-                                            Box(
-                                                Modifier
-                                                    .clip(RoundedCornerShape(20.dp))
-                                                    .background(pb)
-                                                    .padding(horizontal = 12.dp, vertical = 5.dp)
-                                            ) {
+                                            Box(Modifier.clip(RoundedCornerShape(20.dp)).background(pb).padding(horizontal = 12.dp, vertical = 5.dp)) {
                                                 Text(ps, color = pf, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-
-                                        // Landlord: Mark Checked In when deposit is paid
-                                        if (isCurrentUserLandlord && booking.bookingStatus == BookingStatus.DEPOSIT_PAID) {
-                                            Spacer(Modifier.height(12.dp))
-                                            Button(
-                                                onClick  = { showCheckIn = true },
-                                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                                shape    = RoundedCornerShape(12.dp),
-                                                colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8))
-                                            ) {
-                                                Icon(Icons.Default.Home, null, tint = BW, modifier = Modifier.size(16.dp))
-                                                Spacer(Modifier.width(8.dp))
-                                                Text(
-                                                    "Mark Tenant Checked In",
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize   = 14.sp,
-                                                    color      = BW
-                                                )
-                                            }
-                                        }
-
-                                        // Landlord: Confirm final payment received
-                                        if (isCurrentUserLandlord && booking.bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT) {
-                                            Spacer(Modifier.height(12.dp))
-                                            Button(
-                                                onClick  = { showFinalPay = true },
-                                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                                shape    = RoundedCornerShape(12.dp),
-                                                colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                                            ) {
-                                                Icon(Icons.Default.Payments, null, tint = BW, modifier = Modifier.size(16.dp))
-                                                Spacer(Modifier.width(8.dp))
-                                                Text(
-                                                    "Confirm Final Payment Received",
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize   = 14.sp,
-                                                    color      = BW
-                                                )
                                             }
                                         }
                                     }
 
+                                    // ✅ Landlord: DEPOSIT_PAID pe "Mark Checked In" button
+                                    if (isCurrentUserLandlord && currentBooking.bookingStatus == BookingStatus.DEPOSIT_PAID) {
+                                        Button(
+                                            onClick  = { showCheckIn = true },
+                                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                                            shape    = RoundedCornerShape(12.dp),
+                                            colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8))
+                                        ) {
+                                            Icon(Icons.Default.Home, null, tint = BW, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Mark Tenant Checked In", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = BW)
+                                        }
+                                    }
+
+                                    // ✅ FIX: AWAITING_FINAL_PAYMENT landlord button removed
+                                    // Tenant ab app se khud 80% pay karega — landlord ko manually confirm nahi karna
+
                                 } else {
-                                    // ── Regular (non-pre-booking) payment breakdown ──
+                                    // ── Normal (non-pre) booking payment ──
                                     BCard("Payment Breakdown", Icons.Default.Receipt) {
-                                        BPayRow("Price / Night",    "PKR ${booking.pricePerNight.toInt()}")
-                                        BPayRow("Subtotal",         "PKR ${booking.subtotal.toInt()}")
-                                        BPayRow("Service Fee",      "PKR ${booking.serviceFee.toInt()}")
-                                        BPayRow("Security Deposit", "PKR ${booking.securityDeposit.toInt()}")
+                                        BRow("Price / Night",    "PKR ${"%,.0f".format(currentBooking.pricePerNight)}")
+                                        BRow("Subtotal",         "PKR ${"%,.0f".format(currentBooking.subtotal)}")
+                                        BRow("Service Fee",      "PKR ${"%,.0f".format(currentBooking.serviceFee)}")
+                                        BRow("Security Deposit", "PKR ${"%,.0f".format(currentBooking.securityDeposit)}")
+
                                         Spacer(Modifier.height(8.dp))
                                         HorizontalDivider(color = BL)
                                         Spacer(Modifier.height(8.dp))
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment     = Alignment.CenterVertically
-                                        ) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Text("Payment Status", color = BM, fontSize = 13.sp)
-                                            val ps = booking.paymentStatusEnum.displayName()
+                                            val ps = currentBooking.paymentStatusEnum.displayName()
                                             val (pf, pb) = when (ps) {
                                                 "Paid"    -> Color(0xFF15803D) to Color(0xFFDCFCE7)
                                                 "Pending" -> Color(0xFFB45309) to Color(0xFFFEF3C7)
                                                 else      -> Color(0xFFB91C1C) to Color(0xFFFEE2E2)
                                             }
-                                            Box(
-                                                Modifier
-                                                    .clip(RoundedCornerShape(20.dp))
-                                                    .background(pb)
-                                                    .padding(horizontal = 12.dp, vertical = 5.dp)
-                                            ) {
+                                            Box(Modifier.clip(RoundedCornerShape(20.dp)).background(pb).padding(horizontal = 12.dp, vertical = 5.dp)) {
                                                 Text(ps, color = pf, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
                                         }
                                         Spacer(Modifier.height(10.dp))
                                         HorizontalDivider(color = BG.copy(alpha = 0.2f))
                                         Spacer(Modifier.height(10.dp))
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment     = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                "Total Amount",
-                                                fontWeight = FontWeight.SemiBold,
-                                                color      = BN,
-                                                fontSize   = 14.sp
-                                            )
-                                            Text(
-                                                booking.formattedTotal,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color      = BN,
-                                                fontSize   = 22.sp
-                                            )
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Total Amount", fontWeight = FontWeight.SemiBold, color = BN, fontSize = 14.sp)
+                                            Text(currentBooking.formattedTotal, fontWeight = FontWeight.ExtraBold, color = BN, fontSize = 22.sp)
                                         }
                                     }
 
-                                    // Tenant: Pay Now button for unpaid pending bookings
-                                    if (!isCurrentUserLandlord && isPending &&
-                                        booking.paymentStatusEnum.displayName() == "Pending"
-                                    ) {
+                                    if (!isCurrentUserLandlord && isPending && currentBooking.paymentStatusEnum == PaymentStatus.PENDING) {
                                         Button(
                                             onClick = {
-                                                navController.navigate(
-                                                    Screen.Payment.createRoute(
-                                                        bookingId = booking.bookingId,
-                                                        payerId   = booking.tenantId,
-                                                        payeeId   = booking.landlordId,
-                                                        payerName = booking.tenantName,
-                                                        payeeName = booking.landlordName,
-                                                        amount    = booking.totalAmount
-                                                    )
-                                                )
+                                                navController.navigate(Screen.Payment.createRoute(
+                                                    bookingId = currentBooking.bookingId,
+                                                    payerId   = currentBooking.tenantId,
+                                                    payeeId   = currentBooking.landlordId,
+                                                    payerName = currentBooking.tenantName,
+                                                    payeeName = currentBooking.landlordName,
+                                                    amount    = currentBooking.totalAmount
+                                                ))
                                             },
                                             modifier = Modifier.fillMaxWidth().height(48.dp),
                                             shape    = RoundedCornerShape(12.dp),
                                             colors   = ButtonDefaults.buttonColors(containerColor = BN)
                                         ) {
-                                            Icon(
-                                                Icons.Default.Payment, null,
-                                                tint     = BG,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                            Icon(Icons.Default.Payment, null, tint = BG, modifier = Modifier.size(16.dp))
                                             Spacer(Modifier.width(8.dp))
-                                            Text(
-                                                "Pay Now",
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize   = 14.sp,
-                                                color      = BG
-                                            )
+                                            Text("Pay Now", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = BG)
                                         }
                                     }
                                 }
                             }
 
-                            // ─────────────────────────────────────────────────
-                            // TAB 2: Info
-                            // ─────────────────────────────────────────────────
+                            // ── TAB 2: Info ─────────────────────────────────────
                             2 -> {
                                 BCard("Booking Info", Icons.Default.Info) {
-                                    BRow("Tenant",         tenantName.ifBlank { booking.tenantEmail.ifBlank { "—" } })
+                                    BRow("Tenant",         currentBooking.tenantEmail.ifBlank { tenantName })
                                     BRow("Host",           hostName)
-                                    BRow("Payment Method", if (isPreBooking) "Partial / Cash on Arrival" else booking.paymentMethod.ifBlank { "—" })
-                                    BRow("Booked On",      bfmt(booking.createdAt?.toDate()))
-                                }
-
-                                // Tenant: Cancel button for pending bookings
-                                if (!isCurrentUserLandlord && isPending) {
-                                    OutlinedButton(
-                                        onClick  = { showCancel = true },
-                                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                                        shape    = RoundedCornerShape(12.dp),
-                                        border   = BorderStroke(1.dp, Color(0xFFDC2626)),
-                                        colors   = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626))
-                                    ) {
-                                        Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            "Cancel Booking",
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize   = 14.sp
-                                        )
-                                    }
-                                }
-
-                                // Landlord: Reject / Approve buttons for pending bookings
-                                if (isCurrentUserLandlord && isPending) {
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        OutlinedButton(
-                                            onClick  = { showReject = true },
-                                            modifier = Modifier.weight(1f).height(48.dp),
-                                            shape    = RoundedCornerShape(12.dp),
-                                            border   = BorderStroke(1.dp, Color(0xFFDC2626)),
-                                            colors   = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626))
-                                        ) {
-                                            Icon(Icons.Default.Close, null, modifier = Modifier.size(15.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("Reject", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        }
-                                        Button(
-                                            onClick  = { showApprove = true },
-                                            modifier = Modifier.weight(1f).height(48.dp),
-                                            shape    = RoundedCornerShape(12.dp),
-                                            colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                                        ) {
-                                            Icon(Icons.Default.Check, null, modifier = Modifier.size(15.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("Approve", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        }
-                                    }
+                                    BRow("Payment Method", if (isPreBooking) "Partial / Cash on Arrival" else "Cash on Arrival")
+                                    BRow("Booked On",       bfmt(currentBooking.createdAt?.toDate() ?: currentBooking.checkInDate?.toDate()))
                                 }
                             }
                         }
-
-                        // Error strip at the bottom of any tab
-                        uiState.errorMessage?.let {
-                            BStrip(Icons.Default.ErrorOutline, it, Color(0xFFB91C1C), Color(0xFFFEE2E2))
-                        }
-
-                        Spacer(Modifier.height(24.dp))
                     }
                 }
             }
@@ -879,217 +496,41 @@ fun BookingDetailScreen(
     }
 }
 
-// ── Private composable helpers ────────────────────────────────────────────────
-
-@Composable
-private fun BCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(14.dp),
-        colors    = CardDefaults.cardColors(containerColor = BW),
-        elevation = CardDefaults.cardElevation(0.dp),
-        border    = BorderStroke(1.dp, BL)
-    ) {
+// ── Helper Composables ──────────────────────────────────────────────────────
+@Composable private fun BCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = BW), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, BL)) {
         Column(Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier              = Modifier.padding(bottom = 12.dp)
-            ) {
-                Box(
-                    Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(BN.copy(alpha = 0.07f)),
-                    Alignment.Center
-                ) {
-                    Icon(icon, null, tint = BN, modifier = Modifier.size(14.dp))
-                }
-                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = BN)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(icon, null, tint = BN, modifier = Modifier.size(18.dp))
+                Text(title, fontWeight = FontWeight.Bold, color = BN, fontSize = 14.sp)
             }
-            HorizontalDivider(color = BL, thickness = 0.5.dp)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             content()
         }
     }
 }
-
-@Composable
-private fun BRow(label: String, value: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 7.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically
-    ) {
-        Text(label, color = BM, fontSize = 13.sp, modifier = Modifier.weight(1f))
-        Text(
-            value.ifBlank { "—" },
-            color      = BN,
-            fontSize   = 13.sp,
-            fontWeight = FontWeight.Medium,
-            textAlign  = TextAlign.End,
-            modifier   = Modifier.weight(1.5f),
-            maxLines   = 1,
-            overflow   = TextOverflow.Ellipsis
-        )
-    }
-    HorizontalDivider(color = BL, thickness = 0.5.dp)
-}
-
-@Composable
-private fun BPayRow(label: String, value: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = BM, fontSize = 13.sp)
-        Text(value, color = BN, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+@Composable private fun BRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = BM, fontSize = 14.sp)
+        Text(value, color = BN, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
-
-@Composable
-private fun BPill(icon: ImageVector, text: String) {
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(BN.copy(alpha = 0.06f))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        Icon(icon, null, tint = BN, modifier = Modifier.size(12.dp))
-        Text(text, color = BN, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun BStrip(icon: ImageVector, msg: String, fg: Color, bg: Color) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(bg)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null, tint = fg, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(10.dp))
-        Text(msg, color = fg, fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 18.sp)
-    }
-}
-
-@Composable
-private fun BDialog(
-    title       : String,
-    message     : String,
-    confirmLabel: String,
-    confirmColor: Color,
-    icon        : ImageVector,
-    iconBg      : Color,
-    iconTint    : Color,
-    onConfirm   : () -> Unit,
-    onDismiss   : () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor   = BW,
-        shape            = RoundedCornerShape(20.dp),
-        icon = {
-            Box(Modifier.size(52.dp).clip(CircleShape).background(iconBg), Alignment.Center) {
-                Icon(icon, null, tint = iconTint, modifier = Modifier.size(24.dp))
-            }
-        },
-        title = {
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = BN, textAlign = TextAlign.Center)
-        },
-        text = {
-            Text(message, fontSize = 14.sp, color = BM, lineHeight = 20.sp, textAlign = TextAlign.Center)
-        },
-        confirmButton = {
-            Button(
-                onClick  = onConfirm,
-                shape    = RoundedCornerShape(12.dp),
-                colors   = ButtonDefaults.buttonColors(containerColor = confirmColor),
-                modifier = Modifier.fillMaxWidth().height(46.dp)
-            ) {
-                Text(confirmLabel, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Go Back", color = BM, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-            }
-        }
-    )
-}
-
-// ── Public aliases (backward compatibility with other screens) ────────────────
-
-@Composable fun BDCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) = BCard(title, icon, content)
-@Composable fun BDField(label: String, value: String) = BRow(label, value)
-@Composable fun BDPayRow(label: String, value: String) = BPayRow(label, value)
-@Composable fun BDPill(icon: ImageVector, text: String) = BPill(icon, text)
-@Composable fun BDSectionHeader(icon: ImageVector, title: String) {
-    Row(
-        verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Box(
-            Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(BN.copy(alpha = 0.07f)),
-            Alignment.Center
-        ) {
+@Composable private fun BPill(icon: ImageVector, text: String) {
+    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(BL).padding(horizontal = 10.dp, vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(icon, null, tint = BN, modifier = Modifier.size(14.dp))
+            Text(text, color = BN, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
-        Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = BN)
     }
 }
-@Composable fun BDSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) = BCard(title, icon, content)
-@Composable fun BDInfoItem(label: String, value: String) = BRow(label, value)
-@Composable fun BDStayPill(icon: ImageVector, text: String) = BPill(icon, text)
-@Composable fun BDStatusCard(status: String) {
-    val t = bTheme(when (status) {
-        "Confirmed"                     -> BookingStatus.CONFIRMED
-        "Checked In"                    -> BookingStatus.CHECKED_IN
-        "Completed"                     -> BookingStatus.COMPLETED
-        "Cancelled"                     -> BookingStatus.CANCELLED
-        "Awaiting", "Awaiting Approval" -> BookingStatus.PENDING_APPROVAL
-        "Deposit Paid"                  -> BookingStatus.DEPOSIT_PAID
-        "Final Payment Pending"         -> BookingStatus.AWAITING_FINAL_PAYMENT
-        else                            -> BookingStatus.PENDING
-    })
-    BStrip(t.icon, t.label + " — " + t.desc, t.fg, t.bg)
+@Composable private fun BStrip(icon: ImageVector, text: String, fg: Color, bg: Color) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).padding(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = fg, modifier = Modifier.size(16.dp))
+            Text(text, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+    }
 }
-@Composable fun BDActionSection(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(BW)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        content             = content
-    )
+@Composable private fun BDialog(title: String, desc: String, btnText: String, btnColor: Color, icon: ImageVector, iconBg: Color, iconTint: Color, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, confirmButton = { Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = btnColor)) { Text(btnText, color = BW) } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = BM) } }, title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Box(Modifier.size(32.dp).clip(CircleShape).background(iconBg), contentAlignment = Alignment.Center) { Icon(icon, null, tint = iconTint, modifier = Modifier.size(16.dp)) }; Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BN) } }, text = { Text(desc, fontSize = 14.sp, color = BN.copy(alpha = 0.7f)) }, shape = RoundedCornerShape(20.dp), containerColor = BW)
 }
-@Composable fun BookingSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) = BCard(title, icon, content)
-@Composable fun InfoItem(label: String, value: String) = BRow(label, value)
-@Composable fun BookingStatusBanner(status: String) = BDStatusCard(status)
-@Composable fun StatusBadge(status: String) = BDStatusCard(status)
-@Composable fun CancelConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) =
-    BDialog(
-        "Cancel Booking", "Cancel this booking? This cannot be undone.", "Yes, Cancel",
-        Color(0xFFDC2626), Icons.Default.Cancel, Color(0xFFFEE2E2), Color(0xFFDC2626),
-        onConfirm, onDismiss
-    )
-@Composable fun BookingActionDialog(
-    title       : String,
-    message     : String,
-    confirmLabel: String,
-    confirmColor: Color,
-    icon        : ImageVector,
-    iconBg      : Color,
-    iconTint    : Color,
-    onConfirm   : () -> Unit,
-    onDismiss   : () -> Unit
-) = BDialog(title, message, confirmLabel, confirmColor, icon, iconBg, iconTint, onConfirm, onDismiss)
-
-fun String?.displayName(): String = this ?: "Unknown"

@@ -26,7 +26,6 @@ import com.example.havenhub.data.PaymentMethod
 import com.example.havenhub.navigation.Screen
 import com.example.havenhub.viewmodel.PaymentViewModel
 
-// Green color used for the "Secured" badge on the order summary card
 private val PGreen = Color(0xFF22C55E)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,13 +38,12 @@ fun PaymentScreen(
     payerName    : String,
     payeeName    : String,
     amount       : String,
-    paymentType  : String = "FULL",   // "FULL" | "DEPOSIT" | "REMAINING"
-    packageId    : String = "none",   // rental package reference; "none" for simple bookings
+    paymentType  : String = "FULL",   // ← NEW
+    packageId    : String = "none",   // ← NEW
     viewModel    : PaymentViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Verify if payment already exists for this booking when the screen opens
     LaunchedEffect(bookingId) {
         viewModel.verifyPaymentStatus(bookingId)
     }
@@ -62,14 +60,10 @@ fun PaymentScreen(
 
     val amountDouble = amount.toDoubleOrNull() ?: 0.0
 
-    // FIX: "FULL" OR "REMAINING" both count as final/full payment phase.
-    // "DEPOSIT" is the only case where we are paying partial (20%) upfront.
-    // Pull version had only `paymentType == "FULL"` which was wrong —
-    // it would show "Complete Deposit Payment" title for REMAINING payments.
-    val isFinalPaymentPhase = paymentType == "FULL" || paymentType == "REMAINING"
+    // ← FIXED: driven by paymentType param, not ViewModel state
+    val isFinalPaymentPhase = paymentType == "FULL"
 
-    // Navigate to PaymentSuccess after processPayment() succeeds.
-    // popUpTo uses all 9 route segments to correctly clear the payment screen from back stack.
+    // ← FIXED: popUpTo route includes all 9 segments
     LaunchedEffect(uiState.actionSuccess) {
         if (uiState.actionSuccess) {
             navController.navigate(Screen.PaymentSuccess.createRoute(bookingId)) {
@@ -81,7 +75,6 @@ fun PaymentScreen(
         }
     }
 
-    // Available payment methods shown as selectable rows
     val methods = listOf(
         Triple(PaymentMethod.JAZZCASH,      "📱", Color(0xFFD50000)),
         Triple(PaymentMethod.EASYPAISA,     "💚", Color(0xFF2E7D32)),
@@ -91,7 +84,6 @@ fun PaymentScreen(
 
     Scaffold(
         topBar = {
-            // Gradient top bar — title changes based on payment phase
             Box(
                 modifier = Modifier.fillMaxWidth()
                     .background(Brush.horizontalGradient(listOf(primary, primaryContainer)))
@@ -105,15 +97,10 @@ fun PaymentScreen(
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
-                            // Show correct title for each payment type
-                            text = when (paymentType) {
-                                "DEPOSIT"   -> "Complete Deposit Payment"
-                                "REMAINING" -> "Pay Remaining Balance"
-                                else        -> "Complete Payment"   // FULL
-                            },
+                            text = if (isFinalPaymentPhase) "Complete Final Payment" else "Complete Deposit Payment",
                             fontWeight = FontWeight.Bold,
-                            color      = onPrimary,
-                            fontSize   = 17.sp
+                            color = onPrimary,
+                            fontSize = 17.sp
                         )
                         Text("Secure & encrypted", fontSize = 11.sp, color = onPrimary.copy(0.55f))
                     }
@@ -138,7 +125,7 @@ fun PaymentScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // ── Order Summary card ────────────────────────────────
+            // ── Order Summary ─────────────────────────────────────
             Card(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(16.dp),
@@ -153,22 +140,12 @@ fun PaymentScreen(
                     }
                     Spacer(Modifier.height(14.dp))
 
-                    PaySummaryRow("Booking ID",   "#${bookingId.take(8).uppercase()}",  onPrimary)
-                    PaySummaryRow("From",          payerName.ifBlank { "Tenant" },       onPrimary)
-                    PaySummaryRow("To",            payeeName.ifBlank { "Landlord" },     onPrimary)
-                    // Payment type label shown clearly so user knows what they are paying
-                    PaySummaryRow(
-                        "Payment Type",
-                        when (paymentType) {
-                            "DEPOSIT"   -> "Advance Deposit (20%)"
-                            "REMAINING" -> "Remaining Balance (80%)"
-                            else        -> "Full Amount (100%)"
-                        },
-                        onPrimary
-                    )
+                    PaySummaryRow("Booking ID", "#${bookingId.take(8).uppercase()}", onPrimary)
+                    PaySummaryRow("From",       payerName.ifBlank { "Tenant" },      onPrimary)
+                    PaySummaryRow("To",         payeeName.ifBlank { "Landlord" },    onPrimary)
+                    PaySummaryRow("Payment Type", if (isFinalPaymentPhase) "Remaining Amount" else "Deposit Amount", onPrimary)
 
                     Spacer(Modifier.height(8.dp))
-                    // Decorative gradient divider line
                     Box(
                         Modifier.fillMaxWidth().height(1.dp)
                             .background(Brush.horizontalGradient(listOf(tertiary.copy(0.6f), Color.Transparent)))
@@ -181,16 +158,7 @@ fun PaymentScreen(
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         Column {
-                            // Label changes based on payment type
-                            Text(
-                                when (paymentType) {
-                                    "DEPOSIT"   -> "Deposit Payable"
-                                    "REMAINING" -> "Remaining Payable"
-                                    else        -> "Total Payable"
-                                },
-                                fontSize = 12.sp,
-                                color    = onPrimary.copy(0.6f)
-                            )
+                            Text(if (isFinalPaymentPhase) "Remaining Payable" else "Deposit Payable", fontSize = 12.sp, color = onPrimary.copy(0.6f))
                             Text(
                                 "PKR ${"%,.0f".format(amountDouble)}",
                                 fontSize   = 24.sp,
@@ -198,7 +166,6 @@ fun PaymentScreen(
                                 color      = tertiary
                             )
                         }
-                        // "Secured" badge
                         Box(
                             Modifier.clip(RoundedCornerShape(8.dp))
                                 .background(PGreen.copy(0.15f))
@@ -214,7 +181,7 @@ fun PaymentScreen(
                 }
             }
 
-            // ── Payment method selection ──────────────────────────
+            // ── Payment Method Selection ──────────────────────────
             Text("Select Payment Method", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = onSurface)
 
             methods.forEach { (method, icon, accent) ->
@@ -233,7 +200,6 @@ fun PaymentScreen(
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Method icon box
                     Box(
                         Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(accent.copy(0.1f)),
                         Alignment.Center
@@ -262,18 +228,18 @@ fun PaymentScreen(
                     )
                 }
 
-                // Divider between methods (not after the last one)
                 if (method != methods.last().first) {
                     HorizontalDivider(color = background, thickness = 2.dp)
                 }
             }
 
+            // ── Pay Button ────────────────────────────────────────
             Spacer(Modifier.height(4.dp))
 
-            // ── Pay button ────────────────────────────────────────
             Button(
                 onClick = {
                     val selected = uiState.selectedMethod ?: return@Button
+
                     viewModel.processPayment(
                         bookingId          = bookingId,
                         payerId            = payerId,
@@ -281,12 +247,10 @@ fun PaymentScreen(
                         payerName          = payerName,
                         payeeName          = payeeName,
                         amount             = amount,
-                        packageId          = packageId,
+                        packageId          = packageId,   // ← NEW
                         method             = selected,
-                        // isFinalPayment = true for FULL or REMAINING; false for DEPOSIT
                         isFinalPayment     = isFinalPaymentPhase,
-                        // isPreBookingDirect = true only for DEPOSIT payment (paying 20% upfront)
-                        isPreBookingDirect = paymentType == "DEPOSIT"
+                        isPreBookingDirect = !isFinalPaymentPhase
                     )
                 },
                 modifier  = Modifier.fillMaxWidth().height(54.dp),
@@ -315,7 +279,7 @@ fun PaymentScreen(
                 }
             }
 
-            // ── Hint: shown when no method is selected ────────────
+            // ── Hint ─────────────────────────────────────────────
             if (uiState.selectedMethod == null) {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -328,7 +292,7 @@ fun PaymentScreen(
                 }
             }
 
-            // ── Error message ─────────────────────────────────────
+            // ── Error ─────────────────────────────────────────────
             uiState.errorMessage?.let { errMsg ->
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
@@ -341,7 +305,7 @@ fun PaymentScreen(
                 }
             }
 
-            // ── Security note at the bottom ───────────────────────
+            // ── Security note ─────────────────────────────────────
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
@@ -357,7 +321,6 @@ fun PaymentScreen(
     }
 }
 
-// ── Helper: single row in the order summary card ──────────────────────────────
 @Composable
 private fun PaySummaryRow(label: String, value: String, onPrimary: Color) {
     Row(
